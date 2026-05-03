@@ -27,7 +27,6 @@
     "*": "ask"
   },
   "special": {
-    "doom_loop": "deny",
     "external_directory": "ask"
   }
 }

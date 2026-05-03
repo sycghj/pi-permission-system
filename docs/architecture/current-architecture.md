@@ -95,7 +95,7 @@ src/
   "bash":    { "git status": "allow", "git *": "ask" },
   "mcp":     { "exa:*": "allow", "mcp_status": "allow" },
   "skills":  { "*": "ask" },
-  "special": { "doom_loop": "deny", "external_directory": "ask" }
+  "special": { "external_directory": "ask" }
 }
 ```
 

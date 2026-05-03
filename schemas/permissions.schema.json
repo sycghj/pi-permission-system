@@ -60,8 +60,8 @@
           "default": "ask"
         },
         "special": {
-          "description": "Default permission for special checks (doom_loop, external_directory) when no explicit rule matches.",
-          "markdownDescription": "Default permission for special checks (`doom_loop`, `external_directory`) when no explicit rule matches.",
+          "description": "Default permission for special checks (external_directory) when no explicit rule matches.",
+          "markdownDescription": "Default permission for special checks (`external_directory`) when no explicit rule matches.",
           "$ref": "#/$defs/permissionState",
           "default": "ask"
         }
@@ -122,10 +122,6 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "doom_loop": {
-          "description": "Controls doom loop detection behavior.",
-          "$ref": "#/$defs/permissionState"
-        },
         "external_directory": {
           "description": "Enforces permission checks for path-bearing file tools (read, write, edit, find, grep, ls) when they target paths outside the active working directory.",
           "markdownDescription": "Enforces permission checks for path-bearing file tools (`read`, `write`, `edit`, `find`, `grep`, `ls`) when they target paths outside the active working directory.\n\nEvaluated **before** the normal tool permission check — so `tools.read: \"allow\"` can permit ordinary reads while `external_directory: \"ask\"` still requires confirmation for paths outside `cwd`.",

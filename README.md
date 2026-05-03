@@ -137,7 +137,7 @@ The config file combines runtime knobs and permission policy in one object:
   "bash": { "git status": "allow", "git *": "ask" },
   "mcp": { "mcp_status": "allow" },
   "skills": { "*": "ask" },
-  "special": { "doom_loop": "deny", "external_directory": "ask" }
+  "special": { "external_directory": "ask" }
 }
 ```
 
@@ -353,13 +353,11 @@ Reserved permission checks:
 
 | Key                  | Description                                                                                                                                                                   |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `doom_loop`          | Controls doom loop detection behavior                                                                                                                                         |
 | `external_directory` | Enforces ask/allow/deny decisions for path-bearing tools and bash commands that reference paths outside the active working directory                                          |
 
 ```jsonc
 {
   "special": {
-    "doom_loop": "deny",
     "external_directory": "ask",
   },
 }

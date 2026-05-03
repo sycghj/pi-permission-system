@@ -267,7 +267,7 @@ flowchart TD
     E --> F["#51 Generalize session approvals to all surfaces"]
     F --> G["#52 Bash arity table"]
     G --> H["#53 ~/​$HOME expansion"]
-    I["#54 Verify doom_loop fires"] -.->|"independent"| C
+    I["#54 Deprecate doom_loop (dead code)"] -.->|"independent"| C
 
     style A fill:#e8f5e9
     style B fill:#e8f5e9
@@ -285,7 +285,7 @@ Orange node is investigation, can run in parallel.
 |#42|Extract event handlers from index.ts|#43|
 |#43|Eliminate module-scope mutable state|—|
 |#55|Extract pure `evaluate()` function|#56|
-|#54|Verify doom_loop fires end-to-end|#56 (soft)|
+|#54|Deprecate doom_loop dead config key|#56 (soft)|
 
 ### Phase 2: Unified model (internal refactor, no config change)
 
