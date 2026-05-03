@@ -890,16 +890,21 @@ export class PermissionManager {
       const fallbackTarget = mcpTargets[0] || "mcp";
       const toolLevelMcpState = merged.tools?.mcp;
 
-      const mcpMatch = findCompiledPermissionMatchForNames(
-        compiledMcp,
-        mcpTargets,
-      );
-      if (mcpMatch) {
+      const mcpRuleset = compiledToRuleset("mcp", compiledMcp);
+      let mcpExplicitMatch: { target: string; rule: Rule } | null = null;
+      for (const target of mcpTargets) {
+        const rule = evaluate("mcp", target, mcpRuleset);
+        if (mcpRuleset.includes(rule)) {
+          mcpExplicitMatch = { target, rule };
+          break;
+        }
+      }
+      if (mcpExplicitMatch) {
         return {
           toolName,
-          state: mcpMatch.state,
-          matchedPattern: mcpMatch.matchedPattern,
-          target: mcpMatch.matchedName,
+          state: mcpExplicitMatch.rule.action,
+          matchedPattern: mcpExplicitMatch.rule.pattern,
+          target: mcpExplicitMatch.target,
           source: "mcp",
         };
       }
