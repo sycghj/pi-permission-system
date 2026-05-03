@@ -11,10 +11,7 @@ import {
   handleSessionStart,
   handleToolCall,
 } from "./handlers";
-import {
-  type PermissionPromptDecision,
-  requestPermissionDecisionFromUi,
-} from "./permission-dialog";
+import { requestPermissionDecisionFromUi } from "./permission-dialog";
 import {
   createExtensionRuntime,
   createPermissionManagerForCwd,
