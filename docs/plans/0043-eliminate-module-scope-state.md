@@ -314,10 +314,17 @@ Target: ≤150 lines.
 |`createExtensionRuntime` called multiple times in concurrent test files|Each call creates an independent runtime with its own state. No shared mutable state between instances — this is the whole point.|
 |Large changeset across many files|Steps are ordered so each commit is independently valid and testable. The riskiest step (6) is preceded by comprehensive mock updates (3) and type changes (4) that surface any mismatch at compile time.|
 
+## Implementation Notes
+
+- `createHandlerDeps` was kept inline in `src/index.ts` (≤20 lines as predicted).
+- `PermissionForwardingDeps` gained a `logger: ForwardedPermissionLogger` field (step 5 option 1 from the Open Questions).
+  All io.ts functions that log now take `logger: ForwardedPermissionLogger | null` as the first parameter.
+  The module-scope `logger` variable and `setForwardedPermissionLogger` were removed entirely.
+- `src/index.ts` reduced from 466 → 99 lines (79% reduction).
+  The ≤150-line target was comfortably met.
+- `runtime.writeReviewLog` / `runtime.writeDebugLog` are plain arrow functions on the runtime object (not class methods), so `.bind(runtime)` is technically a no-op but was added for clarity when passing them as callbacks.
+- The `getContextSystemPrompt` helper in `polling.ts` calls `logPermissionForwardingWarning(null, ...)` because it has no access to `deps` — the warning is silently dropped in that one case, which is acceptable (it's a best-effort metadata read).
+
 ## Open Questions
 
-- Should `createHandlerDeps(runtime, pi)` be a function in `src/runtime.ts` or remain inline in `src/index.ts`?
-  Defer until implementation — if it is ≤20 lines, inline is fine.
-- Should `PermissionForwardingDeps` gain a `logger` field, or should each IO function accept the logger individually?
-  The plan assumes per-function parameter threading for explicitness, but `PermissionForwardingDeps` already bundles `writeReviewLog` — adding logger there may be simpler.
-  Decide during step 5 implementation.
+- None remaining.
