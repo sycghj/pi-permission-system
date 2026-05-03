@@ -12,6 +12,8 @@ import {
 } from "./common";
 import { loadUnifiedConfig, stripJsonComments } from "./config-loader";
 import { getGlobalConfigPath } from "./config-paths";
+import type { Rule, Ruleset } from "./rule";
+import { evaluate } from "./rule";
 import type {
   AgentPermissions,
   BashPermissions,
@@ -401,6 +403,21 @@ function compilePermissionPatternsFromSources(
   }
 
   return compileWildcardPatternEntries(entries);
+}
+
+/**
+ * Convert compiled wildcard patterns into a Ruleset for use with evaluate().
+ * The returned Rule objects are the same references as the input; evaluate()
+ * uses reference equality to distinguish an explicit match from the synthetic
+ * default it returns when nothing matches.
+ */
+function compiledToRuleset(
+  surface: string,
+  patterns: CompiledPermissionPatterns,
+): Ruleset {
+  return patterns.map(
+    (p): Rule => ({ surface, pattern: p.pattern, action: p.state }),
+  );
 }
 
 function findCompiledPermissionMatch(
@@ -812,14 +829,13 @@ export class PermissionManager {
     const normalizedToolName = toolName.trim();
 
     if (SPECIAL_PERMISSION_KEYS.has(normalizedToolName)) {
-      const result = findCompiledPermissionMatch(
-        compiledSpecial,
-        normalizedToolName,
-      );
+      const specialRuleset = compiledToRuleset("special", compiledSpecial);
+      const rule = evaluate("special", normalizedToolName, specialRuleset);
+      const explicit = specialRuleset.includes(rule);
       return {
         toolName,
-        state: result?.state || merged.defaultPolicy.special,
-        matchedPattern: result?.matchedPattern,
+        state: explicit ? rule.action : merged.defaultPolicy.special,
+        matchedPattern: explicit ? rule.pattern : undefined,
         source: "special",
       };
     }
