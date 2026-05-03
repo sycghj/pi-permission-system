@@ -1,22 +1,54 @@
-import { join } from "node:path";
 import {
+  existsSync,
+  mkdirSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join, normalize } from "node:path";
+import {
+  type ExtensionCommandContext,
   type ExtensionContext,
   getAgentDir,
 } from "@mariozechner/pi-coding-agent";
 import {
+  getActiveAgentName,
+  getActiveAgentNameFromSystemPrompt,
+} from "./active-agent";
+import { loadAndMergeConfigs, loadUnifiedConfig } from "./config-loader";
+import {
   DEBUG_LOG_FILENAME,
+  getGlobalConfigPath,
   getGlobalLogsDir,
+  getLegacyExtensionConfigPath,
+  getLegacyGlobalPolicyPath,
+  getLegacyProjectPolicyPath,
+  getProjectConfigPath,
   REVIEW_LOG_FILENAME,
 } from "./config-paths";
+import { buildResolvedConfigLogEntry } from "./config-reporter";
 import {
   DEFAULT_EXTENSION_CONFIG,
+  EXTENSION_ROOT,
   ensurePermissionSystemLogsDirectory,
+  normalizePermissionSystemConfig,
   type PermissionSystemExtensionConfig,
 } from "./extension-config";
+import {
+  confirmPermission,
+  type PermissionForwardingDeps,
+  processForwardedPermissionRequests,
+} from "./forwarded-permissions/polling";
+import type { PromptPermissionDetails } from "./handlers/types";
 import { createPermissionSystemLogger } from "./logging";
+import type { PermissionPromptDecision } from "./permission-dialog";
+import { PERMISSION_FORWARDING_POLL_INTERVAL_MS } from "./permission-forwarding";
 import { PermissionManager } from "./permission-manager";
 import { SessionApprovalCache } from "./session-approval-cache";
 import type { SkillPromptEntry } from "./skill-prompt-sanitizer";
+import { syncPermissionSystemStatus } from "./status";
+import { isSubagentExecutionContext } from "./subagent-context";
+import { shouldAutoApprovePermissionState } from "./yolo-mode";
 
 /**
  * Runtime context object created once inside `piPermissionSystemExtension()`.
@@ -58,6 +90,317 @@ export interface ExtensionRuntime {
   writeReviewLog(event: string, details?: Record<string, unknown>): void;
 }
 
+// ── Pure helpers ───────────────────────────────────────────────────────────
+
+/**
+ * Derive Pi project-level config and agents paths from a working directory.
+ * Returns null when cwd is absent (headless / global-only config).
+ */
+export function derivePiProjectPaths(cwd: string | undefined | null): {
+  projectGlobalConfigPath: string;
+  projectAgentsDir: string;
+} | null {
+  if (!cwd) {
+    return null;
+  }
+  return {
+    projectGlobalConfigPath: getProjectConfigPath(cwd),
+    projectAgentsDir: join(cwd, ".pi", "agent", "agents"),
+  };
+}
+
+/**
+ * Create a new PermissionManager scoped to a working directory's config hierarchy.
+ * Pass `cwd` as null/undefined to use global config only.
+ */
+export function createPermissionManagerForCwd(
+  agentDir: string,
+  cwd: string | undefined | null,
+): PermissionManager {
+  const projectPaths = derivePiProjectPaths(cwd);
+  return new PermissionManager({
+    globalConfigPath: getGlobalConfigPath(agentDir),
+    projectGlobalConfigPath: projectPaths?.projectGlobalConfigPath,
+    projectAgentsDir: projectPaths?.projectAgentsDir,
+  });
+}
+
+/**
+ * Reload merged config from disk into the runtime.
+ * If `ctx` is provided, updates `runtime.runtimeContext` first.
+ */
+export function refreshExtensionConfig(
+  runtime: ExtensionRuntime,
+  ctx?: ExtensionContext,
+): void {
+  if (ctx) {
+    runtime.runtimeContext = ctx;
+  }
+  const cwd = runtime.runtimeContext?.cwd ?? null;
+  const mergeResult = loadAndMergeConfigs(
+    runtime.agentDir,
+    cwd ?? "",
+    EXTENSION_ROOT,
+  );
+  const runtimeConfig = normalizePermissionSystemConfig(mergeResult.merged);
+  runtime.config = runtimeConfig;
+
+  if (runtime.runtimeContext?.hasUI) {
+    syncPermissionSystemStatus(runtime.runtimeContext, runtimeConfig);
+  }
+
+  const warning =
+    mergeResult.issues.length > 0 ? mergeResult.issues.join("\n") : undefined;
+
+  if (warning && warning !== runtime.lastConfigWarning) {
+    runtime.lastConfigWarning = warning;
+    runtime.runtimeContext?.ui.notify(warning, "warning");
+  } else if (!warning) {
+    runtime.lastConfigWarning = null;
+  }
+
+  runtime.writeDebugLog("config.loaded", {
+    warning: warning ?? null,
+    debugLog: runtimeConfig.debugLog,
+    permissionReviewLog: runtimeConfig.permissionReviewLog,
+    yoloMode: runtimeConfig.yoloMode,
+  });
+}
+
+/**
+ * Save updated runtime knobs (debugLog, permissionReviewLog, yoloMode) to the
+ * global config file, then update runtime.config and sync UI status.
+ */
+export function saveExtensionConfig(
+  runtime: ExtensionRuntime,
+  next: PermissionSystemExtensionConfig,
+  ctx: ExtensionCommandContext,
+): void {
+  const normalized = normalizePermissionSystemConfig(next);
+  const globalPath = getGlobalConfigPath(runtime.agentDir);
+
+  const existing = loadUnifiedConfig(globalPath);
+  const merged = {
+    ...existing.config,
+    debugLog: normalized.debugLog,
+    permissionReviewLog: normalized.permissionReviewLog,
+    yoloMode: normalized.yoloMode,
+  };
+
+  const tmpPath = `${globalPath}.tmp`;
+  try {
+    mkdirSync(dirname(globalPath), { recursive: true });
+    writeFileSync(tmpPath, `${JSON.stringify(merged, null, 2)}\n`, "utf-8");
+    renameSync(tmpPath, globalPath);
+  } catch (error) {
+    try {
+      if (existsSync(tmpPath)) {
+        unlinkSync(tmpPath);
+      }
+    } catch {
+      // Ignore cleanup failures.
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    ctx.ui.notify(
+      `Failed to save permission-system config at '${globalPath}': ${message}`,
+      "error",
+    );
+    return;
+  }
+
+  runtime.config = normalized;
+  syncPermissionSystemStatus(ctx, normalized);
+  runtime.lastConfigWarning = null;
+
+  runtime.writeDebugLog("config.saved", {
+    debugLog: normalized.debugLog,
+    permissionReviewLog: normalized.permissionReviewLog,
+    yoloMode: normalized.yoloMode,
+  });
+}
+
+/**
+ * Resolve the active agent name from the Pi session, system prompt, or last
+ * known name. Updates `runtime.lastKnownActiveAgentName` as a side effect.
+ */
+export function resolveAgentName(
+  runtime: ExtensionRuntime,
+  ctx: ExtensionContext,
+  systemPrompt?: string,
+): string | null {
+  const fromSession = getActiveAgentName(ctx);
+  if (fromSession) {
+    runtime.lastKnownActiveAgentName = fromSession;
+    return fromSession;
+  }
+  const fromSystemPrompt = getActiveAgentNameFromSystemPrompt(systemPrompt);
+  if (fromSystemPrompt) {
+    runtime.lastKnownActiveAgentName = fromSystemPrompt;
+    return fromSystemPrompt;
+  }
+  return runtime.lastKnownActiveAgentName;
+}
+
+/**
+ * Write the resolved config path set (global, project, legacy) to the review
+ * and debug logs.
+ */
+export function logResolvedConfigPaths(runtime: ExtensionRuntime): void {
+  const policyPaths = runtime.permissionManager.getResolvedPolicyPaths();
+  const cwd = runtime.runtimeContext?.cwd ?? null;
+  const { agentDir } = runtime;
+  const legacyGlobalPolicyDetected = existsSync(
+    getLegacyGlobalPolicyPath(agentDir),
+  );
+  const legacyProjectPolicyDetected = cwd
+    ? existsSync(getLegacyProjectPolicyPath(cwd))
+    : false;
+  const legacyExtConfigPath = getLegacyExtensionConfigPath(EXTENSION_ROOT);
+  const newGlobalPath = getGlobalConfigPath(agentDir);
+  const legacyExtensionConfigDetected =
+    normalize(legacyExtConfigPath) !== normalize(newGlobalPath) &&
+    existsSync(legacyExtConfigPath);
+  const entry = buildResolvedConfigLogEntry({
+    policyPaths,
+    legacyGlobalPolicyDetected,
+    legacyProjectPolicyDetected,
+    legacyExtensionConfigDetected,
+  });
+  runtime.writeReviewLog(
+    "config.resolved",
+    entry as unknown as Record<string, unknown>,
+  );
+  runtime.writeDebugLog(
+    "config.resolved",
+    entry as unknown as Record<string, unknown>,
+  );
+}
+
+// ── Permission helpers ─────────────────────────────────────────────────────
+
+/** Internal: write a structured permission decision entry to the review log. */
+function reviewPermissionDecision(
+  writeReviewLog: (event: string, details: Record<string, unknown>) => void,
+  event: string,
+  details: PromptPermissionDetails & {
+    resolution?: string;
+    denialReason?: string;
+  },
+): void {
+  writeReviewLog(event, {
+    requestId: details.requestId,
+    source: details.source,
+    agentName: details.agentName,
+    message: details.message,
+    toolCallId: details.toolCallId ?? null,
+    toolName: details.toolName ?? null,
+    skillName: details.skillName ?? null,
+    path: details.path ?? null,
+    command: details.command ?? null,
+    target: details.target ?? null,
+    toolInputPreview: details.toolInputPreview ?? null,
+    resolution: details.resolution ?? null,
+    denialReason: details.denialReason ?? null,
+  });
+}
+
+/**
+ * Prompt the user for a permission decision using the forwarding flow,
+ * log the waiting / approved / denied outcome, and return the decision.
+ * In yolo mode, auto-approves without prompting.
+ */
+export async function promptPermission(
+  runtime: ExtensionRuntime,
+  forwardingDeps: PermissionForwardingDeps,
+  ctx: ExtensionContext,
+  details: PromptPermissionDetails,
+): Promise<PermissionPromptDecision> {
+  if (shouldAutoApprovePermissionState("ask", runtime.config)) {
+    reviewPermissionDecision(
+      runtime.writeReviewLog,
+      "permission_request.auto_approved",
+      details,
+    );
+    return { approved: true, state: "approved" };
+  }
+  reviewPermissionDecision(
+    runtime.writeReviewLog,
+    "permission_request.waiting",
+    details,
+  );
+  const decision = await confirmPermission(
+    ctx,
+    details.message,
+    forwardingDeps,
+  );
+  reviewPermissionDecision(
+    runtime.writeReviewLog,
+    decision.approved
+      ? "permission_request.approved"
+      : "permission_request.denied",
+    {
+      ...details,
+      resolution: decision.state,
+      denialReason: decision.denialReason,
+    },
+  );
+  return decision;
+}
+
+// ── Forwarding polling lifecycle ───────────────────────────────────────────
+
+/** Stop the forwarded-permission polling interval and clear related state. */
+export function stopForwardedPermissionPolling(
+  runtime: ExtensionRuntime,
+): void {
+  if (runtime.permissionForwardingTimer) {
+    clearInterval(runtime.permissionForwardingTimer);
+    runtime.permissionForwardingTimer = null;
+  }
+  runtime.permissionForwardingContext = null;
+  runtime.isProcessingForwardedRequests = false;
+}
+
+/**
+ * Start the forwarded-permission polling interval.
+ * No-ops (and stops any existing poll) when the context has no UI or is a
+ * subagent execution context.
+ */
+export function startForwardedPermissionPolling(
+  runtime: ExtensionRuntime,
+  forwardingDeps: PermissionForwardingDeps,
+  ctx: ExtensionContext,
+): void {
+  if (
+    !ctx.hasUI ||
+    isSubagentExecutionContext(ctx, runtime.subagentSessionsDir)
+  ) {
+    stopForwardedPermissionPolling(runtime);
+    return;
+  }
+  runtime.permissionForwardingContext = ctx;
+  if (runtime.permissionForwardingTimer) {
+    return;
+  }
+  runtime.permissionForwardingTimer = setInterval(() => {
+    if (
+      !runtime.permissionForwardingContext ||
+      runtime.isProcessingForwardedRequests
+    ) {
+      return;
+    }
+    runtime.isProcessingForwardedRequests = true;
+    void processForwardedPermissionRequests(
+      runtime.permissionForwardingContext,
+      forwardingDeps,
+    ).finally(() => {
+      runtime.isProcessingForwardedRequests = false;
+    });
+  }, PERMISSION_FORWARDING_POLL_INTERVAL_MS);
+}
+
+// ── Factory ────────────────────────────────────────────────────────────────
+
 /**
  * Create a fully-initialized `ExtensionRuntime`.
  *
@@ -83,9 +426,7 @@ export function createExtensionRuntime(options?: {
     globalLogsDir,
     config: { ...DEFAULT_EXTENSION_CONFIG },
     runtimeContext: null,
-    permissionManager: new PermissionManager({
-      globalConfigPath: undefined, // PermissionManager derives from getAgentDir() internally
-    }),
+    permissionManager: createPermissionManagerForCwd(agentDir, undefined),
     activeSkillEntries: [],
     lastKnownActiveAgentName: null,
     lastActiveToolsCacheKey: null,

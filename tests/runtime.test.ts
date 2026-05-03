@@ -1,20 +1,33 @@
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── logger stub ────────────────────────────────────────────────────────────
-const { mockLoggerDebug, mockLoggerReview, mockCreateLogger } = vi.hoisted(
-  () => ({
-    mockLoggerDebug:
-      vi.fn<
-        (event: string, details?: Record<string, unknown>) => string | undefined
-      >(),
-    mockLoggerReview:
-      vi.fn<
-        (event: string, details?: Record<string, unknown>) => string | undefined
-      >(),
-    mockCreateLogger: vi.fn(),
-  }),
-);
+const {
+  mockLoggerDebug,
+  mockLoggerReview,
+  mockCreateLogger,
+  mockLoadAndMergeConfigs,
+  mockSyncPermissionSystemStatus,
+  mockGetActiveAgentName,
+  mockGetActiveAgentNameFromSystemPrompt,
+  mockBuildResolvedConfigLogEntry,
+} = vi.hoisted(() => ({
+  mockLoggerDebug:
+    vi.fn<
+      (event: string, details?: Record<string, unknown>) => string | undefined
+    >(),
+  mockLoggerReview:
+    vi.fn<
+      (event: string, details?: Record<string, unknown>) => string | undefined
+    >(),
+  mockCreateLogger: vi.fn(),
+  mockLoadAndMergeConfigs: vi.fn(),
+  mockSyncPermissionSystemStatus: vi.fn(),
+  mockGetActiveAgentName: vi.fn<() => string | null>(),
+  mockGetActiveAgentNameFromSystemPrompt:
+    vi.fn<(prompt?: string) => string | null>(),
+  mockBuildResolvedConfigLogEntry: vi.fn(),
+}));
 
 vi.mock("../src/logging", () => ({
   createPermissionSystemLogger: mockCreateLogger,
@@ -24,13 +37,56 @@ vi.mock("../src/permission-manager", () => ({
   PermissionManager: vi.fn(),
 }));
 
+vi.mock("../src/config-loader", () => ({
+  loadAndMergeConfigs: mockLoadAndMergeConfigs,
+  loadUnifiedConfig: vi.fn().mockReturnValue({ config: {} }),
+}));
+
+vi.mock("../src/status", () => ({
+  PERMISSION_SYSTEM_STATUS_KEY: "permission-system",
+  syncPermissionSystemStatus: mockSyncPermissionSystemStatus,
+  getPermissionSystemStatus: vi.fn(),
+}));
+
+vi.mock("../src/active-agent", () => ({
+  getActiveAgentName: mockGetActiveAgentName,
+  getActiveAgentNameFromSystemPrompt: mockGetActiveAgentNameFromSystemPrompt,
+}));
+
+vi.mock("../src/config-reporter", () => ({
+  buildResolvedConfigLogEntry: mockBuildResolvedConfigLogEntry,
+}));
+
+vi.mock("../src/forwarded-permissions/polling", () => ({
+  processForwardedPermissionRequests: vi.fn().mockResolvedValue(undefined),
+  confirmPermission: vi
+    .fn()
+    .mockResolvedValue({ approved: true, state: "approved" }),
+}));
+
+vi.mock("../src/subagent-context", () => ({
+  isSubagentExecutionContext: vi.fn().mockReturnValue(false),
+}));
+
 vi.mock("../src/session-approval-cache", () => ({
   SessionApprovalCache: vi.fn(),
 }));
 
-import { getGlobalLogsDir } from "../src/config-paths";
+import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import {
+  getGlobalConfigPath,
+  getGlobalLogsDir,
+  getProjectConfigPath,
+} from "../src/config-paths";
 import { DEFAULT_EXTENSION_CONFIG } from "../src/extension-config";
-import { createExtensionRuntime } from "../src/runtime";
+import { PermissionManager } from "../src/permission-manager";
+import {
+  createExtensionRuntime,
+  createPermissionManagerForCwd,
+  derivePiProjectPaths,
+  refreshExtensionConfig,
+  resolveAgentName,
+} from "../src/runtime";
 
 // ── test suite ─────────────────────────────────────────────────────────────
 
@@ -279,5 +335,284 @@ describe("createExtensionRuntime", () => {
     const rt2 = createExtensionRuntime({ agentDir: "/agent/b" });
     rt1.lastKnownActiveAgentName = "agent-a";
     expect(rt2.lastKnownActiveAgentName).toBeNull();
+  });
+});
+
+// ── derivePiProjectPaths ───────────────────────────────────────────────────
+
+describe("derivePiProjectPaths", () => {
+  it("returns null for null cwd", () => {
+    expect(derivePiProjectPaths(null)).toBeNull();
+  });
+
+  it("returns null for undefined cwd", () => {
+    expect(derivePiProjectPaths(undefined)).toBeNull();
+  });
+
+  it("returns null for empty string cwd", () => {
+    expect(derivePiProjectPaths("")).toBeNull();
+  });
+
+  it("returns projectGlobalConfigPath via getProjectConfigPath", () => {
+    const result = derivePiProjectPaths("/my/project");
+    expect(result?.projectGlobalConfigPath).toBe(
+      getProjectConfigPath("/my/project"),
+    );
+  });
+
+  it("returns projectAgentsDir as .pi/agent/agents under cwd", () => {
+    const result = derivePiProjectPaths("/my/project");
+    expect(result?.projectAgentsDir).toBe(
+      join("/my/project", ".pi", "agent", "agents"),
+    );
+  });
+});
+
+// ── createPermissionManagerForCwd ─────────────────────────────────────────
+
+describe("createPermissionManagerForCwd", () => {
+  beforeEach(() => {
+    // PermissionManager is already mocked as vi.fn() at module scope.
+  });
+
+  it("creates a PermissionManager with globalConfigPath from agentDir", () => {
+    const MockPM = PermissionManager as ReturnType<typeof vi.fn>;
+    MockPM.mockClear();
+    createPermissionManagerForCwd("/test/agent", null);
+    expect(MockPM).toHaveBeenCalledWith(
+      expect.objectContaining({
+        globalConfigPath: getGlobalConfigPath("/test/agent"),
+      }),
+    );
+  });
+
+  it("includes projectGlobalConfigPath when cwd is provided", () => {
+    const MockPM = PermissionManager as ReturnType<typeof vi.fn>;
+    MockPM.mockClear();
+    createPermissionManagerForCwd("/test/agent", "/my/project");
+    expect(MockPM).toHaveBeenCalledWith(
+      expect.objectContaining({
+        globalConfigPath: getGlobalConfigPath("/test/agent"),
+        projectGlobalConfigPath: getProjectConfigPath("/my/project"),
+      }),
+    );
+  });
+
+  it("excludes projectGlobalConfigPath when cwd is null", () => {
+    const MockPM = PermissionManager as ReturnType<typeof vi.fn>;
+    MockPM.mockClear();
+    createPermissionManagerForCwd("/test/agent", null);
+    const callArg = MockPM.mock.calls[0][0] as Record<string, unknown>;
+    expect(callArg.projectGlobalConfigPath).toBeUndefined();
+  });
+});
+
+// ── refreshExtensionConfig ────────────────────────────────────────────────
+
+describe("refreshExtensionConfig", () => {
+  function makeRuntime() {
+    mockCreateLogger.mockReturnValue({
+      debug: mockLoggerDebug,
+      review: mockLoggerReview,
+    });
+    return createExtensionRuntime({ agentDir: "/test/agent" });
+  }
+
+  function makeCtx(
+    overrides: Partial<ExtensionContext> = {},
+  ): ExtensionContext {
+    return {
+      cwd: "/test/project",
+      hasUI: false,
+      ui: { notify: vi.fn(), setStatus: vi.fn() },
+      sessionManager: { getEntries: vi.fn(), addEntry: vi.fn() },
+      ...overrides,
+    } as unknown as ExtensionContext;
+  }
+
+  beforeEach(() => {
+    mockLoggerDebug.mockReset().mockReturnValue(undefined);
+    mockLoggerReview.mockReset().mockReturnValue(undefined);
+    mockLoadAndMergeConfigs.mockReset().mockReturnValue({
+      merged: { ...DEFAULT_EXTENSION_CONFIG },
+      issues: [],
+    });
+    mockSyncPermissionSystemStatus.mockReset();
+  });
+
+  it("updates runtime.runtimeContext when ctx is provided", () => {
+    const runtime = makeRuntime();
+    const ctx = makeCtx();
+    refreshExtensionConfig(runtime, ctx);
+    expect(runtime.runtimeContext).toBe(ctx);
+  });
+
+  it("does not override runtimeContext when ctx is omitted", () => {
+    const runtime = makeRuntime();
+    const existing = makeCtx();
+    runtime.runtimeContext = existing;
+    refreshExtensionConfig(runtime);
+    expect(runtime.runtimeContext).toBe(existing);
+  });
+
+  it("updates runtime.config with normalized merged result", () => {
+    const runtime = makeRuntime();
+    mockLoadAndMergeConfigs.mockReturnValue({
+      merged: { debugLog: true, permissionReviewLog: false, yoloMode: false },
+      issues: [],
+    });
+    refreshExtensionConfig(runtime);
+    expect(runtime.config.debugLog).toBe(true);
+    expect(runtime.config.permissionReviewLog).toBe(false);
+  });
+
+  it("calls loadAndMergeConfigs with runtime.agentDir and cwd", () => {
+    const runtime = makeRuntime();
+    const ctx = makeCtx({ cwd: "/my/project" });
+    refreshExtensionConfig(runtime, ctx);
+    expect(mockLoadAndMergeConfigs).toHaveBeenCalledWith(
+      "/test/agent",
+      "/my/project",
+      expect.any(String), // EXTENSION_ROOT
+    );
+  });
+
+  it("writes config.loaded debug log", () => {
+    const runtime = makeRuntime();
+    refreshExtensionConfig(runtime);
+    expect(mockLoggerDebug).toHaveBeenCalledWith(
+      "config.loaded",
+      expect.objectContaining({ debugLog: false }),
+    );
+  });
+
+  it("sets lastConfigWarning when issues are present", () => {
+    const runtime = makeRuntime();
+    mockLoadAndMergeConfigs.mockReturnValue({
+      merged: { ...DEFAULT_EXTENSION_CONFIG },
+      issues: ["legacy config detected"],
+    });
+    refreshExtensionConfig(runtime);
+    expect(runtime.lastConfigWarning).toBe("legacy config detected");
+  });
+
+  it("clears lastConfigWarning when no issues", () => {
+    const runtime = makeRuntime();
+    runtime.lastConfigWarning = "old warning";
+    mockLoadAndMergeConfigs.mockReturnValue({
+      merged: { ...DEFAULT_EXTENSION_CONFIG },
+      issues: [],
+    });
+    refreshExtensionConfig(runtime);
+    expect(runtime.lastConfigWarning).toBeNull();
+  });
+
+  it("notifies UI when a new warning appears and hasUI is true", () => {
+    const runtime = makeRuntime();
+    const mockNotify = vi.fn();
+    const ctx = makeCtx({ hasUI: true, ui: { notify: mockNotify } as never });
+    mockLoadAndMergeConfigs.mockReturnValue({
+      merged: { ...DEFAULT_EXTENSION_CONFIG },
+      issues: ["new warning"],
+    });
+    refreshExtensionConfig(runtime, ctx);
+    expect(mockNotify).toHaveBeenCalledWith("new warning", "warning");
+  });
+
+  it("does not re-notify the same warning on subsequent calls", () => {
+    const runtime = makeRuntime();
+    const mockNotify = vi.fn();
+    const ctx = makeCtx({ hasUI: true, ui: { notify: mockNotify } as never });
+    mockLoadAndMergeConfigs.mockReturnValue({
+      merged: { ...DEFAULT_EXTENSION_CONFIG },
+      issues: ["persistent warning"],
+    });
+    refreshExtensionConfig(runtime, ctx);
+    refreshExtensionConfig(runtime, ctx);
+    expect(mockNotify).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls syncPermissionSystemStatus when hasUI is true", () => {
+    const runtime = makeRuntime();
+    const ctx = makeCtx({ hasUI: true });
+    refreshExtensionConfig(runtime, ctx);
+    expect(mockSyncPermissionSystemStatus).toHaveBeenCalledWith(
+      ctx,
+      expect.any(Object),
+    );
+  });
+
+  it("does not call syncPermissionSystemStatus when hasUI is false", () => {
+    const runtime = makeRuntime();
+    const ctx = makeCtx({ hasUI: false });
+    refreshExtensionConfig(runtime, ctx);
+    expect(mockSyncPermissionSystemStatus).not.toHaveBeenCalled();
+  });
+});
+
+// ── resolveAgentName ──────────────────────────────────────────────────────
+
+describe("resolveAgentName", () => {
+  function makeRuntime() {
+    mockCreateLogger.mockReturnValue({
+      debug: mockLoggerDebug,
+      review: mockLoggerReview,
+    });
+    return createExtensionRuntime({ agentDir: "/test/agent" });
+  }
+
+  function makeCtx(): ExtensionContext {
+    return {
+      cwd: "/test/project",
+      hasUI: false,
+      ui: {},
+      sessionManager: { getEntries: vi.fn(), addEntry: vi.fn() },
+    } as unknown as ExtensionContext;
+  }
+
+  beforeEach(() => {
+    mockLoggerDebug.mockReset().mockReturnValue(undefined);
+    mockGetActiveAgentName.mockReset().mockReturnValue(null);
+    mockGetActiveAgentNameFromSystemPrompt.mockReset().mockReturnValue(null);
+  });
+
+  it("returns and stores name from getActiveAgentName when available", () => {
+    const runtime = makeRuntime();
+    mockGetActiveAgentName.mockReturnValue("session-agent");
+    const result = resolveAgentName(runtime, makeCtx());
+    expect(result).toBe("session-agent");
+    expect(runtime.lastKnownActiveAgentName).toBe("session-agent");
+  });
+
+  it("falls back to getActiveAgentNameFromSystemPrompt when session name is null", () => {
+    const runtime = makeRuntime();
+    mockGetActiveAgentName.mockReturnValue(null);
+    mockGetActiveAgentNameFromSystemPrompt.mockReturnValue("prompt-agent");
+    const result = resolveAgentName(runtime, makeCtx(), "system prompt text");
+    expect(result).toBe("prompt-agent");
+    expect(runtime.lastKnownActiveAgentName).toBe("prompt-agent");
+  });
+
+  it("falls back to lastKnownActiveAgentName when both sources return null", () => {
+    const runtime = makeRuntime();
+    runtime.lastKnownActiveAgentName = "remembered-agent";
+    mockGetActiveAgentName.mockReturnValue(null);
+    mockGetActiveAgentNameFromSystemPrompt.mockReturnValue(null);
+    const result = resolveAgentName(runtime, makeCtx());
+    expect(result).toBe("remembered-agent");
+  });
+
+  it("returns null when all sources are null and no prior name", () => {
+    const runtime = makeRuntime();
+    const result = resolveAgentName(runtime, makeCtx());
+    expect(result).toBeNull();
+  });
+
+  it("does not update lastKnownActiveAgentName when falling back to stored value", () => {
+    const runtime = makeRuntime();
+    runtime.lastKnownActiveAgentName = "remembered-agent";
+    resolveAgentName(runtime, makeCtx());
+    // Value unchanged — not overwritten with null
+    expect(runtime.lastKnownActiveAgentName).toBe("remembered-agent");
   });
 });
