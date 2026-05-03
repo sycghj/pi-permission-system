@@ -36,6 +36,9 @@ Read `docs/plans/` before making architectural changes (created by `/plan-issue`
 - Avoid `any` unless absolutely necessary.
 - Use standard top-level imports only.
 - Keep modules focused and composable (one concern per file in `src/`: `bash-filter.ts`, `wildcard-matcher.ts`, `permission-manager.ts`, etc.).
+- When writing handler functions that consume Pi SDK events, prefer lean local payload interfaces over full SDK event types.
+  The SDK may not export all event interfaces, and exported types often require fields the handler does not read.
+  Define a minimal interface with only the fields the handler uses (e.g., `interface SessionStartPayload { reason: string; }`).
 - Prefer explicit configuration over hidden behavior.
 - Permission decisions should be pure functions of (policy, request) wherever possible — keep IO at the edges.
 - Do not cache `getAgentDir()` or other environment-derived values at module scope — tests set `PI_CODING_AGENT_DIR` after import.
@@ -109,6 +112,7 @@ issue_title: "Per-agent permission frontmatter overrides" # required
 - When using `vi.mock()`, extract each `vi.fn()` stub to a module-scope variable and reset it in `beforeEach` — `vi.restoreAllMocks()` only operates on `vi.spyOn()` spies, not on `vi.fn()` instances.
   Use `.mockReset()` when the stub has no default implementation (each test sets its own return value).
   Use `.mockClear()` when the `vi.mock()` factory provides a default implementation that tests must preserve.
+- When a `vi.mock()` factory references a module-scope `vi.fn()` stub, wrap the stub declaration in `vi.hoisted()` — Vitest hoists `vi.mock()` above normal declarations, so unhoisted variables are `undefined` when the factory runs.
 - When mocking `node:*` built-in modules with `vi.mock()`, include a `default` key mirroring the named exports — omitting it causes "No default export defined on the mock" errors when any import uses the default.
 - When writing TDD steps in a plan, ensure each feat step that changes behavior also accounts for existing tests that will break.
   Either fold the test updates into the same step or place a dedicated test-update step immediately before the feat step — never after it.
