@@ -2657,6 +2657,58 @@ test("PermissionManager.getConfigIssues returns empty array for clean config", (
   }
 });
 
+// --- doom_loop config-loader deprecation tests (#54) ---
+
+test("PermissionManager.getConfigIssues returns deprecation for doom_loop in global config", () => {
+  const config: GlobalPermissionConfig = {
+    defaultPolicy: {
+      tools: "ask",
+      bash: "ask",
+      mcp: "ask",
+      skills: "ask",
+      special: "ask",
+    },
+    tools: {},
+    bash: {},
+    mcp: {},
+    skills: {},
+    special: { doom_loop: "deny" },
+  };
+  const { manager, cleanup } = createManager(config);
+  try {
+    const issues = manager.getConfigIssues();
+    assert.equal(issues.length, 1);
+    assert.ok(issues[0].includes("doom_loop"));
+  } finally {
+    cleanup();
+  }
+});
+
+test("checkPermission doom_loop falls through to defaultPolicy.tools when stripped by config-loader", () => {
+  const { manager, cleanup } = createManager({
+    defaultPolicy: {
+      tools: "allow",
+      bash: "ask",
+      mcp: "ask",
+      skills: "ask",
+      special: "deny",
+    },
+    tools: {},
+    bash: {},
+    mcp: {},
+    skills: {},
+    special: { doom_loop: "ask" },
+  });
+  try {
+    const result = manager.checkPermission("doom_loop", {});
+    // doom_loop stripped by config-loader — falls through to defaultPolicy.tools
+    assert.equal(result.state, "allow");
+    assert.equal(result.matchedPattern, undefined);
+  } finally {
+    cleanup();
+  }
+});
+
 // --- session-scoped approval tests (#45) ---
 
 test("session approval: first prompt with 'Yes, for this session' skips subsequent prompts under same prefix", async () => {
