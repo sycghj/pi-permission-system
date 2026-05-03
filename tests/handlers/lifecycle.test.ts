@@ -96,22 +96,8 @@ function makeRuntime(
 }
 
 function makeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
-  const pm = makePermissionManager();
   return {
     runtime: makeRuntime(),
-    getPermissionManager: vi.fn().mockReturnValue(pm),
-    setPermissionManager: vi.fn(),
-    getRuntimeContext: vi.fn().mockReturnValue(null),
-    setRuntimeContext: vi.fn(),
-    getActiveSkillEntries: vi.fn().mockReturnValue([] as SkillPromptEntry[]),
-    setActiveSkillEntries: vi.fn(),
-    getLastKnownActiveAgentName: vi.fn().mockReturnValue(null),
-    setLastKnownActiveAgentName: vi.fn(),
-    getLastActiveToolsCacheKey: vi.fn().mockReturnValue(null),
-    setLastActiveToolsCacheKey: vi.fn(),
-    getLastPromptStateCacheKey: vi.fn().mockReturnValue(null),
-    setLastPromptStateCacheKey: vi.fn(),
-    sessionApprovalCache: makeSessionApprovalCache(),
     createPermissionManagerForCwd: vi
       .fn()
       .mockReturnValue(makePermissionManager()),
@@ -126,8 +112,6 @@ function makeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
     createPermissionRequestId: vi.fn().mockReturnValue("test-id"),
     startForwardedPermissionPolling: vi.fn(),
     stopForwardedPermissionPolling: vi.fn(),
-    writeReviewLog: vi.fn(),
-    writeDebugLog: vi.fn(),
     getAllTools: vi.fn().mockReturnValue([]),
     setActiveTools: vi.fn(),
     ...overrides,
@@ -146,7 +130,7 @@ describe("handleSessionStart", () => {
     const ctx = makeCtx();
     const deps = makeDeps();
     await handleSessionStart(deps, { reason: "startup" }, ctx);
-    expect(deps.setRuntimeContext).toHaveBeenCalledWith(ctx);
+    expect(deps.runtime.runtimeContext).toBe(ctx);
   });
 
   it("refreshes extension config with ctx", async () => {
@@ -166,16 +150,16 @@ describe("handleSessionStart", () => {
     expect(deps.createPermissionManagerForCwd).toHaveBeenCalledWith(
       "/my/project",
     );
-    expect(deps.setPermissionManager).toHaveBeenCalledWith(newPm);
+    expect(deps.runtime.permissionManager).toBe(newPm);
   });
 
   it("clears the before_agent_start cache", async () => {
     const ctx = makeCtx();
     const deps = makeDeps();
     await handleSessionStart(deps, { reason: "startup" }, ctx);
-    expect(deps.setActiveSkillEntries).toHaveBeenCalledWith([]);
-    expect(deps.setLastActiveToolsCacheKey).toHaveBeenCalledWith(null);
-    expect(deps.setLastPromptStateCacheKey).toHaveBeenCalledWith(null);
+    expect(deps.runtime.activeSkillEntries).toEqual([]);
+    expect(deps.runtime.lastActiveToolsCacheKey).toBeNull();
+    expect(deps.runtime.lastPromptStateCacheKey).toBeNull();
   });
 
   it("sets lastKnownActiveAgentName from getActiveAgentName", async () => {
@@ -183,7 +167,7 @@ describe("handleSessionStart", () => {
     const ctx = makeCtx();
     const deps = makeDeps();
     await handleSessionStart(deps, { reason: "startup" }, ctx);
-    expect(deps.setLastKnownActiveAgentName).toHaveBeenCalledWith("my-agent");
+    expect(deps.runtime.lastKnownActiveAgentName).toBe("my-agent");
   });
 
   it("sets lastKnownActiveAgentName to null when no agent is active", async () => {
@@ -191,7 +175,7 @@ describe("handleSessionStart", () => {
     const ctx = makeCtx();
     const deps = makeDeps();
     await handleSessionStart(deps, { reason: "startup" }, ctx);
-    expect(deps.setLastKnownActiveAgentName).toHaveBeenCalledWith(null);
+    expect(deps.runtime.lastKnownActiveAgentName).toBeNull();
   });
 
   it("starts forwarded permission polling", async () => {
@@ -211,7 +195,7 @@ describe("handleSessionStart", () => {
   it("notifies each policy issue", async () => {
     const pm = makePermissionManager(["issue A", "issue B"]);
     const deps = makeDeps({
-      getPermissionManager: vi.fn().mockReturnValue(pm),
+      createPermissionManagerForCwd: vi.fn().mockReturnValue(pm),
     });
     await handleSessionStart(deps, { reason: "startup" }, makeCtx());
     expect(deps.notifyWarning).toHaveBeenCalledWith("issue A");
@@ -228,17 +212,20 @@ describe("handleSessionStart", () => {
     const ctx = makeCtx({ cwd: "/proj" });
     const deps = makeDeps();
     await handleSessionStart(deps, { reason: "reload" }, ctx);
-    expect(deps.writeDebugLog).toHaveBeenCalledWith("lifecycle.reload", {
-      triggeredBy: "session_start",
-      reason: "reload",
-      cwd: "/proj",
-    });
+    expect(deps.runtime.writeDebugLog).toHaveBeenCalledWith(
+      "lifecycle.reload",
+      {
+        triggeredBy: "session_start",
+        reason: "reload",
+        cwd: "/proj",
+      },
+    );
   });
 
   it("does not write lifecycle.reload debug log for non-reload reasons", async () => {
     const deps = makeDeps();
     await handleSessionStart(deps, { reason: "startup" }, makeCtx());
-    expect(deps.writeDebugLog).not.toHaveBeenCalled();
+    expect(deps.runtime.writeDebugLog).not.toHaveBeenCalled();
   });
 });
 
@@ -248,61 +235,63 @@ describe("handleResourcesDiscover", () => {
   it("does nothing when reason is not reload", async () => {
     const deps = makeDeps();
     await handleResourcesDiscover(deps, { reason: "startup" });
-    expect(deps.setPermissionManager).not.toHaveBeenCalled();
-    expect(deps.writeDebugLog).not.toHaveBeenCalled();
+    expect(deps.createPermissionManagerForCwd).not.toHaveBeenCalled();
+    expect(deps.runtime.writeDebugLog).not.toHaveBeenCalled();
   });
 
   it("creates and stores a new PM using runtimeContext.cwd on reload", async () => {
     const ctx = makeCtx({ cwd: "/runtime/cwd" });
     const newPm = makePermissionManager();
     const deps = makeDeps({
-      getRuntimeContext: vi.fn().mockReturnValue(ctx),
+      runtime: makeRuntime({ runtimeContext: ctx }),
       createPermissionManagerForCwd: vi.fn().mockReturnValue(newPm),
     });
     await handleResourcesDiscover(deps, { reason: "reload" });
     expect(deps.createPermissionManagerForCwd).toHaveBeenCalledWith(
       "/runtime/cwd",
     );
-    expect(deps.setPermissionManager).toHaveBeenCalledWith(newPm);
+    expect(deps.runtime.permissionManager).toBe(newPm);
   });
 
   it("uses undefined cwd when runtimeContext is null on reload", async () => {
-    const deps = makeDeps({
-      getRuntimeContext: vi.fn().mockReturnValue(null),
-    });
+    const deps = makeDeps();
     await handleResourcesDiscover(deps, { reason: "reload" });
     expect(deps.createPermissionManagerForCwd).toHaveBeenCalledWith(undefined);
   });
 
   it("clears the before_agent_start cache on reload", async () => {
-    const deps = makeDeps({ getRuntimeContext: vi.fn().mockReturnValue(null) });
+    const deps = makeDeps();
     await handleResourcesDiscover(deps, { reason: "reload" });
-    expect(deps.setActiveSkillEntries).toHaveBeenCalledWith([]);
-    expect(deps.setLastActiveToolsCacheKey).toHaveBeenCalledWith(null);
-    expect(deps.setLastPromptStateCacheKey).toHaveBeenCalledWith(null);
+    expect(deps.runtime.activeSkillEntries).toEqual([]);
+    expect(deps.runtime.lastActiveToolsCacheKey).toBeNull();
+    expect(deps.runtime.lastPromptStateCacheKey).toBeNull();
   });
 
   it("writes lifecycle.reload debug log on reload", async () => {
     const ctx = makeCtx({ cwd: "/proj" });
-    const deps = makeDeps({ getRuntimeContext: vi.fn().mockReturnValue(ctx) });
+    const deps = makeDeps({ runtime: makeRuntime({ runtimeContext: ctx }) });
     await handleResourcesDiscover(deps, { reason: "reload" });
-    expect(deps.writeDebugLog).toHaveBeenCalledWith("lifecycle.reload", {
-      triggeredBy: "resources_discover",
-      reason: "reload",
-      cwd: "/proj",
-    });
+    expect(deps.runtime.writeDebugLog).toHaveBeenCalledWith(
+      "lifecycle.reload",
+      {
+        triggeredBy: "resources_discover",
+        reason: "reload",
+        cwd: "/proj",
+      },
+    );
   });
 
   it("logs cwd as null when runtimeContext is null on reload", async () => {
-    const deps = makeDeps({
-      getRuntimeContext: vi.fn().mockReturnValue(null),
-    });
+    const deps = makeDeps();
     await handleResourcesDiscover(deps, { reason: "reload" });
-    expect(deps.writeDebugLog).toHaveBeenCalledWith("lifecycle.reload", {
-      triggeredBy: "resources_discover",
-      reason: "reload",
-      cwd: null,
-    });
+    expect(deps.runtime.writeDebugLog).toHaveBeenCalledWith(
+      "lifecycle.reload",
+      {
+        triggeredBy: "resources_discover",
+        reason: "reload",
+        cwd: null,
+      },
+    );
   });
 });
 
@@ -312,7 +301,7 @@ describe("handleSessionShutdown", () => {
   it("clears the UI status when a runtime context is present", async () => {
     const ctx = makeCtx();
     const deps = makeDeps({
-      getRuntimeContext: vi.fn().mockReturnValue(ctx),
+      runtime: makeRuntime({ runtimeContext: ctx }),
     });
     await handleSessionShutdown(deps);
     expect(ctx.ui.setStatus).toHaveBeenCalledWith(
@@ -322,28 +311,29 @@ describe("handleSessionShutdown", () => {
   });
 
   it("does not throw when runtime context is null", async () => {
-    const deps = makeDeps({ getRuntimeContext: vi.fn().mockReturnValue(null) });
+    const deps = makeDeps();
     await expect(handleSessionShutdown(deps)).resolves.not.toThrow();
   });
 
   it("sets runtime context to null", async () => {
-    const deps = makeDeps();
+    const ctx = makeCtx();
+    const deps = makeDeps({ runtime: makeRuntime({ runtimeContext: ctx }) });
     await handleSessionShutdown(deps);
-    expect(deps.setRuntimeContext).toHaveBeenCalledWith(null);
+    expect(deps.runtime.runtimeContext).toBeNull();
   });
 
   it("clears the before_agent_start cache", async () => {
     const deps = makeDeps();
     await handleSessionShutdown(deps);
-    expect(deps.setActiveSkillEntries).toHaveBeenCalledWith([]);
-    expect(deps.setLastActiveToolsCacheKey).toHaveBeenCalledWith(null);
-    expect(deps.setLastPromptStateCacheKey).toHaveBeenCalledWith(null);
+    expect(deps.runtime.activeSkillEntries).toEqual([]);
+    expect(deps.runtime.lastActiveToolsCacheKey).toBeNull();
+    expect(deps.runtime.lastPromptStateCacheKey).toBeNull();
   });
 
   it("clears the session approval cache", async () => {
     const deps = makeDeps();
     await handleSessionShutdown(deps);
-    expect(deps.sessionApprovalCache.clear).toHaveBeenCalledOnce();
+    expect(deps.runtime.sessionApprovalCache.clear).toHaveBeenCalledOnce();
   });
 
   it("stops forwarded permission polling", async () => {
@@ -353,8 +343,10 @@ describe("handleSessionShutdown", () => {
   });
 
   it("does not reset lastKnownActiveAgentName", async () => {
-    const deps = makeDeps();
+    const deps = makeDeps({
+      runtime: makeRuntime({ lastKnownActiveAgentName: "remembered" }),
+    });
     await handleSessionShutdown(deps);
-    expect(deps.setLastKnownActiveAgentName).not.toHaveBeenCalled();
+    expect(deps.runtime.lastKnownActiveAgentName).toBe("remembered");
   });
 });

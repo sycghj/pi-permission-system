@@ -39,7 +39,7 @@ export async function handleInput(
   event: InputPayload,
   ctx: ExtensionContext,
 ): Promise<InputEventResult> {
-  deps.setRuntimeContext(ctx);
+  deps.runtime.runtimeContext = ctx;
   deps.startForwardedPermissionPolling(ctx);
 
   const skillName = extractSkillNameFromInput(event.text);
@@ -48,9 +48,11 @@ export async function handleInput(
   }
 
   const agentName = deps.resolveAgentName(ctx);
-  const check = deps
-    .getPermissionManager()
-    .checkPermission("skill", { name: skillName }, agentName ?? undefined);
+  const check = deps.runtime.permissionManager.checkPermission(
+    "skill",
+    { name: skillName },
+    agentName ?? undefined,
+  );
 
   if (check.state === "deny" && ctx.hasUI) {
     const notifyMessage = agentName
@@ -74,7 +76,7 @@ export async function handleInput(
         message: skillInputMessage,
         skillName,
       }),
-    writeLog: deps.writeReviewLog,
+    writeLog: deps.runtime.writeReviewLog,
     logContext: {
       source: "skill_input",
       skillName,

@@ -61,7 +61,7 @@ export async function handleToolCall(
   event: unknown,
   ctx: ExtensionContext,
 ): Promise<{ block?: true; reason?: string }> {
-  deps.setRuntimeContext(ctx);
+  deps.runtime.runtimeContext = ctx;
   deps.startForwardedPermissionPolling(ctx);
 
   const agentName = deps.resolveAgentName(ctx);
@@ -92,7 +92,7 @@ export async function handleToolCall(
   // ── Skill-read gate ──────────────────────────────────────────────────────
   if (
     isToolCallEventType("read", event as ToolCallEvent) &&
-    deps.getActiveSkillEntries().length > 0
+    deps.runtime.activeSkillEntries.length > 0
   ) {
     const normalizedReadPath = normalizePathForComparison(
       (event as ToolCallEvent & { input: { path: string } }).input.path,
@@ -100,7 +100,7 @@ export async function handleToolCall(
     );
     const matchedSkill = findSkillPathMatch(
       normalizedReadPath,
-      deps.getActiveSkillEntries(),
+      deps.runtime.activeSkillEntries,
     );
 
     if (matchedSkill) {
@@ -124,7 +124,7 @@ export async function handleToolCall(
             skillName: matchedSkill.name,
             path: readEvent.input.path,
           }),
-        writeLog: deps.writeReviewLog,
+        writeLog: deps.runtime.writeReviewLog,
         logContext: {
           source: "skill_read",
           skillName: matchedSkill.name,
@@ -169,13 +169,13 @@ export async function handleToolCall(
       externalDirectoryPath,
       ctx.cwd,
     );
-    const sessionPrefix = deps.sessionApprovalCache.findMatchingPrefix(
+    const sessionPrefix = deps.runtime.sessionApprovalCache.findMatchingPrefix(
       "external_directory",
       normalizedExtPath,
     );
 
     if (sessionPrefix) {
-      deps.writeReviewLog("permission_request.session_approved", {
+      deps.runtime.writeReviewLog("permission_request.session_approved", {
         source: "tool_call",
         toolCallId: (event as { toolCallId: string }).toolCallId,
         toolName,
@@ -186,9 +186,11 @@ export async function handleToolCall(
       });
       // Fall through to normal permission check
     } else {
-      const extCheck = deps
-        .getPermissionManager()
-        .checkPermission("external_directory", {}, agentName ?? undefined);
+      const extCheck = deps.runtime.permissionManager.checkPermission(
+        "external_directory",
+        {},
+        agentName ?? undefined,
+      );
 
       let extDirDecision: PermissionPromptDecision | null = null;
       const extDirMessage = formatExternalDirectoryAskPrompt(
@@ -213,7 +215,7 @@ export async function handleToolCall(
           extDirDecision = decision;
           return decision;
         },
-        writeLog: deps.writeReviewLog,
+        writeLog: deps.runtime.writeReviewLog,
         logContext: {
           source: "tool_call",
           toolCallId: (event as { toolCallId: string }).toolCallId,
@@ -244,7 +246,7 @@ export async function handleToolCall(
 
       if (extDirDecision?.state === "approved_for_session") {
         const prefix = deriveApprovalPrefix(normalizedExtPath);
-        deps.sessionApprovalCache.approve("external_directory", prefix);
+        deps.runtime.sessionApprovalCache.approve("external_directory", prefix);
       }
     }
     // Fall through to normal permission check
@@ -260,11 +262,12 @@ export async function handleToolCall(
       );
       if (externalPaths.length > 0) {
         const uncoveredPaths = externalPaths.filter(
-          (p) => !deps.sessionApprovalCache.has("external_directory", p),
+          (p) =>
+            !deps.runtime.sessionApprovalCache.has("external_directory", p),
         );
 
         if (uncoveredPaths.length === 0) {
-          deps.writeReviewLog("permission_request.session_approved", {
+          deps.runtime.writeReviewLog("permission_request.session_approved", {
             source: "tool_call",
             toolCallId: (event as { toolCallId: string }).toolCallId,
             toolName,
@@ -275,9 +278,11 @@ export async function handleToolCall(
           });
           // Fall through to normal bash permission check
         } else {
-          const extCheck = deps
-            .getPermissionManager()
-            .checkPermission("external_directory", {}, agentName ?? undefined);
+          const extCheck = deps.runtime.permissionManager.checkPermission(
+            "external_directory",
+            {},
+            agentName ?? undefined,
+          );
 
           let bashExtDecision: PermissionPromptDecision | null = null;
           const bashExtMessage = formatBashExternalDirectoryAskPrompt(
@@ -302,7 +307,7 @@ export async function handleToolCall(
               bashExtDecision = decision;
               return decision;
             },
-            writeLog: deps.writeReviewLog,
+            writeLog: deps.runtime.writeReviewLog,
             logContext: {
               source: "tool_call",
               toolCallId: (event as { toolCallId: string }).toolCallId,
@@ -335,7 +340,10 @@ export async function handleToolCall(
           if (bashExtDecision?.state === "approved_for_session") {
             for (const extPath of uncoveredPaths) {
               const prefix = deriveApprovalPrefix(extPath);
-              deps.sessionApprovalCache.approve("external_directory", prefix);
+              deps.runtime.sessionApprovalCache.approve(
+                "external_directory",
+                prefix,
+              );
             }
           }
         }
@@ -345,9 +353,11 @@ export async function handleToolCall(
   }
 
   // ── Normal tool permission gate ───────────────────────────────────────────
-  const check = deps
-    .getPermissionManager()
-    .checkPermission(toolName, input, agentName ?? undefined);
+  const check = deps.runtime.permissionManager.checkPermission(
+    toolName,
+    input,
+    agentName ?? undefined,
+  );
   const permissionLogContext = getPermissionLogContext(
     check,
     input,
@@ -375,7 +385,7 @@ export async function handleToolCall(
         toolName,
         ...permissionLogContext,
       }),
-    writeLog: deps.writeReviewLog,
+    writeLog: deps.runtime.writeReviewLog,
     logContext: {
       source: "tool_call",
       toolCallId: (event as { toolCallId: string }).toolCallId,

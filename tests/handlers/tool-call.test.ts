@@ -92,26 +92,6 @@ function makeRuntime(
 function makeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
   return {
     runtime: makeRuntime(),
-    getPermissionManager: vi.fn().mockReturnValue({
-      checkPermission: vi.fn().mockReturnValue(makePermissionResult("allow")),
-    }),
-    setPermissionManager: vi.fn(),
-    getRuntimeContext: vi.fn().mockReturnValue(null),
-    setRuntimeContext: vi.fn(),
-    getActiveSkillEntries: vi.fn().mockReturnValue([]),
-    setActiveSkillEntries: vi.fn(),
-    getLastKnownActiveAgentName: vi.fn().mockReturnValue(null),
-    setLastKnownActiveAgentName: vi.fn(),
-    getLastActiveToolsCacheKey: vi.fn().mockReturnValue(null),
-    setLastActiveToolsCacheKey: vi.fn(),
-    getLastPromptStateCacheKey: vi.fn().mockReturnValue(null),
-    setLastPromptStateCacheKey: vi.fn(),
-    sessionApprovalCache: {
-      approve: vi.fn(),
-      has: vi.fn().mockReturnValue(false),
-      findMatchingPrefix: vi.fn().mockReturnValue(null),
-      clear: vi.fn(),
-    } as unknown as HandlerDeps["sessionApprovalCache"],
     createPermissionManagerForCwd: vi.fn(),
     refreshExtensionConfig: vi.fn(),
     notifyWarning: vi.fn(),
@@ -124,8 +104,6 @@ function makeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
     createPermissionRequestId: vi.fn().mockReturnValue("req-id"),
     startForwardedPermissionPolling: vi.fn(),
     stopForwardedPermissionPolling: vi.fn(),
-    writeReviewLog: vi.fn(),
-    writeDebugLog: vi.fn(),
     getAllTools: vi.fn().mockReturnValue([{ name: "read" }, { name: "bash" }]),
     setActiveTools: vi.fn(),
     ...overrides,
@@ -165,7 +143,7 @@ describe("handleToolCall", () => {
     const ctx = makeCtx();
     const deps = makeDeps();
     await handleToolCall(deps, makeToolCallEvent("read"), ctx);
-    expect(deps.setRuntimeContext).toHaveBeenCalledWith(ctx);
+    expect(deps.runtime.runtimeContext).toBe(ctx);
   });
 
   it("starts forwarded permission polling", async () => {
@@ -198,11 +176,8 @@ describe("handleToolCall", () => {
   });
 
   it("returns empty object when tool is allowed", async () => {
-    const deps = makeDeps({
-      getPermissionManager: vi.fn().mockReturnValue({
-        checkPermission: vi.fn().mockReturnValue(makePermissionResult("allow")),
-      }),
-    });
+    // default makeRuntime() has checkPermission → "allow"
+    const deps = makeDeps();
     const result = await handleToolCall(
       deps,
       makeToolCallEvent("read"),
@@ -213,8 +188,12 @@ describe("handleToolCall", () => {
 
   it("blocks when tool is denied by policy", async () => {
     const deps = makeDeps({
-      getPermissionManager: vi.fn().mockReturnValue({
-        checkPermission: vi.fn().mockReturnValue(makePermissionResult("deny")),
+      runtime: makeRuntime({
+        permissionManager: {
+          checkPermission: vi
+            .fn()
+            .mockReturnValue(makePermissionResult("deny")),
+        } as unknown as ExtensionRuntime["permissionManager"],
       }),
     });
     const result = await handleToolCall(
@@ -227,8 +206,10 @@ describe("handleToolCall", () => {
 
   it("blocks when tool ask has no UI available", async () => {
     const deps = makeDeps({
-      getPermissionManager: vi.fn().mockReturnValue({
-        checkPermission: vi.fn().mockReturnValue(makePermissionResult("ask")),
+      runtime: makeRuntime({
+        permissionManager: {
+          checkPermission: vi.fn().mockReturnValue(makePermissionResult("ask")),
+        } as unknown as ExtensionRuntime["permissionManager"],
       }),
       canRequestPermissionConfirmation: vi.fn().mockReturnValue(false),
     });
@@ -242,8 +223,10 @@ describe("handleToolCall", () => {
 
   it("allows when user approves the ask prompt", async () => {
     const deps = makeDeps({
-      getPermissionManager: vi.fn().mockReturnValue({
-        checkPermission: vi.fn().mockReturnValue(makePermissionResult("ask")),
+      runtime: makeRuntime({
+        permissionManager: {
+          checkPermission: vi.fn().mockReturnValue(makePermissionResult("ask")),
+        } as unknown as ExtensionRuntime["permissionManager"],
       }),
       canRequestPermissionConfirmation: vi.fn().mockReturnValue(true),
       promptPermission: vi
@@ -260,8 +243,10 @@ describe("handleToolCall", () => {
 
   it("blocks when user denies the ask prompt", async () => {
     const deps = makeDeps({
-      getPermissionManager: vi.fn().mockReturnValue({
-        checkPermission: vi.fn().mockReturnValue(makePermissionResult("ask")),
+      runtime: makeRuntime({
+        permissionManager: {
+          checkPermission: vi.fn().mockReturnValue(makePermissionResult("ask")),
+        } as unknown as ExtensionRuntime["permissionManager"],
       }),
       canRequestPermissionConfirmation: vi.fn().mockReturnValue(true),
       promptPermission: vi
@@ -290,11 +275,8 @@ describe("handleToolCall — skill-read gate", () => {
       normalizedBaseDir: "/skills/librarian",
     };
     const deps = makeDeps({
-      getActiveSkillEntries: vi.fn().mockReturnValue([skillEntry]),
+      runtime: makeRuntime({ activeSkillEntries: [skillEntry] }),
       getAllTools: vi.fn().mockReturnValue([{ toolName: "read" }]),
-      getPermissionManager: vi.fn().mockReturnValue({
-        checkPermission: vi.fn().mockReturnValue(makePermissionResult("allow")),
-      }),
     });
     const event = {
       type: "tool_call",
@@ -316,11 +298,8 @@ describe("handleToolCall — skill-read gate", () => {
       normalizedBaseDir: "/skills/librarian",
     };
     const deps = makeDeps({
-      getActiveSkillEntries: vi.fn().mockReturnValue([skillEntry]),
+      runtime: makeRuntime({ activeSkillEntries: [skillEntry] }),
       getAllTools: vi.fn().mockReturnValue([{ toolName: "read" }]),
-      getPermissionManager: vi.fn().mockReturnValue({
-        checkPermission: vi.fn().mockReturnValue(makePermissionResult("allow")),
-      }),
     });
     const event = {
       type: "tool_call",
@@ -338,10 +317,14 @@ describe("handleToolCall — skill-read gate", () => {
 describe("handleToolCall — external-directory gate", () => {
   it("blocks a read of a path outside cwd when policy is deny", async () => {
     const deps = makeDeps({
-      getAllTools: vi.fn().mockReturnValue([{ name: "read" }]),
-      getPermissionManager: vi.fn().mockReturnValue({
-        checkPermission: vi.fn().mockReturnValue(makePermissionResult("deny")),
+      runtime: makeRuntime({
+        permissionManager: {
+          checkPermission: vi
+            .fn()
+            .mockReturnValue(makePermissionResult("deny")),
+        } as unknown as ExtensionRuntime["permissionManager"],
       }),
+      getAllTools: vi.fn().mockReturnValue([{ name: "read" }]),
     });
     const event = {
       type: "tool_call",
@@ -355,16 +338,15 @@ describe("handleToolCall — external-directory gate", () => {
 
   it("allows when session has an existing approval for the external path", async () => {
     const deps = makeDeps({
-      getAllTools: vi.fn().mockReturnValue([{ name: "read" }]),
-      getPermissionManager: vi.fn().mockReturnValue({
-        checkPermission: vi.fn().mockReturnValue(makePermissionResult("allow")),
+      runtime: makeRuntime({
+        sessionApprovalCache: {
+          approve: vi.fn(),
+          has: vi.fn().mockReturnValue(false),
+          findMatchingPrefix: vi.fn().mockReturnValue("/outside/project/"),
+          clear: vi.fn(),
+        } as unknown as ExtensionRuntime["sessionApprovalCache"],
       }),
-      sessionApprovalCache: {
-        approve: vi.fn(),
-        has: vi.fn().mockReturnValue(false),
-        findMatchingPrefix: vi.fn().mockReturnValue("/outside/project/"),
-        clear: vi.fn(),
-      } as unknown as HandlerDeps["sessionApprovalCache"],
+      getAllTools: vi.fn().mockReturnValue([{ name: "read" }]),
     });
     const event = {
       type: "tool_call",
@@ -382,17 +364,19 @@ describe("handleToolCall — external-directory gate", () => {
       has: vi.fn().mockReturnValue(false),
       findMatchingPrefix: vi.fn().mockReturnValue(null),
       clear: vi.fn(),
-    } as unknown as HandlerDeps["sessionApprovalCache"];
+    } as unknown as ExtensionRuntime["sessionApprovalCache"];
     const deps = makeDeps({
-      getAllTools: vi.fn().mockReturnValue([{ name: "read" }]),
-      getPermissionManager: vi.fn().mockReturnValue({
-        checkPermission: vi.fn().mockReturnValue(makePermissionResult("ask")),
+      runtime: makeRuntime({
+        permissionManager: {
+          checkPermission: vi.fn().mockReturnValue(makePermissionResult("ask")),
+        } as unknown as ExtensionRuntime["permissionManager"],
+        sessionApprovalCache: approveCache,
       }),
+      getAllTools: vi.fn().mockReturnValue([{ name: "read" }]),
       canRequestPermissionConfirmation: vi.fn().mockReturnValue(true),
       promptPermission: vi
         .fn()
         .mockResolvedValue({ approved: true, state: "approved_for_session" }),
-      sessionApprovalCache: approveCache,
     });
     const event = {
       type: "tool_call",
@@ -413,10 +397,14 @@ describe("handleToolCall — external-directory gate", () => {
 describe("handleToolCall — bash external-directory gate", () => {
   it("blocks a bash command referencing an external path when policy is deny", async () => {
     const deps = makeDeps({
-      getAllTools: vi.fn().mockReturnValue([{ name: "bash" }]),
-      getPermissionManager: vi.fn().mockReturnValue({
-        checkPermission: vi.fn().mockReturnValue(makePermissionResult("deny")),
+      runtime: makeRuntime({
+        permissionManager: {
+          checkPermission: vi
+            .fn()
+            .mockReturnValue(makePermissionResult("deny")),
+        } as unknown as ExtensionRuntime["permissionManager"],
       }),
+      getAllTools: vi.fn().mockReturnValue([{ name: "bash" }]),
     });
     const event = {
       type: "tool_call",
@@ -430,17 +418,16 @@ describe("handleToolCall — bash external-directory gate", () => {
 
   it("skips bash external gate when all referenced paths are session-approved", async () => {
     const deps = makeDeps({
-      getAllTools: vi.fn().mockReturnValue([{ name: "bash" }]),
-      getPermissionManager: vi.fn().mockReturnValue({
-        checkPermission: vi.fn().mockReturnValue(makePermissionResult("allow")),
+      runtime: makeRuntime({
+        sessionApprovalCache: {
+          approve: vi.fn(),
+          // All paths are covered
+          has: vi.fn().mockReturnValue(true),
+          findMatchingPrefix: vi.fn().mockReturnValue(null),
+          clear: vi.fn(),
+        } as unknown as ExtensionRuntime["sessionApprovalCache"],
       }),
-      sessionApprovalCache: {
-        approve: vi.fn(),
-        // All paths are covered
-        has: vi.fn().mockReturnValue(true),
-        findMatchingPrefix: vi.fn().mockReturnValue(null),
-        clear: vi.fn(),
-      } as unknown as HandlerDeps["sessionApprovalCache"],
+      getAllTools: vi.fn().mockReturnValue([{ name: "bash" }]),
     });
     const event = {
       type: "tool_call",

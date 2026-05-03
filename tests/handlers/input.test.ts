@@ -71,27 +71,6 @@ function makeRuntime(
 function makeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
   return {
     runtime: makeRuntime(),
-    getPermissionManager: vi.fn().mockReturnValue({
-      checkPermission: vi.fn().mockReturnValue({ state: "allow" }),
-      getConfigIssues: vi.fn().mockReturnValue([]),
-    }),
-    setPermissionManager: vi.fn(),
-    getRuntimeContext: vi.fn().mockReturnValue(null),
-    setRuntimeContext: vi.fn(),
-    getActiveSkillEntries: vi.fn().mockReturnValue([] as SkillPromptEntry[]),
-    setActiveSkillEntries: vi.fn(),
-    getLastKnownActiveAgentName: vi.fn().mockReturnValue(null),
-    setLastKnownActiveAgentName: vi.fn(),
-    getLastActiveToolsCacheKey: vi.fn().mockReturnValue(null),
-    setLastActiveToolsCacheKey: vi.fn(),
-    getLastPromptStateCacheKey: vi.fn().mockReturnValue(null),
-    setLastPromptStateCacheKey: vi.fn(),
-    sessionApprovalCache: {
-      approve: vi.fn(),
-      has: vi.fn(),
-      findMatchingPrefix: vi.fn(),
-      clear: vi.fn(),
-    } as unknown as HandlerDeps["sessionApprovalCache"],
     createPermissionManagerForCwd: vi.fn(),
     refreshExtensionConfig: vi.fn(),
     notifyWarning: vi.fn(),
@@ -104,8 +83,6 @@ function makeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
     createPermissionRequestId: vi.fn().mockReturnValue("req-id"),
     startForwardedPermissionPolling: vi.fn(),
     stopForwardedPermissionPolling: vi.fn(),
-    writeReviewLog: vi.fn(),
-    writeDebugLog: vi.fn(),
     getAllTools: vi.fn().mockReturnValue([]),
     setActiveTools: vi.fn(),
     ...overrides,
@@ -153,7 +130,7 @@ describe("handleInput", () => {
     const ctx = makeCtx();
     const deps = makeDeps();
     await handleInput(deps, makeInputEvent("hello"), ctx);
-    expect(deps.setRuntimeContext).toHaveBeenCalledWith(ctx);
+    expect(deps.runtime.runtimeContext).toBe(ctx);
   });
 
   it("starts forwarded permission polling", async () => {
@@ -176,15 +153,14 @@ describe("handleInput", () => {
   it("does not check permissions for non-skill input", async () => {
     const deps = makeDeps();
     await handleInput(deps, makeInputEvent("just a message"), makeCtx());
-    expect(deps.getPermissionManager().checkPermission).not.toHaveBeenCalled();
+    expect(
+      deps.runtime.permissionManager.checkPermission,
+    ).not.toHaveBeenCalled();
   });
 
   it("returns continue when skill is allowed", async () => {
-    const deps = makeDeps({
-      getPermissionManager: vi.fn().mockReturnValue({
-        checkPermission: vi.fn().mockReturnValue({ state: "allow" }),
-      }),
-    });
+    const deps = makeDeps();
+    // default makeRuntime() has checkPermission → { state: "allow" }
     const result = await handleInput(
       deps,
       makeInputEvent("/skill:librarian"),
@@ -194,9 +170,13 @@ describe("handleInput", () => {
   });
 
   it("returns handled when skill is denied", async () => {
+    const pm = {
+      checkPermission: vi.fn().mockReturnValue({ state: "deny" }),
+    };
     const deps = makeDeps({
-      getPermissionManager: vi.fn().mockReturnValue({
-        checkPermission: vi.fn().mockReturnValue({ state: "deny" }),
+      runtime: makeRuntime({
+        permissionManager:
+          pm as unknown as ExtensionRuntime["permissionManager"],
       }),
     });
     const result = await handleInput(
@@ -209,9 +189,13 @@ describe("handleInput", () => {
 
   it("shows a warning notification when skill is denied and UI is available", async () => {
     const ctx = makeCtx({ hasUI: true });
+    const pm = {
+      checkPermission: vi.fn().mockReturnValue({ state: "deny" }),
+    };
     const deps = makeDeps({
-      getPermissionManager: vi.fn().mockReturnValue({
-        checkPermission: vi.fn().mockReturnValue({ state: "deny" }),
+      runtime: makeRuntime({
+        permissionManager:
+          pm as unknown as ExtensionRuntime["permissionManager"],
       }),
     });
     await handleInput(deps, makeInputEvent("/skill:librarian"), ctx);
@@ -223,9 +207,11 @@ describe("handleInput", () => {
 
   it("does not show a warning notification when skill is denied and UI is absent", async () => {
     const ctx = makeCtx({ hasUI: false });
+    const pm = { checkPermission: vi.fn().mockReturnValue({ state: "deny" }) };
     const deps = makeDeps({
-      getPermissionManager: vi.fn().mockReturnValue({
-        checkPermission: vi.fn().mockReturnValue({ state: "deny" }),
+      runtime: makeRuntime({
+        permissionManager:
+          pm as unknown as ExtensionRuntime["permissionManager"],
       }),
     });
     await handleInput(deps, makeInputEvent("/skill:librarian"), ctx);
@@ -233,9 +219,11 @@ describe("handleInput", () => {
   });
 
   it("returns handled when skill requires approval but no UI is available", async () => {
+    const pm = { checkPermission: vi.fn().mockReturnValue({ state: "ask" }) };
     const deps = makeDeps({
-      getPermissionManager: vi.fn().mockReturnValue({
-        checkPermission: vi.fn().mockReturnValue({ state: "ask" }),
+      runtime: makeRuntime({
+        permissionManager:
+          pm as unknown as ExtensionRuntime["permissionManager"],
       }),
       canRequestPermissionConfirmation: vi.fn().mockReturnValue(false),
     });
@@ -248,9 +236,11 @@ describe("handleInput", () => {
   });
 
   it("prompts and returns continue when skill ask is approved", async () => {
+    const pm = { checkPermission: vi.fn().mockReturnValue({ state: "ask" }) };
     const deps = makeDeps({
-      getPermissionManager: vi.fn().mockReturnValue({
-        checkPermission: vi.fn().mockReturnValue({ state: "ask" }),
+      runtime: makeRuntime({
+        permissionManager:
+          pm as unknown as ExtensionRuntime["permissionManager"],
       }),
       canRequestPermissionConfirmation: vi.fn().mockReturnValue(true),
       promptPermission: vi
@@ -267,9 +257,11 @@ describe("handleInput", () => {
   });
 
   it("returns handled when skill ask is denied by user", async () => {
+    const pm = { checkPermission: vi.fn().mockReturnValue({ state: "ask" }) };
     const deps = makeDeps({
-      getPermissionManager: vi.fn().mockReturnValue({
-        checkPermission: vi.fn().mockReturnValue({ state: "ask" }),
+      runtime: makeRuntime({
+        permissionManager:
+          pm as unknown as ExtensionRuntime["permissionManager"],
       }),
       canRequestPermissionConfirmation: vi.fn().mockReturnValue(true),
       promptPermission: vi
@@ -285,9 +277,11 @@ describe("handleInput", () => {
   });
 
   it("passes agentName in the prompt permission request", async () => {
+    const pm = { checkPermission: vi.fn().mockReturnValue({ state: "ask" }) };
     const deps = makeDeps({
-      getPermissionManager: vi.fn().mockReturnValue({
-        checkPermission: vi.fn().mockReturnValue({ state: "ask" }),
+      runtime: makeRuntime({
+        permissionManager:
+          pm as unknown as ExtensionRuntime["permissionManager"],
       }),
       resolveAgentName: vi.fn().mockReturnValue("code-agent"),
       canRequestPermissionConfirmation: vi.fn().mockReturnValue(true),

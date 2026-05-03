@@ -19,24 +19,25 @@ export async function handleSessionStart(
   event: SessionStartPayload,
   ctx: ExtensionContext,
 ): Promise<void> {
-  deps.setRuntimeContext(ctx);
+  deps.runtime.runtimeContext = ctx;
   deps.refreshExtensionConfig(ctx);
-  deps.setPermissionManager(deps.createPermissionManagerForCwd(ctx.cwd));
-  deps.setActiveSkillEntries([]);
-  deps.setLastActiveToolsCacheKey(null);
-  deps.setLastPromptStateCacheKey(null);
-  deps.setLastKnownActiveAgentName(getActiveAgentName(ctx));
+  deps.runtime.permissionManager = deps.createPermissionManagerForCwd(ctx.cwd);
+  deps.runtime.activeSkillEntries = [];
+  deps.runtime.lastActiveToolsCacheKey = null;
+  deps.runtime.lastPromptStateCacheKey = null;
+  deps.runtime.lastKnownActiveAgentName = getActiveAgentName(ctx);
   deps.startForwardedPermissionPolling(ctx);
   deps.logResolvedConfigPaths();
 
-  const agentName = deps.getLastKnownActiveAgentName();
-  const policyIssues = deps.getPermissionManager().getConfigIssues(agentName);
+  const agentName = deps.runtime.lastKnownActiveAgentName;
+  const policyIssues =
+    deps.runtime.permissionManager.getConfigIssues(agentName);
   for (const issue of policyIssues) {
     deps.notifyWarning(issue);
   }
 
   if (event.reason === "reload") {
-    deps.writeDebugLog("lifecycle.reload", {
+    deps.runtime.writeDebugLog("lifecycle.reload", {
       triggeredBy: "session_start",
       reason: event.reason,
       cwd: ctx.cwd,
@@ -52,14 +53,14 @@ export async function handleResourcesDiscover(
     return;
   }
 
-  const runtimeContext = deps.getRuntimeContext();
-  deps.setPermissionManager(
-    deps.createPermissionManagerForCwd(runtimeContext?.cwd),
+  const { runtimeContext } = deps.runtime;
+  deps.runtime.permissionManager = deps.createPermissionManagerForCwd(
+    runtimeContext?.cwd,
   );
-  deps.setActiveSkillEntries([]);
-  deps.setLastActiveToolsCacheKey(null);
-  deps.setLastPromptStateCacheKey(null);
-  deps.writeDebugLog("lifecycle.reload", {
+  deps.runtime.activeSkillEntries = [];
+  deps.runtime.lastActiveToolsCacheKey = null;
+  deps.runtime.lastPromptStateCacheKey = null;
+  deps.runtime.writeDebugLog("lifecycle.reload", {
     triggeredBy: "resources_discover",
     reason: event.reason,
     cwd: runtimeContext?.cwd ?? null,
@@ -67,14 +68,14 @@ export async function handleResourcesDiscover(
 }
 
 export async function handleSessionShutdown(deps: HandlerDeps): Promise<void> {
-  const ctx = deps.getRuntimeContext();
-  if (ctx) {
-    ctx.ui.setStatus(PERMISSION_SYSTEM_STATUS_KEY, undefined);
+  const { runtimeContext } = deps.runtime;
+  if (runtimeContext) {
+    runtimeContext.ui.setStatus(PERMISSION_SYSTEM_STATUS_KEY, undefined);
   }
-  deps.setRuntimeContext(null);
-  deps.setActiveSkillEntries([]);
-  deps.setLastActiveToolsCacheKey(null);
-  deps.setLastPromptStateCacheKey(null);
-  deps.sessionApprovalCache.clear();
+  deps.runtime.runtimeContext = null;
+  deps.runtime.activeSkillEntries = [];
+  deps.runtime.lastActiveToolsCacheKey = null;
+  deps.runtime.lastPromptStateCacheKey = null;
+  deps.runtime.sessionApprovalCache.clear();
   deps.stopForwardedPermissionPolling();
 }

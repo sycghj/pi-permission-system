@@ -90,27 +90,8 @@ function makeRuntime(
 }
 
 function makeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
-  const pm = makePm();
   return {
     runtime: makeRuntime(),
-    getPermissionManager: vi.fn().mockReturnValue(pm),
-    setPermissionManager: vi.fn(),
-    getRuntimeContext: vi.fn().mockReturnValue(null),
-    setRuntimeContext: vi.fn(),
-    getActiveSkillEntries: vi.fn().mockReturnValue([] as SkillPromptEntry[]),
-    setActiveSkillEntries: vi.fn(),
-    getLastKnownActiveAgentName: vi.fn().mockReturnValue(null),
-    setLastKnownActiveAgentName: vi.fn(),
-    getLastActiveToolsCacheKey: vi.fn().mockReturnValue(null),
-    setLastActiveToolsCacheKey: vi.fn(),
-    getLastPromptStateCacheKey: vi.fn().mockReturnValue(null),
-    setLastPromptStateCacheKey: vi.fn(),
-    sessionApprovalCache: {
-      approve: vi.fn(),
-      has: vi.fn(),
-      findMatchingPrefix: vi.fn(),
-      clear: vi.fn(),
-    } as unknown as HandlerDeps["sessionApprovalCache"],
     createPermissionManagerForCwd: vi.fn().mockReturnValue(makePm()),
     refreshExtensionConfig: vi.fn(),
     notifyWarning: vi.fn(),
@@ -123,8 +104,6 @@ function makeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
     createPermissionRequestId: vi.fn().mockReturnValue("test-id"),
     startForwardedPermissionPolling: vi.fn(),
     stopForwardedPermissionPolling: vi.fn(),
-    writeReviewLog: vi.fn(),
-    writeDebugLog: vi.fn(),
     getAllTools: vi.fn().mockReturnValue([]),
     setActiveTools: vi.fn(),
     ...overrides,
@@ -196,7 +175,9 @@ describe("handleBeforeAgentStart", () => {
   it("filters out denied tools from allowed list", async () => {
     const pm = makePm("deny");
     const deps = makeDeps({
-      getPermissionManager: vi.fn().mockReturnValue(pm),
+      runtime: makeRuntime({
+        permissionManager: pm as unknown as PermissionManager,
+      }),
       getAllTools: vi
         .fn()
         .mockReturnValue([{ name: "write" }, { name: "read" }]),
@@ -209,7 +190,9 @@ describe("handleBeforeAgentStart", () => {
   it("includes allowed and ask tools in the active list", async () => {
     const pm = makePm("allow");
     const deps = makeDeps({
-      getPermissionManager: vi.fn().mockReturnValue(pm),
+      runtime: makeRuntime({
+        permissionManager: pm as unknown as PermissionManager,
+      }),
       getAllTools: vi
         .fn()
         .mockReturnValue([{ name: "read" }, { name: "write" }]),
@@ -221,10 +204,9 @@ describe("handleBeforeAgentStart", () => {
   it("updates the active-tools cache key after applying", async () => {
     const deps = makeDeps({
       getAllTools: vi.fn().mockReturnValue([{ name: "read" }]),
-      getLastActiveToolsCacheKey: vi.fn().mockReturnValue(null),
     });
     await handleBeforeAgentStart(deps, makeEvent(), makeCtx());
-    expect(deps.setLastActiveToolsCacheKey).toHaveBeenCalledOnce();
+    expect(deps.runtime.lastActiveToolsCacheKey).not.toBeNull();
   });
 
   it("skips setActiveTools when cache key is unchanged", async () => {
@@ -234,8 +216,8 @@ describe("handleBeforeAgentStart", () => {
     );
     const key = createActiveToolsCacheKey(["read"]);
     const deps = makeDeps({
+      runtime: makeRuntime({ lastActiveToolsCacheKey: key }),
       getAllTools: vi.fn().mockReturnValue([{ name: "read" }]),
-      getLastActiveToolsCacheKey: vi.fn().mockReturnValue(key),
     });
     await handleBeforeAgentStart(deps, makeEvent(), makeCtx());
     expect(deps.setActiveTools).not.toHaveBeenCalled();
@@ -247,7 +229,6 @@ describe("handleBeforeAgentStart", () => {
     const systemPrompt = `You are an assistant.\n\nAvailable tools:\n- read\n- write\n`;
     const deps = makeDeps({
       getAllTools: vi.fn().mockReturnValue([]),
-      getLastPromptStateCacheKey: vi.fn().mockReturnValue(null),
     });
     const result = await handleBeforeAgentStart(
       deps,
@@ -256,14 +237,13 @@ describe("handleBeforeAgentStart", () => {
     );
     // The prompt was modified, so systemPrompt should be returned
     expect(result).toHaveProperty("systemPrompt");
-    expect(deps.setLastPromptStateCacheKey).toHaveBeenCalledOnce();
+    expect(deps.runtime.lastPromptStateCacheKey).not.toBeNull();
   });
 
   it("returns empty object when systemPrompt is unchanged", async () => {
     const prompt = "No tools section here.";
     const deps = makeDeps({
       getAllTools: vi.fn().mockReturnValue([]),
-      getLastPromptStateCacheKey: vi.fn().mockReturnValue(null),
     });
     const result = await handleBeforeAgentStart(
       deps,
@@ -276,10 +256,9 @@ describe("handleBeforeAgentStart", () => {
   it("stores resolved skill entries on deps", async () => {
     const deps = makeDeps({
       getAllTools: vi.fn().mockReturnValue([]),
-      getLastPromptStateCacheKey: vi.fn().mockReturnValue(null),
     });
     await handleBeforeAgentStart(deps, makeEvent(), makeCtx());
-    expect(deps.setActiveSkillEntries).toHaveBeenCalledOnce();
+    expect(deps.runtime.activeSkillEntries).toEqual(expect.any(Array));
   });
 
   it("returns empty object and skips prompt work when prompt cache key is unchanged", async () => {
@@ -297,12 +276,15 @@ describe("handleBeforeAgentStart", () => {
       allowedToolNames: allowedTools,
     });
     const deps = makeDeps({
-      getPermissionManager: vi.fn().mockReturnValue(pm),
+      runtime: makeRuntime({
+        permissionManager: pm as unknown as PermissionManager,
+        lastPromptStateCacheKey: key,
+      }),
       getAllTools: vi.fn().mockReturnValue([{ name: "read" }]),
-      getLastPromptStateCacheKey: vi.fn().mockReturnValue(key),
     });
     const result = await handleBeforeAgentStart(deps, makeEvent("hello"), ctx);
     expect(result).toEqual({});
-    expect(deps.setActiveSkillEntries).not.toHaveBeenCalled();
+    // activeSkillEntries was not assigned by the handler (early return)
+    expect(deps.runtime.activeSkillEntries).toEqual([]);
   });
 });

@@ -486,31 +486,6 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
       writeDebugLog,
       writeReviewLog,
     },
-    getPermissionManager: () => permissionManager,
-    setPermissionManager: (pm) => {
-      permissionManager = pm;
-    },
-    getRuntimeContext: () => runtimeContext,
-    setRuntimeContext: (ctx) => {
-      runtimeContext = ctx;
-    },
-    getActiveSkillEntries: () => activeSkillEntries,
-    setActiveSkillEntries: (entries) => {
-      activeSkillEntries = entries;
-    },
-    getLastKnownActiveAgentName: () => lastKnownActiveAgentName,
-    setLastKnownActiveAgentName: (name) => {
-      lastKnownActiveAgentName = name;
-    },
-    getLastActiveToolsCacheKey: () => lastActiveToolsCacheKey,
-    setLastActiveToolsCacheKey: (key) => {
-      lastActiveToolsCacheKey = key;
-    },
-    getLastPromptStateCacheKey: () => lastPromptStateCacheKey,
-    setLastPromptStateCacheKey: (key) => {
-      lastPromptStateCacheKey = key;
-    },
-    sessionApprovalCache,
     createPermissionManagerForCwd,
     refreshExtensionConfig,
     notifyWarning,
@@ -526,8 +501,6 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
     createPermissionRequestId,
     startForwardedPermissionPolling,
     stopForwardedPermissionPolling,
-    writeReviewLog,
-    writeDebugLog,
     getAllTools: () => pi.getAllTools(),
     setActiveTools: (names) => pi.setActiveTools(names),
   };
