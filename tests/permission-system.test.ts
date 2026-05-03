@@ -2583,12 +2583,22 @@ test("normalizeRawPermission emits deprecation issue for special.tool_call_limit
   assert.equal(result.permissions.special?.tool_call_limit, undefined);
 });
 
-test("normalizeRawPermission emits no issues for valid special keys", () => {
+test("normalizeRawPermission emits deprecation issue for special.doom_loop (string)", () => {
+  const result = normalizeRawPermission({
+    special: { doom_loop: "ask" },
+  });
+  assert.equal(result.configIssues.length, 1);
+  assert.ok(result.configIssues[0].includes("doom_loop"));
+  assert.equal(result.permissions.special?.doom_loop, undefined);
+});
+
+test("normalizeRawPermission emits deprecation issue for special.doom_loop (deny)", () => {
   const result = normalizeRawPermission({
     special: { doom_loop: "deny" },
   });
-  assert.equal(result.configIssues.length, 0);
-  assert.equal(result.permissions.special?.doom_loop, "deny");
+  assert.equal(result.configIssues.length, 1);
+  assert.ok(result.configIssues[0].includes("doom_loop"));
+  assert.equal(result.permissions.special?.doom_loop, undefined);
 });
 
 test("normalizeRawPermission emits no issues when special is absent", () => {
