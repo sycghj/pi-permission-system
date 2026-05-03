@@ -242,7 +242,15 @@ Each cycle is red → green → commit.
 |Event type signatures are not exported by the Pi SDK|Use `Parameters<...>` inference or define minimal event shapes in `src/handlers/types.ts`. If the SDK changes, type errors surface at compile time.|
 |Existing integration tests break during incremental extraction|Steps 2–5 keep old inline handlers working in parallel until step 6 swaps them out. This avoids a big-bang rewrite.|
 
+## Implementation Notes
+
+- `extractSkillNameFromInput` landed in `src/handlers/input.ts` (exported).
+- `getEventInput` landed in `src/handlers/tool-call.ts` (exported).
+- `getEventToolName` was eliminated entirely — handlers call `getToolNameFromValue` from `tool-registry.ts` directly.
+- `shouldExposeTool` was extracted as a pure exported function in `src/handlers/before-agent-start.ts` rather than a dep entry, consistent with the target architecture principle.
+- Event parameter types: the SDK does not export `ResourcesDiscoverEvent`; handler files use lean local payload interfaces (`SessionStartPayload`, `ResourcesDiscoverPayload`, `InputPayload`, `BeforeAgentStartPayload`) instead of full SDK event types, since handlers consume only a subset of fields.
+- `src/index.ts` reduced from 1066 → 466 lines (56% reduction). The ≤200 line target requires #43 to eliminate module-scope state and extract the remaining factory helpers (`refreshExtensionConfig`, `saveExtensionConfig`, `promptPermission`, `resolveAgentName`, `logResolvedConfigPaths`, etc.) into an `ExtensionRuntime` context object.
+
 ## Open Questions
 
 - **Should `HandlerDeps` be split into per-handler narrower interfaces?** Defer until the single interface proves unwieldy — YAGNI for now.
-- **Should module-scope helpers (`extractSkillNameFromInput`, etc.) move to `src/handlers/` or to `src/common.ts`?** Decide during step 7 based on usage; lean toward co-locating with the handler that uses them.
