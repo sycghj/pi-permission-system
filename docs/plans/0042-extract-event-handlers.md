@@ -7,10 +7,12 @@ issue_title: "Extract event handlers from piPermissionSystemExtension into separ
 
 ## Problem Statement
 
-After #21 (module extraction) and #41 (permission-gate abstraction), `src/index.ts` is still ~1066 lines.
+After #21 (module extraction), #41 (permission-gate abstraction), and #55 (pure `evaluate()`), `src/index.ts` is still ~1066 lines.
 The `piPermissionSystemExtension` factory contains 6 inline event-handler closures (~740 lines) that each represent a distinct concern.
 The `tool_call` handler alone is ~250 lines.
 This makes the file hard to navigate, review, and test in isolation.
+
+The [target architecture](../architecture/target-architecture.md) identifies this extraction as the first step in the structural cleanup phase, blocking #43 (eliminate module-scope state).
 
 ## Goals
 
@@ -23,9 +25,10 @@ This makes the file hard to navigate, review, and test in isolation.
 ## Non-Goals
 
 - Changing permission resolution logic, merge precedence, or default policy.
-- Restructuring module-scope state (`PI_AGENT_DIR`, `extensionLogger`, etc.) — that is a separate concern.
+- Restructuring module-scope state (`PI_AGENT_DIR`, `extensionLogger`, etc.) — deferred to #43 (`ExtensionRuntime`).
 - Refactoring `promptPermission`, `writeReviewLog`, or other helper internals.
 - Extracting the config-save/load helpers or the slash-command registration (they are not event handlers).
+- Unifying the Rule type or normalizing config into flat `Ruleset` at load time — deferred to #56 per the [refactoring sequence](../architecture/target-architecture.md#refactoring-sequence).
 
 ## Background
 
@@ -45,10 +48,13 @@ All handlers share closure state: `permissionManager`, `extensionConfig`, `runti
 Key dependencies already extracted:
 
 - `applyPermissionGate` from `src/permission-gate.ts` (#41) — used by `input` and `tool_call` handlers.
+- `evaluate()`, `Rule`, `Ruleset` from `src/rule.ts` (#55) — used internally by `checkPermission()`; handlers still go through `PermissionManager`.
 - `sanitizeAvailableToolsSection` from `src/system-prompt-sanitizer.ts` — used by `before_agent_start`.
 - `resolveSkillPromptEntries` / `findSkillPathMatch` from `src/skill-prompt-sanitizer.ts`.
 
 Permission surfaces involved: tools, bash, mcp, skills, external_directory (all gate through these handlers).
+
+See [current-architecture.md](../architecture/current-architecture.md) § "Monolithic index.ts" and § "Module map" for the full as-is picture.
 
 ## Design Overview
 
@@ -96,6 +102,15 @@ export interface HandlerDeps {
 
 The exact shape may slim down during implementation — some helpers (e.g., `shouldExposeTool`) could stay in the handler module if they only need `getPermissionManager`.
 The key constraint is: **every test can construct a `HandlerDeps` with stubs and exercise a handler without importing `src/index.ts`**.
+
+### Alignment with ExtensionRuntime (#43)
+
+The [target architecture](../architecture/target-architecture.md) defines an `ExtensionRuntime` context object that replaces all module-scope mutable state.
+`HandlerDeps` is designed as a stepping stone: #43 will fold the getter/setter pairs and mutable fields into `ExtensionRuntime` and pass that to handlers instead.
+To keep that transition smooth:
+
+- Handler function signatures use a single `deps` parameter (not positional state args) — swapping the type is a one-line change per handler.
+- Helpers that only read state (e.g., `shouldExposeTool`, `canRequestPermissionConfirmation`) should be pure functions of their inputs where possible, taking the needed value as a parameter rather than closing over the deps bag. This aligns with the target architecture's principle: *"pure evaluation, IO at the edges."*
 
 ### File layout
 
@@ -149,7 +164,7 @@ Target: ≤200 lines for `src/index.ts` (currently ~1066).
 
 The issue explicitly defers restructuring module-scope state (`PI_AGENT_DIR`, `extensionLogger`, `setExtensionConfig`, etc.).
 These remain in `src/index.ts` and are referenced by the deps object closures.
-A future issue can lift them into a proper runtime context if needed.
+Issue #43 will lift them into `ExtensionRuntime` (see `src/runtime.ts` in the [target module structure](../architecture/target-architecture.md#module-structure-target)).
 
 ## Module-Level Changes
 
@@ -231,4 +246,3 @@ Each cycle is red → green → commit.
 
 - **Should `HandlerDeps` be split into per-handler narrower interfaces?** Defer until the single interface proves unwieldy — YAGNI for now.
 - **Should module-scope helpers (`extractSkillNameFromInput`, etc.) move to `src/handlers/` or to `src/common.ts`?** Decide during step 7 based on usage; lean toward co-locating with the handler that uses them.
-- **Should the inner helper functions (`resolveAgentName`, `shouldExposeTool`) become standalone pure functions rather than deps entries?** They currently close over `permissionManager` / `lastKnownActiveAgentName`. If they only need one dep, they could be extracted as pure functions taking that dep as a parameter. Decide during implementation.
