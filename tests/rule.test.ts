@@ -1,38 +1,6 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { describe, expect, test } from "vitest";
 import type { Rule, Ruleset } from "../src/rule";
-import { evaluate, getDefaultAction } from "../src/rule";
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
-describe("getDefaultAction", () => {
-  test("returns 'ask' for bash surface", () => {
-    expect(getDefaultAction("bash")).toBe("ask");
-  });
-
-  test("returns 'ask' for mcp surface", () => {
-    expect(getDefaultAction("mcp")).toBe("ask");
-  });
-
-  test("returns 'ask' for skill surface", () => {
-    expect(getDefaultAction("skill")).toBe("ask");
-  });
-
-  test("returns 'ask' for special surface", () => {
-    expect(getDefaultAction("special")).toBe("ask");
-  });
-
-  test("returns 'ask' for tools surface", () => {
-    expect(getDefaultAction("tools")).toBe("ask");
-  });
-
-  test("returns 'ask' for unknown surface (least privilege)", () => {
-    expect(getDefaultAction("unknown_surface")).toBe("ask");
-    expect(getDefaultAction("")).toBe("ask");
-    expect(getDefaultAction("external_directory")).toBe("ask");
-  });
-});
+import { evaluate } from "../src/rule";
 
 describe("evaluate", () => {
   const allowBashGit: Rule = {
@@ -64,11 +32,23 @@ describe("evaluate", () => {
     expect(result).toEqual(allowBashGit);
   });
 
-  test("returns synthetic rule with default action when no rules match", () => {
+  test("returns synthetic rule with 'ask' when no rules match and no defaultAction", () => {
     const result = evaluate("bash", "npm install", [allowBashGit]);
     expect(result.surface).toBe("bash");
     expect(result.pattern).toBe("npm install");
-    expect(result.action).toBe("ask"); // getDefaultAction("bash")
+    expect(result.action).toBe("ask");
+  });
+
+  test("returns synthetic rule with custom defaultAction when no rules match", () => {
+    const result = evaluate("bash", "npm install", [allowBashGit], "deny");
+    expect(result.surface).toBe("bash");
+    expect(result.pattern).toBe("npm install");
+    expect(result.action).toBe("deny");
+  });
+
+  test("defaultAction does not affect matched rules", () => {
+    const result = evaluate("bash", "git status", [allowBashGit], "deny");
+    expect(result).toEqual(allowBashGit);
   });
 
   test("returns synthetic rule for empty ruleset", () => {
@@ -126,18 +106,19 @@ describe("evaluate", () => {
     expect(result.action).toBe("ask"); // falls back to default
   });
 
-  test("multiple rulesets: rules from later rulesets take priority", () => {
+  test("merged rulesets: rules from later scope take priority", () => {
     const globalRules: Ruleset = [
       { surface: "bash", pattern: "git *", action: "ask" },
     ];
     const agentRules: Ruleset = [
       { surface: "bash", pattern: "git *", action: "allow" },
     ];
-    const result = evaluate("bash", "git status", globalRules, agentRules);
+    const merged = [...globalRules, ...agentRules];
+    const result = evaluate("bash", "git status", merged);
     expect(result.action).toBe("allow"); // agent rule wins
   });
 
-  test("multiple rulesets: earlier rulesets used when later rulesets have no match", () => {
+  test("merged rulesets: earlier scope used when later scope has no match", () => {
     const globalRules: Ruleset = [
       { surface: "bash", pattern: "git *", action: "allow" },
     ];
@@ -145,12 +126,13 @@ describe("evaluate", () => {
       { surface: "bash", pattern: "npm *", action: "deny" },
     ];
     // git status matches global but not agent rule
-    const result = evaluate("bash", "git status", globalRules, agentRules);
+    const merged = [...globalRules, ...agentRules];
+    const result = evaluate("bash", "git status", merged);
     expect(result.action).toBe("allow"); // global rule is the last match for this pattern
   });
 
-  test("no rulesets at all returns synthetic default", () => {
-    const result = evaluate("bash", "git status");
+  test("empty ruleset returns synthetic default", () => {
+    const result = evaluate("bash", "git status", []);
     expect(result.surface).toBe("bash");
     expect(result.pattern).toBe("git status");
     expect(result.action).toBe("ask");

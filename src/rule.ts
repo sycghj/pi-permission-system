@@ -14,37 +14,21 @@ export interface Rule {
 /** An ordered list of rules. Later rules take priority (last-match-wins). */
 export type Ruleset = Rule[];
 
-const SURFACE_DEFAULTS: Record<string, PermissionState> = {
-  tools: "ask",
-  bash: "ask",
-  mcp: "ask",
-  skill: "ask",
-  special: "ask",
-};
-
-/**
- * Returns the default action for a surface when no rules match.
- * Defaults to "ask" for unknown surfaces (least privilege).
- */
-export function getDefaultAction(surface: string): PermissionState {
-  return SURFACE_DEFAULTS[surface] ?? "ask";
-}
-
 /**
  * Pure permission evaluation.
  *
- * Flattens all provided rulesets and returns the last rule whose surface and
- * pattern both wildcard-match the supplied values (last-match-wins, so later
- * rulesets / later entries have higher priority).
+ * Returns the last rule in `rules` whose surface and pattern both
+ * wildcard-match the supplied values (last-match-wins).
  *
- * When no rule matches, returns a synthetic rule using getDefaultAction().
+ * When no rule matches, returns a synthetic rule with `defaultAction`
+ * (defaults to "ask" — least privilege).
  */
 export function evaluate(
   surface: string,
   pattern: string,
-  ...rulesets: Ruleset[]
+  rules: Ruleset,
+  defaultAction?: PermissionState,
 ): Rule {
-  const rules = rulesets.flat();
   for (let i = rules.length - 1; i >= 0; i -= 1) {
     const rule = rules[i];
     if (
@@ -54,5 +38,5 @@ export function evaluate(
       return rule;
     }
   }
-  return { surface, pattern, action: getDefaultAction(surface) };
+  return { surface, pattern, action: defaultAction ?? "ask" };
 }
