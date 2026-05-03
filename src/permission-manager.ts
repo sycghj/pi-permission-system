@@ -377,6 +377,8 @@ type ResolvedPermissions = {
   globalConfig: GlobalPermissionConfig;
   agentConfig: AgentPermissions;
   merged: GlobalPermissionConfig;
+  compiledBash: CompiledPermissionPatterns;
+  bashDefault: PermissionState;
   compiledSpecial: CompiledPermissionPatterns;
   compiledSkills: CompiledPermissionPatterns;
   compiledMcp: CompiledPermissionPatterns;
@@ -718,10 +720,18 @@ export class PermissionManager {
       projectConfig.tools?.bash ||
       merged.tools?.bash ||
       merged.defaultPolicy.bash;
+    const compiledBash = compilePermissionPatternsFromSources(
+      globalConfig.bash,
+      projectConfig.bash,
+      agentConfig.bash,
+      projectAgentConfig.bash,
+    );
     const value: ResolvedPermissions = {
       globalConfig,
       agentConfig,
       merged,
+      compiledBash,
+      bashDefault,
       compiledSpecial: compilePermissionPatternsFromSources(
         globalConfig.special,
         projectConfig.special,
@@ -740,15 +750,7 @@ export class PermissionManager {
         agentConfig.mcp,
         projectAgentConfig.mcp,
       ),
-      bashFilter: new BashFilter(
-        compilePermissionPatternsFromSources(
-          globalConfig.bash,
-          projectConfig.bash,
-          agentConfig.bash,
-          projectAgentConfig.bash,
-        ),
-        bashDefault,
-      ),
+      bashFilter: new BashFilter(compiledBash, bashDefault),
     };
 
     this.resolvedPermissionsCache.set(cacheKey, { stamp, value });
@@ -821,10 +823,12 @@ export class PermissionManager {
     const {
       agentConfig: _agentConfig,
       merged,
+      compiledBash,
+      bashDefault,
       compiledSpecial,
       compiledSkills,
       compiledMcp,
-      bashFilter,
+      bashFilter: _bashFilter,
     } = this.resolvePermissions(agentName);
     const normalizedToolName = toolName.trim();
 
@@ -863,13 +867,14 @@ export class PermissionManager {
     if (normalizedToolName === "bash") {
       const record = toRecord(input);
       const command = typeof record.command === "string" ? record.command : "";
-      const result = bashFilter.check(command);
-
+      const bashRuleset = compiledToRuleset("bash", compiledBash);
+      const rule = evaluate("bash", command, bashRuleset);
+      const explicit = bashRuleset.includes(rule);
       return {
         toolName,
-        state: result.state,
-        command: result.command,
-        matchedPattern: result.matchedPattern,
+        state: explicit ? rule.action : bashDefault,
+        command,
+        matchedPattern: explicit ? rule.pattern : undefined,
         source: "bash",
       };
     }
