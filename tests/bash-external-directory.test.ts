@@ -223,6 +223,62 @@ describe("extractExternalPathsFromBashCommand", () => {
     });
   });
 
+  describe("safe system paths are filtered", () => {
+    test("does not flag /dev/null in stderr redirect", () => {
+      const result = extractExternalPathsFromBashCommand(
+        "command 2>/dev/null",
+        cwd,
+      );
+      expect(result).toHaveLength(0);
+    });
+
+    test("does not flag /dev/null as a redirect target", () => {
+      const result = extractExternalPathsFromBashCommand(
+        "echo hello > /dev/null",
+        cwd,
+      );
+      expect(result).toHaveLength(0);
+    });
+
+    test("does not flag /dev/stdin", () => {
+      const result = extractExternalPathsFromBashCommand("cat /dev/stdin", cwd);
+      expect(result).toHaveLength(0);
+    });
+
+    test("does not flag /dev/stdout", () => {
+      const result = extractExternalPathsFromBashCommand(
+        "cat /dev/stdout",
+        cwd,
+      );
+      expect(result).toHaveLength(0);
+    });
+
+    test("does not flag /dev/stderr", () => {
+      const result = extractExternalPathsFromBashCommand(
+        "cat /dev/stderr",
+        cwd,
+      );
+      expect(result).toHaveLength(0);
+    });
+
+    test("still flags a real external path alongside /dev/null", () => {
+      const result = extractExternalPathsFromBashCommand(
+        "cat /etc/hosts 2>/dev/null",
+        cwd,
+      );
+      expect(result).toContain("/etc/hosts");
+      expect(result).not.toContain("/dev/null");
+    });
+
+    test("does not flag /dev/null/subdir (not a safe path)", () => {
+      const result = extractExternalPathsFromBashCommand(
+        "cat /dev/null/subdir",
+        cwd,
+      );
+      expect(result).toContain("/dev/null/subdir");
+    });
+  });
+
   describe("deduplication", () => {
     test("returns deduplicated paths", () => {
       const result = extractExternalPathsFromBashCommand(
