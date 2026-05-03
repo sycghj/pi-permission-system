@@ -933,19 +933,24 @@ export class PermissionManager {
       };
     }
 
+    const toolRuleset: Ruleset = Object.entries(merged.tools ?? {}).map(
+      ([name, action]) => ({ surface: "tool", pattern: name, action }),
+    );
+    const toolRule = evaluate("tool", normalizedToolName, toolRuleset);
+    const explicitTool = toolRuleset.includes(toolRule);
+
     if (BUILT_IN_TOOL_PERMISSION_NAMES.has(normalizedToolName)) {
       return {
         toolName,
-        state: merged.tools?.[normalizedToolName] || merged.defaultPolicy.tools,
+        state: explicitTool ? toolRule.action : merged.defaultPolicy.tools,
         source: "tool",
       };
     }
 
-    const explicitToolPermission = merged.tools?.[normalizedToolName];
-    if (explicitToolPermission) {
+    if (explicitTool) {
       return {
         toolName,
-        state: explicitToolPermission,
+        state: toolRule.action,
         source: "tool",
       };
     }
