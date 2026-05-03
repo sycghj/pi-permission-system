@@ -13,16 +13,22 @@ describe("normalizeConfig", () => {
       ]);
     });
 
-    test("tools.bash becomes surface 'bash' with pattern '*'", () => {
-      const result = normalizeConfig({ tools: { bash: "allow" } });
+    test("tools.bash is excluded (handled as fallback override)", () => {
+      const result = normalizeConfig({
+        tools: { bash: "allow", read: "allow" },
+      });
       expect(result).toEqual([
-        { surface: "bash", pattern: "*", action: "allow" },
+        { surface: "read", pattern: "*", action: "allow" },
       ]);
     });
 
-    test("tools.mcp becomes surface 'mcp' with pattern '*'", () => {
-      const result = normalizeConfig({ tools: { mcp: "ask" } });
-      expect(result).toEqual([{ surface: "mcp", pattern: "*", action: "ask" }]);
+    test("tools.mcp is excluded (handled as fallback override)", () => {
+      const result = normalizeConfig({
+        tools: { mcp: "ask", read: "allow" },
+      });
+      expect(result).toEqual([
+        { surface: "read", pattern: "*", action: "allow" },
+      ]);
     });
   });
 
@@ -63,24 +69,24 @@ describe("normalizeConfig", () => {
   });
 
   describe("special entries", () => {
-    test("converts special entries to key-as-surface rules", () => {
+    test("converts special entries to surface 'special' with key as pattern", () => {
       const result = normalizeConfig({
         special: { external_directory: "ask" },
       });
       expect(result).toEqual([
-        { surface: "external_directory", pattern: "*", action: "ask" },
+        { surface: "special", pattern: "external_directory", action: "ask" },
       ]);
     });
   });
 
   describe("ordering", () => {
-    test("tools entries appear before bash entries", () => {
+    test("tools.bash excluded; bash entries come after tools", () => {
       const result = normalizeConfig({
-        tools: { bash: "allow" },
+        tools: { bash: "allow", read: "deny" },
         bash: { "git *": "ask" },
       });
       expect(result).toEqual([
-        { surface: "bash", pattern: "*", action: "allow" },
+        { surface: "read", pattern: "*", action: "deny" },
         { surface: "bash", pattern: "git *", action: "ask" },
       ]);
     });
@@ -98,7 +104,7 @@ describe("normalizeConfig", () => {
         { surface: "bash", pattern: "git *", action: "allow" },
         { surface: "mcp", pattern: "exa:*", action: "allow" },
         { surface: "skill", pattern: "librarian", action: "allow" },
-        { surface: "external_directory", pattern: "*", action: "ask" },
+        { surface: "special", pattern: "external_directory", action: "ask" },
       ]);
     });
   });
