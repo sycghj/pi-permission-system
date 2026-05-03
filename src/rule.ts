@@ -45,10 +45,14 @@ export function evaluate(
   ...rulesets: Ruleset[]
 ): Rule {
   const rules = rulesets.flat();
-  const match = rules.findLast(
-    (rule) =>
+  for (let i = rules.length - 1; i >= 0; i -= 1) {
+    const rule = rules[i];
+    if (
       wildcardMatch(rule.surface, surface) &&
-      wildcardMatch(rule.pattern, pattern),
-  );
-  return match ?? { surface, pattern, action: getDefaultAction(surface) };
+      wildcardMatch(rule.pattern, pattern)
+    ) {
+      return rule;
+    }
+  }
+  return { surface, pattern, action: getDefaultAction(surface) };
 }
