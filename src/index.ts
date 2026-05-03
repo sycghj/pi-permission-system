@@ -36,7 +36,7 @@ import {
   normalizePermissionSystemConfig,
   type PermissionSystemExtensionConfig,
 } from "./extension-config";
-import { setForwardedPermissionLogger } from "./forwarded-permissions/io";
+import type { ForwardedPermissionLogger } from "./forwarded-permissions/io";
 import {
   confirmPermission,
   type PermissionForwardingDeps,
@@ -257,11 +257,15 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
   };
 
   setLoggingWarningReporter(notifyWarning);
-  setForwardedPermissionLogger({ writeReviewLog, writeDebugLog });
 
+  const forwardingLogger: ForwardedPermissionLogger = {
+    writeReviewLog,
+    writeDebugLog,
+  };
   const forwardingDeps: PermissionForwardingDeps = {
     forwardingDir: PERMISSION_FORWARDING_DIR,
     subagentSessionsDir: SUBAGENT_SESSIONS_DIR,
+    logger: forwardingLogger,
     writeReviewLog,
     requestPermissionDecisionFromUi,
     shouldAutoApprove: () =>

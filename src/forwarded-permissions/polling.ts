@@ -21,6 +21,7 @@ import { isSubagentExecutionContext } from "../subagent-context";
 import {
   cleanupPermissionForwardingLocationIfEmpty,
   ensurePermissionForwardingLocation,
+  type ForwardedPermissionLogger,
   getExistingPermissionForwardingLocation,
   listRequestFiles,
   logPermissionForwardingError,
@@ -35,6 +36,7 @@ import {
 export interface PermissionForwardingDeps {
   forwardingDir: string;
   subagentSessionsDir: string;
+  logger: ForwardedPermissionLogger;
   writeReviewLog: (event: string, details: Record<string, unknown>) => void;
   requestPermissionDecisionFromUi: (
     ui: ExtensionContext["ui"],
@@ -65,7 +67,9 @@ function getContextSystemPrompt(ctx: ExtensionContext): string | undefined {
     const systemPrompt = getSystemPrompt.call(ctx);
     return typeof systemPrompt === "string" ? systemPrompt : undefined;
   } catch (error) {
+    // No deps available in this helper — warning silently dropped.
     logPermissionForwardingWarning(
+      null,
       "Failed to read context system prompt for forwarded permission metadata",
       error,
     );
@@ -101,17 +105,20 @@ export async function waitForForwardedPermissionApproval(
 
   if (!targetSessionId) {
     logPermissionForwardingError(
+      deps.logger,
       "Permission forwarding target session could not be resolved from subagent runtime metadata (expected PI_AGENT_ROUTER_PARENT_SESSION_ID)",
     );
     return { approved: false, state: "denied" };
   }
 
   const location = ensurePermissionForwardingLocation(
+    deps.logger,
     deps.forwardingDir,
     targetSessionId,
   );
   if (!location) {
     logPermissionForwardingError(
+      deps.logger,
       `Permission forwarding is unavailable because session-scoped directories could not be prepared for '${targetSessionId}'`,
     );
     return { approved: false, state: "denied" };
@@ -144,9 +151,10 @@ export async function waitForForwardedPermissionApproval(
   });
 
   try {
-    writeJsonFileAtomic(requestPath, request);
+    writeJsonFileAtomic(deps.logger, requestPath, request);
   } catch (error) {
     logPermissionForwardingError(
+      deps.logger,
       `Failed to write forwarded permission request '${requestPath}'`,
       error,
     );
@@ -156,7 +164,10 @@ export async function waitForForwardedPermissionApproval(
   const deadline = Date.now() + PERMISSION_FORWARDING_TIMEOUT_MS;
   while (Date.now() < deadline) {
     if (existsSync(responsePath)) {
-      const response = readForwardedPermissionResponse(responsePath);
+      const response = readForwardedPermissionResponse(
+        deps.logger,
+        responsePath,
+      );
       deps.writeReviewLog("forwarded_permission.response_received", {
         requestId,
         approved: response?.approved ?? null,
@@ -166,9 +177,13 @@ export async function waitForForwardedPermissionApproval(
         targetSessionId,
         responsePath,
       });
-      safeDeleteFile(responsePath, "forwarded permission response");
-      safeDeleteFile(requestPath, "forwarded permission request");
-      cleanupPermissionForwardingLocationIfEmpty(location);
+      safeDeleteFile(
+        deps.logger,
+        responsePath,
+        "forwarded permission response",
+      );
+      safeDeleteFile(deps.logger, requestPath, "forwarded permission request");
+      cleanupPermissionForwardingLocationIfEmpty(deps.logger, location);
       return response ?? { approved: false, state: "denied" };
     }
 
@@ -176,6 +191,7 @@ export async function waitForForwardedPermissionApproval(
   }
 
   logPermissionForwardingWarning(
+    deps.logger,
     `Timed out waiting for forwarded permission response '${responsePath}'`,
   );
   deps.writeReviewLog("forwarded_permission.response_timed_out", {
@@ -184,8 +200,8 @@ export async function waitForForwardedPermissionApproval(
     targetSessionId,
     responsePath,
   });
-  safeDeleteFile(requestPath, "forwarded permission request");
-  cleanupPermissionForwardingLocationIfEmpty(location);
+  safeDeleteFile(deps.logger, requestPath, "forwarded permission request");
+  cleanupPermissionForwardingLocationIfEmpty(deps.logger, location);
   return { approved: false, state: "denied" };
 }
 
@@ -206,16 +222,17 @@ export async function processForwardedPermissionRequests(
     return;
   }
 
-  const requestFiles = listRequestFiles(location.requestsDir);
+  const requestFiles = listRequestFiles(deps.logger, location.requestsDir);
   if (requestFiles.length === 0) {
     return;
   }
 
   for (const fileName of requestFiles) {
     const requestPath = join(location.requestsDir, fileName);
-    const request = readForwardedPermissionRequest(requestPath);
+    const request = readForwardedPermissionRequest(deps.logger, requestPath);
     if (!request) {
       safeDeleteFile(
+        deps.logger,
         requestPath,
         `${location.label} forwarded permission request`,
       );
@@ -224,9 +241,11 @@ export async function processForwardedPermissionRequests(
 
     if (!isForwardedPermissionRequestForSession(request, currentSessionId)) {
       logPermissionForwardingWarning(
+        deps.logger,
         `Ignoring forwarded permission request '${request.id}' because it targets session '${request.targetSessionId}' instead of '${currentSessionId}'`,
       );
       safeDeleteFile(
+        deps.logger,
         requestPath,
         `${location.label} forwarded permission request`,
       );
@@ -265,6 +284,7 @@ export async function processForwardedPermissionRequests(
         );
       } catch (error) {
         logPermissionForwardingError(
+          deps.logger,
           "Failed to show forwarded permission confirmation dialog",
           error,
         );
@@ -289,7 +309,7 @@ export async function processForwardedPermissionRequests(
       },
     );
     try {
-      writeJsonFileAtomic(responsePath, {
+      writeJsonFileAtomic(deps.logger, responsePath, {
         approved: decision.approved,
         state: decision.state,
         denialReason: decision.denialReason,
@@ -298,6 +318,7 @@ export async function processForwardedPermissionRequests(
       } satisfies ForwardedPermissionResponse);
     } catch (error) {
       logPermissionForwardingError(
+        deps.logger,
         `Failed to write ${location.label} forwarded permission response '${responsePath}'`,
         error,
       );
@@ -305,12 +326,13 @@ export async function processForwardedPermissionRequests(
     }
 
     safeDeleteFile(
+      deps.logger,
       requestPath,
       `${location.label} forwarded permission request`,
     );
   }
 
-  cleanupPermissionForwardingLocationIfEmpty(location);
+  cleanupPermissionForwardingLocationIfEmpty(deps.logger, location);
 }
 
 export async function confirmPermission(
