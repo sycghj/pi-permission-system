@@ -2115,7 +2115,7 @@ permission:
   }
 });
 
-test("external_directory permission is independent of doom_loop in the same special config", () => {
+test("external_directory permission is unaffected when doom_loop key is present in config (deprecated and ignored)", () => {
   const { manager, cleanup } = createManager({
     defaultPolicy: {
       tools: "allow",
@@ -2131,10 +2131,12 @@ test("external_directory permission is independent of doom_loop in the same spec
   });
 
   try {
+    // doom_loop is deprecated and stripped — falls through to defaultPolicy.tools
     const doomResult = manager.checkPermission("doom_loop", {});
-    assert.equal(doomResult.state, "deny");
-    assert.equal(doomResult.matchedPattern, "doom_loop");
+    assert.equal(doomResult.state, "allow"); // defaultPolicy.tools, not the stripped doom_loop: "deny"
+    assert.equal(doomResult.matchedPattern, undefined);
 
+    // external_directory still resolves from its own entry
     const extResult = manager.checkPermission("external_directory", {});
     assert.equal(extResult.state, "allow");
     assert.equal(extResult.matchedPattern, "external_directory");

@@ -46,7 +46,7 @@ const BUILT_IN_TOOL_PERMISSION_NAMES = new Set([
   "find",
   "ls",
 ]);
-const SPECIAL_PERMISSION_KEYS = new Set(["doom_loop", "external_directory"]);
+const SPECIAL_PERMISSION_KEYS = new Set(["external_directory"]);
 const MCP_BASELINE_TARGETS = new Set([
   "mcp_status",
   "mcp_list",
@@ -156,6 +156,7 @@ function getConfiguredMcpServerNamesFromPaths(
 }
 
 const DEPRECATED_SPECIAL_KEYS: ReadonlySet<string> = new Set([
+  "doom_loop",
   "tool_call_limit",
 ]);
 
