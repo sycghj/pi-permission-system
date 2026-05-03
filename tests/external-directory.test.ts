@@ -208,6 +208,26 @@ describe("isPathOutsideWorkingDirectory", () => {
   test("returns false for empty path (normalizes to empty string)", () => {
     expect(isPathOutsideWorkingDirectory("", cwd)).toBe(false);
   });
+
+  test("returns false for /dev/null regardless of cwd", () => {
+    expect(isPathOutsideWorkingDirectory("/dev/null", cwd)).toBe(false);
+  });
+
+  test("returns false for /dev/stdin regardless of cwd", () => {
+    expect(isPathOutsideWorkingDirectory("/dev/stdin", cwd)).toBe(false);
+  });
+
+  test("returns false for /dev/stdout regardless of cwd", () => {
+    expect(isPathOutsideWorkingDirectory("/dev/stdout", cwd)).toBe(false);
+  });
+
+  test("returns false for /dev/stderr regardless of cwd", () => {
+    expect(isPathOutsideWorkingDirectory("/dev/stderr", cwd)).toBe(false);
+  });
+
+  test("returns true for /dev/null/subdir (not a safe path)", () => {
+    expect(isPathOutsideWorkingDirectory("/dev/null/subdir", cwd)).toBe(true);
+  });
 });
 
 describe("formatExternalDirectoryHardStopHint", () => {

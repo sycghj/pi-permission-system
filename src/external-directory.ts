@@ -91,11 +91,13 @@ export function isPathOutsideWorkingDirectory(
 ): boolean {
   const normalizedCwd = normalizePathForComparison(cwd, cwd);
   const normalizedPath = normalizePathForComparison(pathValue, cwd);
-  return Boolean(
-    normalizedCwd &&
-      normalizedPath &&
-      !isPathWithinDirectory(normalizedPath, normalizedCwd),
-  );
+  if (!normalizedCwd || !normalizedPath) {
+    return false;
+  }
+  if (isSafeSystemPath(normalizedPath)) {
+    return false;
+  }
+  return !isPathWithinDirectory(normalizedPath, normalizedCwd);
 }
 
 export function formatExternalDirectoryHardStopHint(): string {
