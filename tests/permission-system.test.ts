@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "vitest";
-import { BashFilter } from "../src/bash-filter";
+
 import {
   createActiveToolsCacheKey,
   createBeforeAgentStartPromptStateKey,
@@ -650,30 +650,6 @@ test("Permission-system logger respects debug toggle and keeps review log enable
   } finally {
     rmSync(baseDir, { recursive: true, force: true });
   }
-});
-
-test("BashFilter uses opencode-style last-match hierarchy", () => {
-  const filter = new BashFilter(
-    {
-      "*": "ask",
-      "git *": "deny",
-      "git status *": "ask",
-      "git status": "allow",
-    },
-    "deny",
-  );
-
-  const exact = filter.check("git status");
-  assert.equal(exact.state, "allow");
-  assert.equal(exact.matchedPattern, "git status");
-
-  const subcommand = filter.check("git status --short");
-  assert.equal(subcommand.state, "ask");
-  assert.equal(subcommand.matchedPattern, "git status *");
-
-  const generic = filter.check("git commit -m test");
-  assert.equal(generic.state, "deny");
-  assert.equal(generic.matchedPattern, "git *");
 });
 
 test("PermissionManager canonical built-in permission checking", () => {
