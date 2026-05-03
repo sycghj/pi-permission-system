@@ -1,16 +1,22 @@
-import type {
-  ExtensionContext,
-  ResourcesDiscoverEvent,
-  SessionStartEvent,
-} from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 import { getActiveAgentName } from "../active-agent";
 import { PERMISSION_SYSTEM_STATUS_KEY } from "../status";
 import type { HandlerDeps } from "./types";
 
+/** Minimal subset of SessionStartEvent used by this handler. */
+interface SessionStartPayload {
+  reason: string;
+}
+
+/** Minimal subset of ResourcesDiscoverEvent used by this handler. */
+interface ResourcesDiscoverPayload {
+  reason: string;
+}
+
 export async function handleSessionStart(
   deps: HandlerDeps,
-  event: SessionStartEvent,
+  event: SessionStartPayload,
   ctx: ExtensionContext,
 ): Promise<void> {
   deps.setRuntimeContext(ctx);
@@ -40,7 +46,7 @@ export async function handleSessionStart(
 
 export async function handleResourcesDiscover(
   deps: HandlerDeps,
-  event: ResourcesDiscoverEvent,
+  event: ResourcesDiscoverPayload,
 ): Promise<void> {
   if (event.reason !== "reload") {
     return;

@@ -1,8 +1,12 @@
 import type {
-  BeforeAgentStartEvent,
   BeforeAgentStartEventResult,
   ExtensionContext,
 } from "@mariozechner/pi-coding-agent";
+
+/** Minimal subset of BeforeAgentStartEvent used by this handler. */
+interface BeforeAgentStartPayload {
+  systemPrompt: string;
+}
 
 import {
   createActiveToolsCacheKey,
@@ -34,7 +38,7 @@ export function shouldExposeTool(
 
 export async function handleBeforeAgentStart(
   deps: HandlerDeps,
-  event: BeforeAgentStartEvent,
+  event: BeforeAgentStartPayload,
   ctx: ExtensionContext,
 ): Promise<BeforeAgentStartEventResult> {
   deps.setRuntimeContext(ctx);

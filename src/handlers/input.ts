@@ -1,8 +1,12 @@
 import type {
   ExtensionContext,
-  InputEvent,
   InputEventResult,
 } from "@mariozechner/pi-coding-agent";
+
+/** Minimal subset of InputEvent used by this handler. */
+interface InputPayload {
+  text: string;
+}
 
 import { applyPermissionGate } from "../permission-gate";
 import { formatSkillAskPrompt } from "../permission-prompts";
@@ -32,7 +36,7 @@ export function extractSkillNameFromInput(text: string): string | null {
 
 export async function handleInput(
   deps: HandlerDeps,
-  event: InputEvent,
+  event: InputPayload,
   ctx: ExtensionContext,
 ): Promise<InputEventResult> {
   deps.setRuntimeContext(ctx);

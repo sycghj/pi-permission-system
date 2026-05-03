@@ -12,7 +12,7 @@ import type { SkillPromptEntry } from "../../src/skill-prompt-sanitizer";
 
 // ── active-agent stub ──────────────────────────────────────────────────────
 const { mockGetActiveAgentName } = vi.hoisted(() => ({
-  mockGetActiveAgentName: vi.fn<[ctx: ExtensionContext], string | null>(),
+  mockGetActiveAgentName: vi.fn<(ctx: ExtensionContext) => string | null>(),
 }));
 
 vi.mock("../../src/active-agent", () => ({

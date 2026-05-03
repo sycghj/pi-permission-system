@@ -51,7 +51,7 @@ function makeToolCallEvent(
 function makePermissionResult(
   state: "allow" | "deny" | "ask",
 ): PermissionCheckResult {
-  return { state, toolName: "read", matchedPattern: null, matchedRule: null };
+  return { state, toolName: "read", source: "tool" };
 }
 
 function makeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {

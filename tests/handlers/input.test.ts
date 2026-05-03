@@ -30,7 +30,7 @@ function makeCtx(overrides: Partial<ExtensionContext> = {}): ExtensionContext {
 }
 
 function makeInputEvent(text: string) {
-  return { type: "input" as const, text, source: "user" as const };
+  return { text };
 }
 
 function makeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {

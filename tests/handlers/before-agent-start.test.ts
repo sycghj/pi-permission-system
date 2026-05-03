@@ -41,7 +41,7 @@ function makeCtx(overrides: Partial<ExtensionContext> = {}): ExtensionContext {
 }
 
 function makeEvent(systemPrompt = "You are an assistant.") {
-  return { type: "before_agent_start" as const, systemPrompt, prompt: "" };
+  return { systemPrompt };
 }
 
 /** Minimal PermissionManager stub for shouldExposeTool / policy-cache tests. */
