@@ -470,6 +470,23 @@ Example edit approval prompt:
 Current agent requested tool 'edit' for '.gitignore' (1 replacement: edit #1 replaces 5 lines with 2 lines). Allow this call?
 ```
 
+### Session-Scoped Approvals
+
+When `special.external_directory` resolves to `ask`, the permission dialog offers four options:
+
+```text
+Yes | Yes, for this session | No | No, provide reason
+```
+
+Selecting **Yes, for this session** approves the current request and caches the directory prefix so that subsequent accesses under the same directory skip the prompt for the remainder of the session.
+For example, approving access to `~/other-project/src/foo.ts` covers all paths under `~/other-project/src/` until the session ends.
+
+Session approvals are ephemeral — they are never persisted to disk and are cleared on `session_shutdown`.
+The review log records these decisions with `resolution: "session_approved"` so they remain auditable.
+
+This is currently scoped to the `external_directory` surface only.
+Other permission surfaces (tools, bash patterns, MCP, skills) always use the standard one-time approval flow.
+
 ### Subagent Permission Forwarding
 
 When a delegated or routed subagent runs without direct UI access, `ask` permissions can still be enforced by forwarding the confirmation request through Pi session directories. The main interactive session polls for forwarded requests, shows the confirmation prompt, writes the response, and the subagent resumes once that decision is available.
@@ -514,6 +531,7 @@ This makes it easy to verify which files the extension actually loaded:
 index.ts                    → Root Pi entrypoint shim
 src/
 ├── index.ts                → Extension bootstrap, permission checks, readable prompts, review logging, reload handling, and subagent forwarding
+├── session-approval-cache.ts → Ephemeral session-scoped approval cache for external-directory access
 ├── config-loader.ts        → Unified config loader, merger, and legacy-path detection
 ├── config-paths.ts         → Path derivation for global, project, and legacy config locations
 ├── config-reporter.ts      → Resolved config path reporting for diagnostic logs
