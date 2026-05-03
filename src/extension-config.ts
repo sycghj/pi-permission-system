@@ -69,7 +69,6 @@ const PERMISSION_POLICY_KEYS: ReadonlySet<string> = new Set([
   "skills",
   "special",
   "external_directory",
-  "doom_loop",
 ]);
 
 export function detectMisplacedPermissionKeys(

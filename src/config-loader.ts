@@ -36,6 +36,7 @@ export interface UnifiedConfigLoadResult {
 }
 
 const DEPRECATED_SPECIAL_KEYS: ReadonlySet<string> = new Set([
+  "doom_loop",
   "tool_call_limit",
 ]);
 
@@ -49,7 +50,7 @@ const BUILT_IN_TOOL_PERMISSION_NAMES = new Set([
   "ls",
 ]);
 
-const SPECIAL_PERMISSION_KEYS = new Set(["doom_loop", "external_directory"]);
+const SPECIAL_PERMISSION_KEYS = new Set(["external_directory"]);
 
 export function stripJsonComments(input: string): string {
   let output = "";

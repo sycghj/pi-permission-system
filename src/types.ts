@@ -15,7 +15,7 @@ export type BashPermissions = Record<string, PermissionState>;
 
 export type SkillPermissions = Record<string, PermissionState>;
 
-export type SpecialPermissionName = "doom_loop" | "external_directory";
+export type SpecialPermissionName = "external_directory";
 
 export type SpecialPermissions = Record<string, PermissionState>;
 
