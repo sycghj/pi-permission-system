@@ -113,6 +113,8 @@ issue_title: "Per-agent permission frontmatter overrides" # required
   Use `.mockReset()` when the stub has no default implementation (each test sets its own return value).
   Use `.mockClear()` when the `vi.mock()` factory provides a default implementation that tests must preserve.
 - When a `vi.mock()` factory references a module-scope `vi.fn()` stub, wrap the stub declaration in `vi.hoisted()` — Vitest hoists `vi.mock()` above normal declarations, so unhoisted variables are `undefined` when the factory runs.
+- When mocking a class constructor with `vi.mock()`, use `vi.fn()` with no implementation — not `vi.fn(() => ({}))`.
+  Arrow-function implementations are not constructable; `new MockClass()` throws `"is not a constructor"`.
 - When mocking `node:*` built-in modules with `vi.mock()`, include a `default` key mirroring the named exports — omitting it causes "No default export defined on the mock" errors when any import uses the default.
 - When writing TDD steps in a plan, ensure each feat step that changes behavior also accounts for existing tests that will break.
   Either fold the test updates into the same step or place a dedicated test-update step immediately before the feat step — never after it.
