@@ -262,7 +262,7 @@ No step changes the config format or user-visible behavior.
 ```mermaid
 flowchart TD
     A["#42 Extract event handlers"] --> D["#43 Eliminate module-scope state"]
-    B["✅ #55 Extract pure evaluate()"] --> C["#56 Unify Rule type + normalize config"]
+    B["✅ #55 Extract pure evaluate()"] --> C["✅ #56 Unify Rule type + normalize config"]
     C --> E["#57 Replace SessionApprovalCache with session Ruleset"]
     E --> F["#51 Generalize session approvals to all surfaces"]
     F --> G["#52 Bash arity table"]
@@ -271,6 +271,7 @@ flowchart TD
 
     style A fill:#e8f5e9
     style B fill:#c8e6c9
+    style C fill:#c8e6c9
     style D fill:#e8f5e9
     style I fill:#fff3e0
 ```
@@ -286,13 +287,13 @@ Orange node is investigation, can run in parallel.
 |#42|Extract event handlers from index.ts|#43|
 |#43|Eliminate module-scope mutable state|—|
 |✅ #55|Extract pure `evaluate()` function|#56|
-|#54|Deprecate doom_loop dead config key|#56 (soft)|
+|✅ #54|Deprecate doom_loop dead config key|#56 (soft)|
 
 ### Phase 2: Unified model (internal refactor, no config change)
 
 |Issue|Summary|Blocks|
 |---|---|---|
-|#56|Unify Rule type + normalize config into Ruleset|#57|
+|✅ #56|Unify Rule type + normalize config into Ruleset|#57|
 |#57|Replace SessionApprovalCache with session Ruleset|#51|
 
 ### Phase 3: Feature delivery
