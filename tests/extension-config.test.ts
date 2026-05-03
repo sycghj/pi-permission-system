@@ -42,7 +42,6 @@ describe("detectMisplacedPermissionKeys", () => {
       skills: {},
       special: {},
       external_directory: {},
-      doom_loop: {},
     });
     expect(result).toEqual([
       "defaultPolicy",
@@ -52,8 +51,14 @@ describe("detectMisplacedPermissionKeys", () => {
       "skills",
       "special",
       "external_directory",
-      "doom_loop",
     ]);
+  });
+
+  it("does not detect doom_loop as a misplaced permission key (deprecated)", () => {
+    const result = detectMisplacedPermissionKeys({
+      doom_loop: {},
+    });
+    expect(result).toEqual([]);
   });
 
   it("ignores unknown keys that are not permission-rule keys", () => {

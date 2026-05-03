@@ -133,7 +133,7 @@ describe("loadUnifiedConfig", () => {
     expect(result.config.bash).toEqual({ "git *": "ask" });
   });
 
-  it("collects deprecated special key issues", () => {
+  it("collects deprecated special key issues (doom_loop and tool_call_limit)", () => {
     const configPath = join(tempDir, "config.json");
     writeFileSync(
       configPath,
@@ -143,9 +143,10 @@ describe("loadUnifiedConfig", () => {
     );
 
     const result = loadUnifiedConfig(configPath);
-    expect(result.issues).toHaveLength(1);
-    expect(result.issues[0]).toContain("tool_call_limit");
-    expect(result.config.special).toEqual({ doom_loop: "deny" });
+    expect(result.issues).toHaveLength(2);
+    expect(result.issues.some((i) => i.includes("doom_loop"))).toBe(true);
+    expect(result.issues.some((i) => i.includes("tool_call_limit"))).toBe(true);
+    expect(result.config.special).toBeUndefined();
   });
 });
 

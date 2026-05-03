@@ -2621,7 +2621,7 @@ test("PermissionManager.getConfigIssues returns deprecation for tool_call_limit 
     bash: {},
     mcp: {},
     skills: {},
-    special: { tool_call_limit: "allow" as PermissionState, doom_loop: "deny" },
+    special: { tool_call_limit: "allow" as PermissionState },
   };
   const { manager, cleanup } = createManager(config);
   try {
@@ -2646,7 +2646,7 @@ test("PermissionManager.getConfigIssues returns empty array for clean config", (
     bash: {},
     mcp: {},
     skills: {},
-    special: { doom_loop: "deny" },
+    special: { external_directory: "ask" },
   };
   const { manager, cleanup } = createManager(config);
   try {
