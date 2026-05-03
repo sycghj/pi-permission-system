@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { getGlobalConfigPath } from "../src/config-paths";
 import { DEFAULT_EXTENSION_CONFIG } from "../src/extension-config";
 import piPermissionSystemExtension from "../src/index";
-import type { GlobalPermissionConfig } from "../src/types";
+import type { ScopeConfig } from "../src/types";
 
 type MockHandler = (
   event: Record<string, unknown>,
@@ -26,7 +26,7 @@ describe("session_start handler consolidation", () => {
     mkdirSync(join(baseDir, "agents"), { recursive: true });
     mkdirSync(dirname(globalConfigPath), { recursive: true });
 
-    const config: GlobalPermissionConfig = {
+    const config: ScopeConfig = {
       defaultPolicy: {
         tools: "ask",
         bash: "ask",

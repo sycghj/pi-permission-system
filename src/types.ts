@@ -9,15 +9,7 @@ export type BuiltInToolName =
   | "find"
   | "ls";
 
-export type ToolPermissions = Record<string, PermissionState>;
-
-export type BashPermissions = Record<string, PermissionState>;
-
-export type SkillPermissions = Record<string, PermissionState>;
-
 export type SpecialPermissionName = "external_directory";
-
-export type SpecialPermissions = Record<string, PermissionState>;
 
 export interface PermissionDefaultPolicy {
   tools: PermissionState;
@@ -27,17 +19,20 @@ export interface PermissionDefaultPolicy {
   special: PermissionState;
 }
 
-export interface AgentPermissions {
+/**
+ * Per-scope permission config shape after loading and validation.
+ * All fields optional — each scope may define a subset of the policy.
+ *
+ * This replaces the former AgentPermissions / GlobalPermissionConfig
+ * interfaces (removed in #56).
+ */
+export interface ScopeConfig {
   defaultPolicy?: Partial<PermissionDefaultPolicy>;
-  tools?: ToolPermissions;
-  bash?: BashPermissions;
-  mcp?: ToolPermissions;
-  skills?: SkillPermissions;
-  special?: SpecialPermissions;
-}
-
-export interface GlobalPermissionConfig extends AgentPermissions {
-  defaultPolicy: PermissionDefaultPolicy;
+  tools?: Record<string, PermissionState>;
+  bash?: Record<string, PermissionState>;
+  mcp?: Record<string, PermissionState>;
+  skills?: Record<string, PermissionState>;
+  special?: Record<string, PermissionState>;
 }
 
 export interface PermissionCheckResult {

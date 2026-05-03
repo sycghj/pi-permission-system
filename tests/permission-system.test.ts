@@ -46,11 +46,7 @@ import {
   checkRequestedToolRegistration,
   getToolNameFromValue,
 } from "../src/tool-registry";
-import type {
-  AgentPermissions,
-  GlobalPermissionConfig,
-  PermissionState,
-} from "../src/types";
+import type { PermissionState, ScopeConfig } from "../src/types";
 import {
   canResolveAskPermissionRequest,
   shouldAutoApprovePermissionState,
@@ -61,7 +57,7 @@ type CreateManagerOptions = {
 };
 
 function createManager(
-  config: GlobalPermissionConfig,
+  config: ScopeConfig,
   agentFiles: Record<string, string> = {},
   options: CreateManagerOptions = {},
 ) {
@@ -146,7 +142,7 @@ async function withIsolatedSubagentEnv<T>(
 }
 
 function createToolCallHarness(
-  config: GlobalPermissionConfig,
+  config: ScopeConfig,
   toolNames: readonly string[],
   options: ExtensionHarnessOptions = {},
 ): ExtensionHarness {
@@ -886,7 +882,7 @@ test("MCP server names in settings.json are not used — only mcp.json is consul
   // which matches this rule and returns "allow".
   // After the fix, settings.json is ignored, so no server name is derived and the
   // result falls through to the default mcp policy ("ask").
-  const config: GlobalPermissionConfig = {
+  const config: ScopeConfig = {
     defaultPolicy: {
       tools: "ask",
       bash: "ask",
@@ -1486,12 +1482,12 @@ test("Permission forwarding rejects unresolved sentinel session ids", () => {
 });
 
 type CreateManagerWithProjectOptions = CreateManagerOptions & {
-  projectConfig?: AgentPermissions;
+  projectConfig?: ScopeConfig;
   projectAgentFiles?: Record<string, string>;
 };
 
 function createManagerWithProject(
-  config: GlobalPermissionConfig,
+  config: ScopeConfig,
   agentFiles: Record<string, string> = {},
   options: CreateManagerWithProjectOptions = {},
 ) {
@@ -1783,7 +1779,7 @@ test("PermissionManager reads config from PI_CODING_AGENT_DIR when set", () => {
   mkdirSync(agentsDir, { recursive: true });
   mkdirSync(dirname(newConfigPath), { recursive: true });
 
-  const config: GlobalPermissionConfig = {
+  const config: ScopeConfig = {
     defaultPolicy: {
       tools: "deny",
       bash: "deny",
@@ -2585,7 +2581,7 @@ test("normalizeRawPermission emits no issues when special is absent", () => {
 });
 
 test("PermissionManager.getConfigIssues returns deprecation for tool_call_limit in global config", () => {
-  const config: GlobalPermissionConfig = {
+  const config: ScopeConfig = {
     defaultPolicy: {
       tools: "ask",
       bash: "ask",
@@ -2610,7 +2606,7 @@ test("PermissionManager.getConfigIssues returns deprecation for tool_call_limit 
 });
 
 test("PermissionManager.getConfigIssues returns empty array for clean config", () => {
-  const config: GlobalPermissionConfig = {
+  const config: ScopeConfig = {
     defaultPolicy: {
       tools: "ask",
       bash: "ask",
@@ -2636,7 +2632,7 @@ test("PermissionManager.getConfigIssues returns empty array for clean config", (
 // --- doom_loop config-loader deprecation tests (#54) ---
 
 test("PermissionManager.getConfigIssues returns deprecation for doom_loop in global config", () => {
-  const config: GlobalPermissionConfig = {
+  const config: ScopeConfig = {
     defaultPolicy: {
       tools: "ask",
       bash: "ask",

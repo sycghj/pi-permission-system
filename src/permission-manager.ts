@@ -11,16 +11,15 @@ import {
 } from "./common";
 import { loadUnifiedConfig, stripJsonComments } from "./config-loader";
 import { getGlobalConfigPath } from "./config-paths";
-import { getSurfaceDefault, mergeDefaults } from "./defaults";
+import { mergeDefaults } from "./defaults";
 import { normalizeConfig } from "./normalize";
 import type { Ruleset } from "./rule";
 import { evaluate } from "./rule";
 import type {
-  AgentPermissions,
-  GlobalPermissionConfig,
   PermissionCheckResult,
   PermissionDefaultPolicy,
   PermissionState,
+  ScopeConfig,
 } from "./types";
 
 function defaultGlobalConfigPath(): string {
@@ -157,7 +156,7 @@ const DEPRECATED_SPECIAL_KEYS: ReadonlySet<string> = new Set([
 ]);
 
 export interface NormalizeResult {
-  permissions: AgentPermissions;
+  permissions: ScopeConfig;
   configIssues: string[];
 }
 
@@ -166,7 +165,7 @@ export function normalizeRawPermission(raw: unknown): NormalizeResult {
   const configIssues: string[] = [];
   const normalizedTools = normalizePermissionRecord(record.tools);
 
-  const normalized: AgentPermissions = {
+  const normalized: ScopeConfig = {
     defaultPolicy: normalizePartialPolicy(record.defaultPolicy),
     tools: normalizedTools,
     bash: normalizePermissionRecord(record.bash),
@@ -394,17 +393,15 @@ export class PermissionManager {
   private readonly projectAgentsDir: string | null;
   private readonly globalMcpConfigPath: string;
   private readonly configuredMcpServerNamesOverride: readonly string[] | null;
-  private globalConfigCache: FileCacheEntry<GlobalPermissionConfig> | null =
-    null;
-  private projectGlobalConfigCache: FileCacheEntry<AgentPermissions> | null =
-    null;
+  private globalConfigCache: FileCacheEntry<ScopeConfig> | null = null;
+  private projectGlobalConfigCache: FileCacheEntry<ScopeConfig> | null = null;
   private readonly agentConfigCache = new Map<
     string,
-    FileCacheEntry<AgentPermissions>
+    FileCacheEntry<ScopeConfig>
   >();
   private readonly projectAgentConfigCache = new Map<
     string,
-    FileCacheEntry<AgentPermissions>
+    FileCacheEntry<ScopeConfig>
   >();
   private readonly resolvedPermissionsCache = new Map<
     string,
@@ -457,7 +454,7 @@ export class PermissionManager {
     return [...this.accumulatedConfigIssues];
   }
 
-  private loadGlobalConfig(): GlobalPermissionConfig {
+  private loadGlobalConfig(): ScopeConfig {
     const stamp = getFileStamp(this.globalConfigPath);
     if (this.globalConfigCache?.stamp === stamp) {
       return this.globalConfigCache.value;
@@ -466,7 +463,7 @@ export class PermissionManager {
     const { config, issues } = loadUnifiedConfig(this.globalConfigPath);
     this.accumulateConfigIssues(issues);
 
-    const value: GlobalPermissionConfig = {
+    const value: ScopeConfig = {
       defaultPolicy: normalizePolicy(config.defaultPolicy),
       tools: config.tools || {},
       bash: config.bash || {},
@@ -479,7 +476,7 @@ export class PermissionManager {
     return value;
   }
 
-  private loadProjectGlobalConfig(): AgentPermissions {
+  private loadProjectGlobalConfig(): ScopeConfig {
     if (!this.projectGlobalConfigPath) {
       return {};
     }
@@ -492,7 +489,7 @@ export class PermissionManager {
     const { config, issues } = loadUnifiedConfig(this.projectGlobalConfigPath);
     this.accumulateConfigIssues(issues);
 
-    const value: AgentPermissions = {
+    const value: ScopeConfig = {
       defaultPolicy: config.defaultPolicy,
       tools: config.tools,
       bash: config.bash,
@@ -505,11 +502,11 @@ export class PermissionManager {
     return value;
   }
 
-  private loadAgentPermissionsFrom(
+  private loadScopeConfigFrom(
     dir: string | null,
-    cache: Map<string, FileCacheEntry<AgentPermissions>>,
+    cache: Map<string, FileCacheEntry<ScopeConfig>>,
     agentName?: string,
-  ): AgentPermissions {
+  ): ScopeConfig {
     if (!dir || !agentName) {
       return {};
     }
@@ -521,7 +518,7 @@ export class PermissionManager {
       return cached.value;
     }
 
-    let value: AgentPermissions;
+    let value: ScopeConfig;
     try {
       const markdown = readFileSync(filePath, "utf-8");
       const frontmatter = extractFrontmatter(markdown);
@@ -541,16 +538,16 @@ export class PermissionManager {
     return value;
   }
 
-  private loadAgentPermissions(agentName?: string): AgentPermissions {
-    return this.loadAgentPermissionsFrom(
+  private loadScopeConfig(agentName?: string): ScopeConfig {
+    return this.loadScopeConfigFrom(
       this.agentsDir,
       this.agentConfigCache,
       agentName,
     );
   }
 
-  private loadProjectAgentPermissions(agentName?: string): AgentPermissions {
-    return this.loadAgentPermissionsFrom(
+  private loadProjectScopeConfig(agentName?: string): ScopeConfig {
+    return this.loadScopeConfigFrom(
       this.projectAgentsDir,
       this.projectAgentConfigCache,
       agentName,
@@ -599,8 +596,8 @@ export class PermissionManager {
 
     const globalConfig = this.loadGlobalConfig();
     const projectConfig = this.loadProjectGlobalConfig();
-    const agentConfig = this.loadAgentPermissions(agentName);
-    const projectAgentConfig = this.loadProjectAgentPermissions(agentName);
+    const agentConfig = this.loadScopeConfig(agentName);
+    const projectAgentConfig = this.loadProjectScopeConfig(agentName);
 
     // Normalize each scope into a flat Ruleset and concatenate.
     // Later scopes appear last → higher priority via last-match-wins.
