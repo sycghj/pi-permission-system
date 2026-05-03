@@ -108,6 +108,8 @@ issue_title: "Per-agent permission frontmatter overrides" # required
   Use `.mockReset()` when the stub has no default implementation (each test sets its own return value).
   Use `.mockClear()` when the `vi.mock()` factory provides a default implementation that tests must preserve.
 - When mocking `node:*` built-in modules with `vi.mock()`, include a `default` key mirroring the named exports — omitting it causes "No default export defined on the mock" errors when any import uses the default.
+- When writing TDD steps in a plan, ensure each feat step that changes behavior also accounts for existing tests that will break.
+  Either fold the test updates into the same step or place a dedicated test-update step immediately before the feat step — never after it.
 - When a fix changes shared helper functions (e.g. `findSection`, `normalizePolicy`), run the full test suite (`npx vitest run`) before committing — not just the directly affected test file.
   Helpers are often exercised by integration-level tests in other files.
 - When a test reveals a pre-existing bug rather than a wrong assumption, use `test.fails` to document the expected behavior and file a GitHub issue. Do not adjust the test to match the buggy behavior.
