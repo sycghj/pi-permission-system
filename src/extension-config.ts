@@ -130,10 +130,9 @@ export function loadPermissionSystemConfig(
     }
     if (misplacedKeys.length > 0) {
       warnings.push(
-        `config.json contains permission-rule keys that are ignored here: ${misplacedKeys.join(", ")}.\n` +
-          "Permission rules belong in ~/.pi/agent/pi-permissions.jsonc, " +
-          "<project>/.pi/agent/pi-permissions.jsonc, or per-agent frontmatter.\n" +
-          "See config/config.example.json for the keys config.json supports.",
+        `config.json contains legacy permission-rule keys that are ignored: ${misplacedKeys.join(", ")}.\n` +
+          'Use the flat permission format: { "permission": { "*": "ask", "read": "allow", ... } }.\n' +
+          "See config/config.example.json for the new format.",
       );
     }
 

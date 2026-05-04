@@ -24,7 +24,7 @@ describe("detectMisplacedPermissionKeys", () => {
     expect(result).toEqual([]);
   });
 
-  it("returns misplaced key names when permission-rule keys are present", () => {
+  it("returns misplaced key names when legacy permission-rule keys are present", () => {
     const result = detectMisplacedPermissionKeys({
       debugLog: true,
       defaultPolicy: { tools: "ask" },
@@ -33,7 +33,7 @@ describe("detectMisplacedPermissionKeys", () => {
     expect(result).toEqual(["defaultPolicy", "bash"]);
   });
 
-  it("detects all known permission-rule keys", () => {
+  it("detects all known legacy permission-rule keys", () => {
     const result = detectMisplacedPermissionKeys({
       defaultPolicy: {},
       tools: {},
@@ -54,9 +54,17 @@ describe("detectMisplacedPermissionKeys", () => {
     ]);
   });
 
-  it("does not detect doom_loop as a misplaced permission key (deprecated)", () => {
+  it("does not detect doom_loop as a misplaced permission key", () => {
     const result = detectMisplacedPermissionKeys({
       doom_loop: {},
+    });
+    expect(result).toEqual([]);
+  });
+
+  it("does not flag the new flat-format permission key as misplaced", () => {
+    const result = detectMisplacedPermissionKeys({
+      debugLog: false,
+      permission: { "*": "ask" },
     });
     expect(result).toEqual([]);
   });
@@ -109,7 +117,7 @@ describe("loadPermissionSystemConfig", () => {
     expect(result.warning).toBeDefined();
     expect(result.warning).toContain("defaultPolicy");
     expect(result.warning).toContain("bash");
-    expect(result.warning).toContain("pi-permissions.jsonc");
+    expect(result.warning).toContain("permission");
   });
 
   it("still returns the valid extension config fields when misplaced keys are present", () => {
