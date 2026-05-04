@@ -644,6 +644,11 @@ The hook configuration lives in `prek.toml` at the repo root.
 - [pi-rtk-optimizer](https://github.com/MasuRii/pi-rtk-optimizer) — RTK command rewriting and output compaction
 - [pi-MUST-have-extension](https://github.com/MasuRii/pi-MUST-have-extension) — RFC 2119 keyword normalization for prompts
 
+## Acknowledgments
+
+This project began as a fork of [MasuRii/pi-permission-system](https://github.com/MasuRii/pi-permission-system).
+Thank you to MasuRii for the original work that made this possible.
+
 ## License
 
 [MIT](LICENSE)
