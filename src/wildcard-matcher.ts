@@ -26,7 +26,7 @@ export function compileWildcardPattern<TState>(
   return {
     pattern,
     state,
-    regex: new RegExp(`^${escaped}$`),
+    regex: new RegExp(`^${escaped}$`, "s"),
   };
 }
 
