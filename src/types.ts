@@ -41,5 +41,5 @@ export interface PermissionCheckResult {
   matchedPattern?: string;
   command?: string;
   target?: string;
-  source: "tool" | "bash" | "mcp" | "skill" | "special" | "default";
+  source: "tool" | "bash" | "mcp" | "skill" | "special" | "default" | "session";
 }
