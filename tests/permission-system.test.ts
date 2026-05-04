@@ -46,7 +46,11 @@ import {
   checkRequestedToolRegistration,
   getToolNameFromValue,
 } from "../src/tool-registry";
-import type { PermissionState, ScopeConfig } from "../src/types";
+import type {
+  PermissionCheckResult,
+  PermissionState,
+  ScopeConfig,
+} from "../src/types";
 import {
   canResolveAskPermissionRequest,
   shouldAutoApprovePermissionState,
@@ -2967,5 +2971,195 @@ test("session approval: regular 'Yes' does not create session approval", async (
   } finally {
     await harness.cleanup();
     rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Session-aware checkPermission() integration
+// ---------------------------------------------------------------------------
+
+test("checkPermission returns source 'session' when session rules cover the external_directory path", () => {
+  const { manager, cleanup } = createManager({
+    defaultPolicy: {
+      tools: "allow",
+      bash: "allow",
+      mcp: "allow",
+      skills: "allow",
+      special: "ask",
+    },
+  });
+
+  try {
+    const sessionRules = [
+      {
+        surface: "external_directory",
+        pattern: "/other/project/*",
+        action: "allow" as const,
+        layer: "session" as const,
+      },
+    ];
+
+    const result = manager.checkPermission(
+      "external_directory",
+      { path: "/other/project/src/foo.ts" },
+      undefined,
+      sessionRules,
+    );
+    assert.equal(result.state, "allow");
+    assert.equal(result.source, "session");
+    assert.equal(result.matchedPattern, "/other/project/*");
+  } finally {
+    cleanup();
+  }
+});
+
+test("checkPermission falls back to config policy when session rules do not cover the path", () => {
+  const { manager, cleanup } = createManager({
+    defaultPolicy: {
+      tools: "allow",
+      bash: "allow",
+      mcp: "allow",
+      skills: "allow",
+      special: "deny",
+    },
+  });
+
+  try {
+    const sessionRules = [
+      {
+        surface: "external_directory",
+        pattern: "/other/project/*",
+        action: "allow" as const,
+        layer: "session" as const,
+      },
+    ];
+
+    // Path NOT under /other/project/ — session rules don't match.
+    const result = manager.checkPermission(
+      "external_directory",
+      { path: "/completely/different/path.ts" },
+      undefined,
+      sessionRules,
+    );
+    assert.equal(result.state, "deny");
+    assert.equal(result.source, "special");
+  } finally {
+    cleanup();
+  }
+});
+
+test("checkPermission with empty session rules is identical to call without sessionRules arg", () => {
+  const { manager, cleanup } = createManager({
+    defaultPolicy: {
+      tools: "allow",
+      bash: "allow",
+      mcp: "allow",
+      skills: "allow",
+      special: "ask",
+    },
+    special: { external_directory: "deny" },
+  });
+
+  try {
+    const withEmpty = manager.checkPermission(
+      "external_directory",
+      { path: "/other/project/foo.ts" },
+      undefined,
+      [],
+    );
+    const withoutArg = manager.checkPermission("external_directory", {
+      path: "/other/project/foo.ts",
+    });
+    const expected: PermissionCheckResult = {
+      toolName: "external_directory",
+      state: "deny",
+      matchedPattern: "external_directory",
+      source: "special",
+    };
+    assert.deepEqual(withEmpty, expected);
+    assert.deepEqual(withoutArg, expected);
+  } finally {
+    cleanup();
+  }
+});
+
+test("session rules for one surface do not affect checks on other surfaces", () => {
+  const { manager, cleanup } = createManager({
+    defaultPolicy: {
+      tools: "ask",
+      bash: "ask",
+      mcp: "ask",
+      skills: "ask",
+      special: "ask",
+    },
+  });
+
+  try {
+    const sessionRules = [
+      {
+        surface: "external_directory",
+        pattern: "/other/project/*",
+        action: "allow" as const,
+        layer: "session" as const,
+      },
+    ];
+
+    // Bash check — session rules should not affect bash decisions.
+    const bashResult = manager.checkPermission(
+      "bash",
+      { command: "git status" },
+      undefined,
+      sessionRules,
+    );
+    assert.equal(bashResult.state, "ask");
+    assert.equal(bashResult.source, "bash");
+
+    // MCP check — session rules should not affect MCP decisions.
+    const mcpResult = manager.checkPermission(
+      "mcp",
+      { tool: "exa:search" },
+      undefined,
+      sessionRules,
+    );
+    assert.equal(mcpResult.state, "ask");
+    assert.equal(mcpResult.source, "default");
+  } finally {
+    cleanup();
+  }
+});
+
+test("session rules override config deny for external_directory", () => {
+  const { manager, cleanup } = createManager({
+    defaultPolicy: {
+      tools: "allow",
+      bash: "allow",
+      mcp: "allow",
+      skills: "allow",
+      special: "ask",
+    },
+    special: { external_directory: "deny" },
+  });
+
+  try {
+    const sessionRules = [
+      {
+        surface: "external_directory",
+        pattern: "/other/project/*",
+        action: "allow" as const,
+        layer: "session" as const,
+      },
+    ];
+
+    // Session approval overrides config deny for the covered path.
+    const result = manager.checkPermission(
+      "external_directory",
+      { path: "/other/project/src/foo.ts" },
+      undefined,
+      sessionRules,
+    );
+    assert.equal(result.state, "allow");
+    assert.equal(result.source, "session");
+  } finally {
+    cleanup();
   }
 });
