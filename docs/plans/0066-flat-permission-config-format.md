@@ -23,11 +23,13 @@ Both formats express the same semantics (surface + pattern + action), but the fl
 - Update per-agent frontmatter parsing to use the same flat shape.
 - Update all test fixtures.
 - Update README documentation.
+- Revise "friendly fork" language to "full fork" across `AGENTS.md`, `README.md`, and `.pi/prompts/` templates — this breaking config change makes the "friendly" / "drop-in" framing inaccurate.
+- Write a migration guide (`docs/migration/legacy-to-flat.md`) mapping every legacy key to its flat-format equivalent.
 
 ## Non-Goals
 
 - Maintaining backward compatibility with the legacy format (breaking change, sole user).
-- Auto-migration tooling.
+- Auto-migration tooling (the migration guide is manual; a codemod script is out of scope).
 - Changing `evaluate()` or the internal `Rule`/`Ruleset` types (#65 already unified these).
 - Changing the `/permission-system` slash command name.
 - Changing runtime knobs (`debugLog`, `permissionReviewLog`, `yoloMode`) — those stay at the top level, outside `permission`.
@@ -353,6 +355,26 @@ The legacy keys should still be detected as misplaced — they indicate someone 
 ### `README.md`
 
 - Update config format documentation and examples.
+- Replace "friendly fork" notice with "full fork" language.
+- Remove "diverges from upstream in config layout (#10)" — the divergence is now comprehensive, not config-layout-specific.
+
+### `AGENTS.md`
+
+- Replace "friendly fork" with "full fork" (line 7).
+- Replace "diverges from upstream in config layout" with broader divergence statement (line 8).
+- Remove "diverging from upstream's on-disk identity" constraint (line 18) — no longer meaningful.
+- Update "Config and log paths intentionally diverge from upstream" references (lines 28, 151) — reframe around the `/permission-system` slash command being the sole preserved identity.
+
+### `.pi/prompts/plan-issue.md`, `.pi/prompts/tdd-plan.md`, `.pi/prompts/retro.md`
+
+- Replace "upstream-shared on-disk identity" references with simpler "breaking change" language.
+- Remove upstream-specific framing since the fork is now fully independent.
+
+### `docs/migration/legacy-to-flat.md` (new)
+
+- Migration guide mapping every legacy config key to its flat-format equivalent.
+- Side-by-side before/after examples for: `defaultPolicy`, `tools`, `bash`, `mcp`, `skills`, `special`, `tools.bash`/`tools.mcp` overrides, per-agent frontmatter.
+- Checklist format so users can verify each section is migrated.
 
 ### Tests
 
@@ -416,10 +438,16 @@ The legacy keys should still be detected as misplaced — they indicate someone 
    - Ensure full test suite passes.
    - Commit: `test: update all test fixtures for flat permission format (#66)`
 
-9. **docs: update README for flat permission format**
-   - Rewrite config format sections.
-   - Update all examples.
-   - Commit: `docs: update README for flat permission format (#66)`
+9. **docs: write migration guide**
+   - Create `docs/migration/legacy-to-flat.md` with before/after examples for every legacy key.
+   - Include per-agent frontmatter migration.
+   - Commit: `docs: add legacy-to-flat migration guide (#66)`
+
+10. **docs: revise fork language across project docs**
+    - Update `AGENTS.md`: "friendly fork" → "full fork", remove upstream-divergence constraints.
+    - Update `README.md`: replace fork notice blockquote, update config sections and examples.
+    - Update `.pi/prompts/plan-issue.md`, `tdd-plan.md`, `retro.md`: remove upstream-specific framing.
+    - Commit: `docs: revise fork language from friendly to full fork (#66)`
 
 ## Risks and Mitigations
 
@@ -432,6 +460,7 @@ The legacy keys should still be detected as misplaced — they indicate someone 
 |Could this silently weaken a permission?|No — the flat format normalizes to the same `Rule[]` as the legacy format. `evaluate()` is unchanged. The universal default is `"ask"` (least privilege) when omitted.|
 |Merge semantics change subtly (object + string for same surface)|Define clearly: override replaces base entirely when types differ. Document in README.|
 |MCP baseline auto-allow breaks if config rules change shape|`synthesizeBaseline()` scans for `surface: "mcp" && action: "allow"` — this is independent of config format. `normalizeFlatConfig()` produces the same `Rule` shape.|
+|Fork-language update causes stale prompt template behavior|Changes to `.pi/prompts/` are cosmetic (removing upstream references). No behavioral impact on prompt execution.|
 
 ## Open Questions
 
