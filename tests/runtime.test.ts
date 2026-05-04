@@ -59,9 +59,6 @@ vi.mock("../src/config-reporter", () => ({
 
 vi.mock("../src/forwarded-permissions/polling", () => ({
   processForwardedPermissionRequests: vi.fn().mockResolvedValue(undefined),
-  confirmPermission: vi
-    .fn()
-    .mockResolvedValue({ approved: true, state: "approved" }),
 }));
 
 vi.mock("../src/subagent-context", () => ({
