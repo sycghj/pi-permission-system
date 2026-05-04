@@ -137,5 +137,5 @@ This is the first runtime dependency for this package.
 
 ## Open Questions
 
-- **Follow-up: `tree-sitter-bash` for full AST parsing.** `shell-quote` does not handle heredocs or command substitution. If these edge cases cause real false positives in practice, `tree-sitter-bash` is the next step. File as a separate issue.
-- **`$VAR` expansion**: `shell-quote` with no `env` drops variable references. If we later want to resolve `$HOME`-prefixed paths, we could pass a selective `env` object. Deferred — not a regression from current behavior.
+- **Follow-up: `tree-sitter-bash` for full AST parsing.** Addressed by #74 — `shell-quote` has been replaced with `web-tree-sitter` + `tree-sitter-bash`, eliminating heredoc false positives and providing full AST-based path extraction.
+- **`$VAR` expansion**: tree-sitter parses `$HOME/foo` as an `expansion` + `word` concatenation. `classifyTokenAsPathCandidate` does not expand variables, so `$HOME/foo` is not detected as an external path. This is the same pre-existing limitation as with `shell-quote`. Deferred — not a regression from current behavior.
