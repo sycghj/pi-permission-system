@@ -132,6 +132,45 @@ describe("requestPermissionDecisionFromUi", () => {
       "No, provide reason",
     ]);
   });
+
+  it("uses custom sessionLabel when provided", async () => {
+    const selectFn = vi.fn().mockResolvedValue("Yes");
+    const ui: PermissionDecisionUi = {
+      select: selectFn,
+      input: vi.fn(),
+    };
+    await requestPermissionDecisionFromUi(ui, "Title", "Message", {
+      sessionLabel: 'Yes, allow "git *" for this session',
+    });
+    const options = selectFn.mock.calls[0][1] as string[];
+    expect(options[1]).toBe('Yes, allow "git *" for this session');
+  });
+
+  it("still returns approved_for_session when user selects the custom session label", async () => {
+    const customLabel = 'Yes, allow "git *" for this session';
+    const ui: PermissionDecisionUi = {
+      select: vi.fn().mockResolvedValue(customLabel),
+      input: vi.fn(),
+    };
+    const result = await requestPermissionDecisionFromUi(
+      ui,
+      "Title",
+      "Message",
+      { sessionLabel: customLabel },
+    );
+    expect(result).toEqual({ approved: true, state: "approved_for_session" });
+  });
+
+  it("falls back to default session label when no options provided", async () => {
+    const selectFn = vi.fn().mockResolvedValue("Yes");
+    const ui: PermissionDecisionUi = {
+      select: selectFn,
+      input: vi.fn(),
+    };
+    await requestPermissionDecisionFromUi(ui, "Title", "Message");
+    const options = selectFn.mock.calls[0][1] as string[];
+    expect(options[1]).toBe("Yes, for this session");
+  });
 });
 
 describe("normalizePermissionDenialReason", () => {

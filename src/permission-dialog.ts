@@ -64,13 +64,27 @@ export function isPermissionDecisionState(
   );
 }
 
+export interface RequestPermissionOptions {
+  /** Override the "for this session" option label (e.g. to show the suggested pattern). */
+  sessionLabel?: string;
+}
+
 export async function requestPermissionDecisionFromUi(
   ui: PermissionDecisionUi,
   title: string,
   message: string,
+  options?: RequestPermissionOptions,
 ): Promise<PermissionPromptDecision> {
+  const sessionOption = options?.sessionLabel ?? APPROVE_FOR_SESSION_OPTION;
+  const decisionOptions = [
+    APPROVE_OPTION,
+    sessionOption,
+    DENY_OPTION,
+    DENY_WITH_REASON_OPTION,
+  ] as const;
+
   const selected = await ui.select(`${title}\n${message}`, [
-    ...PERMISSION_DECISION_OPTIONS,
+    ...decisionOptions,
   ]);
 
   if (selected === APPROVE_OPTION) {
@@ -80,7 +94,7 @@ export async function requestPermissionDecisionFromUi(
     };
   }
 
-  if (selected === APPROVE_FOR_SESSION_OPTION) {
+  if (selected === sessionOption) {
     return {
       approved: true,
       state: "approved_for_session",
