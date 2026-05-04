@@ -23,13 +23,16 @@ describe("extractExternalPathsFromBashCommand", () => {
   const cwd = "/projects/my-app";
 
   describe("absolute paths", () => {
-    test("detects absolute path outside CWD", () => {
-      const result = extractExternalPathsFromBashCommand("cat /etc/hosts", cwd);
+    test("detects absolute path outside CWD", async () => {
+      const result = await extractExternalPathsFromBashCommand(
+        "cat /etc/hosts",
+        cwd,
+      );
       expect(result).toContain("/etc/hosts");
     });
 
-    test("detects multiple absolute paths outside CWD", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("detects multiple absolute paths outside CWD", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "diff /etc/hosts /var/log/syslog",
         cwd,
       );
@@ -37,8 +40,8 @@ describe("extractExternalPathsFromBashCommand", () => {
       expect(result).toContain("/var/log/syslog");
     });
 
-    test("does not flag absolute path within CWD", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("does not flag absolute path within CWD", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "cat /projects/my-app/src/index.ts",
         cwd,
       );
@@ -47,17 +50,17 @@ describe("extractExternalPathsFromBashCommand", () => {
   });
 
   describe("home-relative paths", () => {
-    test("detects ~/path outside CWD", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("detects ~/path outside CWD", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "cat ~/documents/secret.txt",
         cwd,
       );
       expect(result).toContain("/mock/home/documents/secret.txt");
     });
 
-    test("does not flag ~/path that resolves within CWD", () => {
+    test("does not flag ~/path that resolves within CWD", async () => {
       // CWD is under /mock/home for this test
-      const result = extractExternalPathsFromBashCommand(
+      const result = await extractExternalPathsFromBashCommand(
         "cat ~/myproject/file.ts",
         "/mock/home/myproject",
       );
@@ -66,16 +69,16 @@ describe("extractExternalPathsFromBashCommand", () => {
   });
 
   describe("dot-dot relative paths", () => {
-    test("detects ../ path that resolves outside CWD", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("detects ../ path that resolves outside CWD", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "cat ../../other-project/secrets.env",
         cwd,
       );
       expect(result).toContain("/other-project/secrets.env");
     });
 
-    test("does not flag ../ path that stays within CWD", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("does not flag ../ path that stays within CWD", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "cat src/../lib/utils.ts",
         cwd,
       );
@@ -84,31 +87,34 @@ describe("extractExternalPathsFromBashCommand", () => {
   });
 
   describe("commands within CWD only", () => {
-    test("returns empty for relative paths within CWD", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("returns empty for relative paths within CWD", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "cat src/index.ts",
         cwd,
       );
       expect(result).toHaveLength(0);
     });
 
-    test("returns empty for bare command with no path arguments", () => {
-      const result = extractExternalPathsFromBashCommand("git status", cwd);
+    test("returns empty for bare command with no path arguments", async () => {
+      const result = await extractExternalPathsFromBashCommand(
+        "git status",
+        cwd,
+      );
       expect(result).toHaveLength(0);
     });
   });
 
   describe("flags are skipped", () => {
-    test("does not treat flags as paths", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("does not treat flags as paths", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "ls -la --color=auto",
         cwd,
       );
       expect(result).toHaveLength(0);
     });
 
-    test("detects path after flags", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("detects path after flags", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "ls -la /etc/passwd",
         cwd,
       );
@@ -117,8 +123,8 @@ describe("extractExternalPathsFromBashCommand", () => {
   });
 
   describe("env assignments are skipped", () => {
-    test("does not treat FOO=/bar as a path", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("does not treat FOO=/bar as a path", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "FOO=/usr/local/bin command",
         cwd,
       );
@@ -127,32 +133,32 @@ describe("extractExternalPathsFromBashCommand", () => {
   });
 
   describe("shell metacharacters split correctly", () => {
-    test("detects path after pipe", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("detects path after pipe", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "echo hello | tee /tmp/output.txt",
         cwd,
       );
       expect(result).toContain("/tmp/output.txt");
     });
 
-    test("detects path after semicolon", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("detects path after semicolon", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "echo done; cat /etc/hosts",
         cwd,
       );
       expect(result).toContain("/etc/hosts");
     });
 
-    test("detects path after &&", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("detects path after &&", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "true && cat /etc/hosts",
         cwd,
       );
       expect(result).toContain("/etc/hosts");
     });
 
-    test("detects path in redirect target", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("detects path in redirect target", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "echo hello > /tmp/out.txt",
         cwd,
       );
@@ -161,16 +167,16 @@ describe("extractExternalPathsFromBashCommand", () => {
   });
 
   describe("URLs are skipped", () => {
-    test("does not treat http:// URL as a path", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("does not treat http:// URL as a path", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "curl http://example.com/path",
         cwd,
       );
       expect(result).toHaveLength(0);
     });
 
-    test("does not treat https:// URL as a path", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("does not treat https:// URL as a path", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "curl https://example.com/etc/hosts",
         cwd,
       );
@@ -179,8 +185,8 @@ describe("extractExternalPathsFromBashCommand", () => {
   });
 
   describe("@scope/package patterns are skipped", () => {
-    test("does not treat @scope/package as a path", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("does not treat @scope/package as a path", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "npm install @types/node",
         cwd,
       );
@@ -189,34 +195,34 @@ describe("extractExternalPathsFromBashCommand", () => {
   });
 
   describe("quoted strings are ignored", () => {
-    test("does not flag path inside double-quoted string", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("does not flag path inside double-quoted string", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         'git commit -m "fix: update /etc/hosts handler"',
         cwd,
       );
       expect(result).toHaveLength(0);
     });
 
-    test("does not flag path inside single-quoted string", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("does not flag path inside single-quoted string", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "echo 'see /usr/local/docs for info'",
         cwd,
       );
       expect(result).toHaveLength(0);
     });
 
-    test("still flags unquoted path alongside quoted content", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("still flags unquoted path alongside quoted content", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         'cat /etc/hosts && echo "done"',
         cwd,
       );
       expect(result).toContain("/etc/hosts");
     });
 
-    test("does not flag path when adjacent quoted segments form one word", () => {
-      // shell-quote concatenates adjacent quoted/unquoted segments into one word:
-      // '"path is "/etc/hosts""' → 'path is /etc/hosts' (one token, not a path candidate).
-      const result = extractExternalPathsFromBashCommand(
+    test("does not flag path when adjacent quoted segments form one word", async () => {
+      // tree-sitter parses adjacent quoted/unquoted segments as a concatenation node
+      // whose resolved text is 'path is /etc/hosts' (one token, not a path candidate).
+      const result = await extractExternalPathsFromBashCommand(
         'echo "path is "/etc/hosts""',
         cwd,
       );
@@ -225,45 +231,48 @@ describe("extractExternalPathsFromBashCommand", () => {
   });
 
   describe("safe system paths are filtered", () => {
-    test("does not flag /dev/null in stderr redirect", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("does not flag /dev/null in stderr redirect", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "command 2>/dev/null",
         cwd,
       );
       expect(result).toHaveLength(0);
     });
 
-    test("does not flag /dev/null as a redirect target", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("does not flag /dev/null as a redirect target", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "echo hello > /dev/null",
         cwd,
       );
       expect(result).toHaveLength(0);
     });
 
-    test("does not flag /dev/stdin", () => {
-      const result = extractExternalPathsFromBashCommand("cat /dev/stdin", cwd);
+    test("does not flag /dev/stdin", async () => {
+      const result = await extractExternalPathsFromBashCommand(
+        "cat /dev/stdin",
+        cwd,
+      );
       expect(result).toHaveLength(0);
     });
 
-    test("does not flag /dev/stdout", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("does not flag /dev/stdout", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "cat /dev/stdout",
         cwd,
       );
       expect(result).toHaveLength(0);
     });
 
-    test("does not flag /dev/stderr", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("does not flag /dev/stderr", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "cat /dev/stderr",
         cwd,
       );
       expect(result).toHaveLength(0);
     });
 
-    test("still flags a real external path alongside /dev/null", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("still flags a real external path alongside /dev/null", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "cat /etc/hosts 2>/dev/null",
         cwd,
       );
@@ -271,8 +280,8 @@ describe("extractExternalPathsFromBashCommand", () => {
       expect(result).not.toContain("/dev/null");
     });
 
-    test("does not flag /dev/null/subdir (not a safe path)", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("does not flag /dev/null/subdir (not a safe path)", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "cat /dev/null/subdir",
         cwd,
       );
@@ -281,37 +290,40 @@ describe("extractExternalPathsFromBashCommand", () => {
   });
 
   describe("bare-slash tokens are skipped", () => {
-    test("does not flag // token", () => {
-      const result = extractExternalPathsFromBashCommand("echo //", cwd);
+    test("does not flag // token", async () => {
+      const result = await extractExternalPathsFromBashCommand("echo //", cwd);
       expect(result).toHaveLength(0);
     });
 
-    test("does not flag / token", () => {
-      const result = extractExternalPathsFromBashCommand("echo /", cwd);
+    test("does not flag / token", async () => {
+      const result = await extractExternalPathsFromBashCommand("echo /", cwd);
       expect(result).toHaveLength(0);
     });
 
-    test("does not flag /// token", () => {
-      const result = extractExternalPathsFromBashCommand("echo ///", cwd);
+    test("does not flag /// token", async () => {
+      const result = await extractExternalPathsFromBashCommand("echo ///", cwd);
       expect(result).toHaveLength(0);
     });
 
-    test("does not flag // in echo with other args", () => {
-      const result = extractExternalPathsFromBashCommand("echo // hello", cwd);
+    test("does not flag // in echo with other args", async () => {
+      const result = await extractExternalPathsFromBashCommand(
+        "echo // hello",
+        cwd,
+      );
       expect(result).toHaveLength(0);
     });
 
-    test("bare-slash guard is still needed: shell-quote emits / as a string token", () => {
-      // shell-quote.parse('echo /') returns ['echo', '/'] — the bare slash IS a string
-      // token, not an operator. classifyTokenAsPathCandidate must still reject it.
+    test("bare-slash guard is still needed: tree-sitter emits / as a word node", async () => {
+      // tree-sitter parses 'echo /' with '/' as a word argument node.
+      // classifyTokenAsPathCandidate must still reject it.
       // This test documents that the /^\/+$/ guard remains a necessary
-      // defense-in-depth layer even with shell-quote as the tokenizer.
-      const result = extractExternalPathsFromBashCommand("echo /", cwd);
+      // defense-in-depth layer even with tree-sitter as the parser.
+      const result = await extractExternalPathsFromBashCommand("echo /", cwd);
       expect(result).toHaveLength(0);
     });
 
-    test("still flags real external path alongside //", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("still flags real external path alongside //", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "cat /etc/hosts; echo //",
         cwd,
       );
@@ -321,23 +333,23 @@ describe("extractExternalPathsFromBashCommand", () => {
   });
 
   describe("node -e and multi-line commands", () => {
-    test("does not flag path inside single-quoted string in node -e argument", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("does not flag path inside single-quoted string in node -e argument", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "node -e \"const p = '/etc/hosts'; console.log(p);\"",
         cwd,
       );
       expect(result).toHaveLength(0);
     });
 
-    test("does not flag path inside multi-line node -e argument", () => {
+    test("does not flag path inside multi-line node -e argument", async () => {
       // Actual newlines inside the double-quoted -e argument.
       const cmd =
         "node -e \"\nimport('x').then(() => {\n  console.log('/etc/hosts');\n});\n\"";
-      const result = extractExternalPathsFromBashCommand(cmd, cwd);
+      const result = await extractExternalPathsFromBashCommand(cmd, cwd);
       expect(result).toHaveLength(0);
     });
 
-    test("does not flag path that appears after escaped quote in multi-line node -e argument", () => {
+    test("does not flag path that appears after escaped quote in multi-line node -e argument", async () => {
       // This is the shape of the command that triggered a prompt during dog-fooding.
       // The outer \"...\" arg contains both actual newlines and \\" escape sequences,
       // with /etc/hosts appearing after a \\" boundary.
@@ -349,32 +361,31 @@ describe("extractExternalPathsFromBashCommand", () => {
         "});",
         '"',
       ].join("\n");
-      const result = extractExternalPathsFromBashCommand(cmd, cwd);
+      const result = await extractExternalPathsFromBashCommand(cmd, cwd);
       expect(result).toHaveLength(0);
     });
   });
 
-  describe("shell-quote tokenizer edge cases", () => {
-    test("does not flag path inside string when escaped quote is present", () => {
-      // stripQuotedStrings regex breaks at \" — content after it leaks into the token stream.
-      // shell-quote correctly parses the escaped quote and keeps the path inside the string.
-      const result = extractExternalPathsFromBashCommand(
+  describe("tokenizer edge cases", () => {
+    test("does not flag path inside string when escaped quote is present", async () => {
+      // tree-sitter correctly parses the escaped quote and keeps the path inside the string.
+      const result = await extractExternalPathsFromBashCommand(
         'git commit -m "fix: update \\"the /etc/hosts\\" handler"',
         cwd,
       );
       expect(result).toHaveLength(0);
     });
 
-    test("does not flag path appearing only in a shell comment", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("does not flag path appearing only in a shell comment", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "echo hello # /etc/shadow",
         cwd,
       );
       expect(result).toHaveLength(0);
     });
 
-    test("flags real path before comment but not path inside comment", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("flags real path before comment but not path inside comment", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "cat /etc/hosts # see also /etc/shadow",
         cwd,
       );
@@ -385,41 +396,41 @@ describe("extractExternalPathsFromBashCommand", () => {
   });
 
   describe("heredoc handling", () => {
-    test("does not flag path inside single-quoted heredoc delimiter", () => {
+    test("does not flag path inside single-quoted heredoc delimiter", async () => {
       const cmd = "cat << 'EOF'\n/etc/hosts\nEOF";
-      const result = extractExternalPathsFromBashCommand(cmd, cwd);
+      const result = await extractExternalPathsFromBashCommand(cmd, cwd);
       expect(result).toHaveLength(0);
     });
 
-    test("does not flag path inside double-quoted heredoc delimiter", () => {
+    test("does not flag path inside double-quoted heredoc delimiter", async () => {
       const cmd = 'cat << "EOF"\n/etc/hosts\nEOF';
-      const result = extractExternalPathsFromBashCommand(cmd, cwd);
+      const result = await extractExternalPathsFromBashCommand(cmd, cwd);
       expect(result).toHaveLength(0);
     });
 
-    test("does not flag path inside unquoted heredoc delimiter", () => {
+    test("does not flag path inside unquoted heredoc delimiter", async () => {
       const cmd = "cat << EOF\n/etc/hosts\nEOF";
-      const result = extractExternalPathsFromBashCommand(cmd, cwd);
+      const result = await extractExternalPathsFromBashCommand(cmd, cwd);
       expect(result).toHaveLength(0);
     });
 
-    test("flags real path alongside heredoc but not heredoc content", () => {
+    test("flags real path alongside heredoc but not heredoc content", async () => {
       const cmd = "cat /etc/hosts << 'EOF'\nsome content\nEOF";
-      const result = extractExternalPathsFromBashCommand(cmd, cwd);
+      const result = await extractExternalPathsFromBashCommand(cmd, cwd);
       expect(result).toContain("/etc/hosts");
       expect(result).toHaveLength(1);
     });
 
-    test("does not flag path inside indented heredoc (<<-)", () => {
+    test("does not flag path inside indented heredoc (<<-)", async () => {
       const cmd = "cat <<- 'EOF'\n\t/etc/hosts\nEOF";
-      const result = extractExternalPathsFromBashCommand(cmd, cwd);
+      const result = await extractExternalPathsFromBashCommand(cmd, cwd);
       expect(result).toHaveLength(0);
     });
   });
 
   describe("deduplication", () => {
-    test("returns deduplicated paths", () => {
-      const result = extractExternalPathsFromBashCommand(
+    test("returns deduplicated paths", async () => {
+      const result = await extractExternalPathsFromBashCommand(
         "cat /etc/hosts; grep foo /etc/hosts",
         cwd,
       );

@@ -252,7 +252,7 @@ export async function handleToolCall(
   if (ctx.cwd && toolName === "bash") {
     const command = getNonEmptyString(toRecord(input).command);
     if (command) {
-      const externalPaths = extractExternalPathsFromBashCommand(
+      const externalPaths = await extractExternalPathsFromBashCommand(
         command,
         ctx.cwd,
       );
