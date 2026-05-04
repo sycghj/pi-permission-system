@@ -48,6 +48,9 @@ For **each** step in the plan's "TDD Order", in order:
 
 One logical change per commit. Do not bundle multiple TDD steps into one commit.
 
+When a step replaces a type or function that many tests depend on, use lift-and-shift: add the new alongside the old, migrate test fixtures incrementally, then remove the old.
+Do not rewrite an entire large test file in one shot — that causes copy-from-memory errors in non-trivial helpers and assertions.
+
 If a step uncovers a problem the plan didn't anticipate (e.g. a downstream test breaks, or a permission decision regresses), fix it as part of the same commit and note the deviation in the commit body. If the deviation is large, stop and ask.
 
 ## After the last TDD step

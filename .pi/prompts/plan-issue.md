@@ -52,6 +52,8 @@ Then the body, sections in this order:
 - **Design Overview** — decision model, data shapes, separation of concerns, edge cases. Include code-fenced TS types when shape changes. Include the merge precedence (global → project → per-agent) when policy semantics change.
 - **Module-Level Changes** — file-by-file list of what's added, changed, or removed across `src/`, `schemas/`, `config/`, and `tests/`.
 - **TDD Order** — numbered red→green→commit cycles. Each item names the test surface, what's covered, and the suggested commit message (`test:`, `feat:`, `feat!:`, `docs:`).
+  When a refactor replaces a type, interface, or function that a large test file depends on, use lift-and-shift: introduce the new thing alongside the old, migrate callers and fixtures incrementally across steps, then remove the old in a final step.
+  Never plan a single step that requires rewriting an entire large test file at once.
 - **Risks and Mitigations** — concrete risks and how the plan addresses each. Always include a "could this silently weaken a permission?" check.
 - **Open Questions** — defer-until-needed items.
 

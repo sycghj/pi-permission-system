@@ -74,6 +74,9 @@ Scalar fields (`debugLog`, `permissionReviewLog`, `yoloMode`) use simple replace
 
 Legacy paths (`~/.pi/agent/pi-permissions.jsonc`, `<cwd>/.pi/agent/pi-permissions.jsonc`, `<extension-root>/config.json`) are detected and merged with a migration warning for one release.
 
+- After a breaking config format change, verify the user's live global config file is compatible before committing the final step.
+  A format change that silently degrades to all-ask is a usability regression even if the code is correct.
+
 Rules:
 
 - Project config must always override global config; per-agent frontmatter must override both.
