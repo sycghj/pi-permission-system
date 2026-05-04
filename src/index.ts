@@ -12,11 +12,11 @@ import {
   handleToolCall,
 } from "./handlers";
 import { requestPermissionDecisionFromUi } from "./permission-dialog";
+import { PermissionPrompter } from "./permission-prompter";
 import {
   createExtensionRuntime,
   createPermissionManagerForCwd,
   logResolvedConfigPaths,
-  promptPermission,
   refreshExtensionConfig,
   resolveAgentName,
   saveExtensionConfig,
@@ -31,6 +31,14 @@ import {
 
 export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
   const runtime = createExtensionRuntime();
+
+  const prompter = new PermissionPrompter({
+    getConfig: () => runtime.config,
+    writeReviewLog: runtime.writeReviewLog.bind(runtime),
+    subagentSessionsDir: runtime.subagentSessionsDir,
+    forwardingDir: runtime.forwardingDir,
+    requestPermissionDecisionFromUi,
+  });
 
   const forwardingDeps: PermissionForwardingDeps = {
     forwardingDir: runtime.forwardingDir,
@@ -74,8 +82,7 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
           runtime.subagentSessionsDir,
         ),
       }),
-    promptPermission: (ctx, details) =>
-      promptPermission(runtime, forwardingDeps, ctx, details),
+    promptPermission: (ctx, details) => prompter.prompt(ctx, details),
     createPermissionRequestId,
     startForwardedPermissionPolling: (ctx) =>
       startForwardedPermissionPolling(runtime, forwardingDeps, ctx),

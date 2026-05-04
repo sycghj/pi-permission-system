@@ -35,20 +35,16 @@ import {
   type PermissionSystemExtensionConfig,
 } from "./extension-config";
 import {
-  confirmPermission,
   type PermissionForwardingDeps,
   processForwardedPermissionRequests,
 } from "./forwarded-permissions/polling";
-import type { PromptPermissionDetails } from "./handlers/types";
 import { createPermissionSystemLogger } from "./logging";
-import type { PermissionPromptDecision } from "./permission-dialog";
 import { PERMISSION_FORWARDING_POLL_INTERVAL_MS } from "./permission-forwarding";
 import { PermissionManager } from "./permission-manager";
 import { SessionRules } from "./session-rules";
 import type { SkillPromptEntry } from "./skill-prompt-sanitizer";
 import { syncPermissionSystemStatus } from "./status";
 import { isSubagentExecutionContext } from "./subagent-context";
-import { shouldAutoApprovePermissionState } from "./yolo-mode";
 
 /**
  * Runtime context object created once inside `piPermissionSystemExtension()`.
@@ -274,78 +270,6 @@ export function logResolvedConfigPaths(runtime: ExtensionRuntime): void {
     "config.resolved",
     entry as unknown as Record<string, unknown>,
   );
-}
-
-// ── Permission helpers ─────────────────────────────────────────────────────
-
-/** Internal: write a structured permission decision entry to the review log. */
-function reviewPermissionDecision(
-  writeReviewLog: (event: string, details: Record<string, unknown>) => void,
-  event: string,
-  details: PromptPermissionDetails & {
-    resolution?: string;
-    denialReason?: string;
-  },
-): void {
-  writeReviewLog(event, {
-    requestId: details.requestId,
-    source: details.source,
-    agentName: details.agentName,
-    message: details.message,
-    toolCallId: details.toolCallId ?? null,
-    toolName: details.toolName ?? null,
-    skillName: details.skillName ?? null,
-    path: details.path ?? null,
-    command: details.command ?? null,
-    target: details.target ?? null,
-    toolInputPreview: details.toolInputPreview ?? null,
-    resolution: details.resolution ?? null,
-    denialReason: details.denialReason ?? null,
-  });
-}
-
-/**
- * Prompt the user for a permission decision using the forwarding flow,
- * log the waiting / approved / denied outcome, and return the decision.
- * In yolo mode, auto-approves without prompting.
- */
-export async function promptPermission(
-  runtime: ExtensionRuntime,
-  forwardingDeps: PermissionForwardingDeps,
-  ctx: ExtensionContext,
-  details: PromptPermissionDetails,
-): Promise<PermissionPromptDecision> {
-  if (shouldAutoApprovePermissionState("ask", runtime.config)) {
-    reviewPermissionDecision(
-      runtime.writeReviewLog,
-      "permission_request.auto_approved",
-      details,
-    );
-    return { approved: true, state: "approved" };
-  }
-  reviewPermissionDecision(
-    runtime.writeReviewLog,
-    "permission_request.waiting",
-    details,
-  );
-  const decision = await confirmPermission(
-    ctx,
-    details.message,
-    forwardingDeps,
-    details.sessionLabel ? { sessionLabel: details.sessionLabel } : undefined,
-  );
-  reviewPermissionDecision(
-    runtime.writeReviewLog,
-    decision.approved
-      ? "permission_request.approved"
-      : "permission_request.denied",
-    {
-      ...details,
-      resolution: decision.state,
-      denialReason: decision.denialReason,
-    },
-  );
-  return decision;
 }
 
 // ── Forwarding polling lifecycle ───────────────────────────────────────────
