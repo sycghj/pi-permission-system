@@ -384,6 +384,39 @@ describe("extractExternalPathsFromBashCommand", () => {
     });
   });
 
+  describe("heredoc handling", () => {
+    test("does not flag path inside single-quoted heredoc delimiter", () => {
+      const cmd = "cat << 'EOF'\n/etc/hosts\nEOF";
+      const result = extractExternalPathsFromBashCommand(cmd, cwd);
+      expect(result).toHaveLength(0);
+    });
+
+    test("does not flag path inside double-quoted heredoc delimiter", () => {
+      const cmd = 'cat << "EOF"\n/etc/hosts\nEOF';
+      const result = extractExternalPathsFromBashCommand(cmd, cwd);
+      expect(result).toHaveLength(0);
+    });
+
+    test("does not flag path inside unquoted heredoc delimiter", () => {
+      const cmd = "cat << EOF\n/etc/hosts\nEOF";
+      const result = extractExternalPathsFromBashCommand(cmd, cwd);
+      expect(result).toHaveLength(0);
+    });
+
+    test("flags real path alongside heredoc but not heredoc content", () => {
+      const cmd = "cat /etc/hosts << 'EOF'\nsome content\nEOF";
+      const result = extractExternalPathsFromBashCommand(cmd, cwd);
+      expect(result).toContain("/etc/hosts");
+      expect(result).toHaveLength(1);
+    });
+
+    test("does not flag path inside indented heredoc (<<-)", () => {
+      const cmd = "cat <<- 'EOF'\n\t/etc/hosts\nEOF";
+      const result = extractExternalPathsFromBashCommand(cmd, cwd);
+      expect(result).toHaveLength(0);
+    });
+  });
+
   describe("deduplication", () => {
     test("returns deduplicated paths", () => {
       const result = extractExternalPathsFromBashCommand(
