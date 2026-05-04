@@ -21,28 +21,12 @@ export type BuiltInToolName =
 
 export type SpecialPermissionName = "external_directory";
 
-export interface PermissionDefaultPolicy {
-  tools: PermissionState;
-  bash: PermissionState;
-  mcp: PermissionState;
-  skills: PermissionState;
-  special: PermissionState;
-}
-
 /**
  * Per-scope permission config shape after loading and validation.
- * All fields optional — each scope may define a subset of the policy.
- *
- * This replaces the former AgentPermissions / GlobalPermissionConfig
- * interfaces (removed in #56).
+ * Holds only the flat permission map — all policy is expressed there.
  */
 export interface ScopeConfig {
-  defaultPolicy?: Partial<PermissionDefaultPolicy>;
-  tools?: Record<string, PermissionState>;
-  bash?: Record<string, PermissionState>;
-  mcp?: Record<string, PermissionState>;
-  skills?: Record<string, PermissionState>;
-  special?: Record<string, PermissionState>;
+  permission?: FlatPermissionConfig;
 }
 
 export interface PermissionCheckResult {
