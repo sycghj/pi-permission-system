@@ -50,7 +50,7 @@ Then the body, sections in this order:
 - **Non-Goals** — explicitly defer anything tangential (sibling issues, follow-ups).
 - **Background** — relevant existing modules/functions and how they relate. Call out which permission surface is involved (tools / bash / mcp / skills / special / external_directory).
 - **Design Overview** — decision model, data shapes, separation of concerns, edge cases. Include code-fenced TS types when shape changes. Include the merge precedence (global → project → per-agent) when policy semantics change.
-- **Module-Level Changes** — file-by-file list of what's added, changed, or removed across `src/`, `schemas/`, `config/`, and `tests/`.
+- **Module-Level Changes** — file-by-file list of what's added, changed, or removed across `src/`, `schemas/`, `config/`, `tests/`, and `docs/architecture/` (flag any architecture doc that describes a module, type, or flow being changed).
 - **TDD Order** — numbered red→green→commit cycles. Each item names the test surface, what's covered, and the suggested commit message (`test:`, `feat:`, `feat!:`, `docs:`).
   When a refactor replaces a type, interface, or function that a large test file depends on, use lift-and-shift: introduce the new thing alongside the old, migrate callers and fixtures incrementally across steps, then remove the old in a final step.
   Never plan a single step that requires rewriting an entire large test file at once.
