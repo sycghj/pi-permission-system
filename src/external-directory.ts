@@ -1,6 +1,8 @@
 import { homedir } from "node:os";
 import { join, normalize, resolve, sep } from "node:path";
 
+import { parse } from "shell-quote";
+
 import { getNonEmptyString, toRecord } from "./common";
 
 /**
@@ -197,26 +199,19 @@ function classifyTokenAsPathCandidate(token: string): string | null {
 }
 
 /**
- * Strips content inside single and double quotes from a command string.
- * Replaces quoted segments with empty string so paths inside quotes are not tokenized.
- * This is a simple regex approach — it cannot handle escaped quotes within strings.
- */
-function stripQuotedStrings(command: string): string {
-  return command.replace(/"[^"]*"/g, "").replace(/'[^']*'/g, "");
-}
-
-/**
  * Extracts paths from a bash command string that resolve outside CWD.
- * This is a best-effort heuristic (token splitting, not full shell parsing).
+ * Uses shell-quote to tokenize so that quoted strings, operators, and comments
+ * are handled correctly, eliminating false positives from the old regex approach.
  */
 export function extractExternalPathsFromBashCommand(
   command: string,
   cwd: string,
 ): string[] {
-  // Strip quoted strings to avoid false positives on paths in messages
-  const unquoted = stripQuotedStrings(command);
-  // Split on shell metacharacters to isolate tokens
-  const tokens = unquoted.split(/[|;&><\s]+/).filter(Boolean);
+  // shell-quote parse() returns strings (resolved arguments), operator objects,
+  // glob objects, and comment objects. Only string entries are path candidates.
+  const tokens = parse(command).filter(
+    (entry): entry is string => typeof entry === "string",
+  );
   const seen = new Set<string>();
   const externalPaths: string[] = [];
 

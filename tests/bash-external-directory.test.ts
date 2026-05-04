@@ -213,8 +213,9 @@ describe("extractExternalPathsFromBashCommand", () => {
       expect(result).toContain("/etc/hosts");
     });
 
-    test.fails("escaped quotes inside strings cause false positive (known limitation)", () => {
-      // The regex-based quote stripping can't handle escaped quotes
+    test("does not flag path when adjacent quoted segments form one word", () => {
+      // shell-quote concatenates adjacent quoted/unquoted segments into one word:
+      // '"path is "/etc/hosts""' → 'path is /etc/hosts' (one token, not a path candidate).
       const result = extractExternalPathsFromBashCommand(
         'echo "path is "/etc/hosts""',
         cwd,
