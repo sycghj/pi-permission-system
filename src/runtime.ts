@@ -44,7 +44,7 @@ import { createPermissionSystemLogger } from "./logging";
 import type { PermissionPromptDecision } from "./permission-dialog";
 import { PERMISSION_FORWARDING_POLL_INTERVAL_MS } from "./permission-forwarding";
 import { PermissionManager } from "./permission-manager";
-import { SessionApprovalCache } from "./session-approval-cache";
+import { SessionRules } from "./session-rules";
 import type { SkillPromptEntry } from "./skill-prompt-sanitizer";
 import { syncPermissionSystemStatus } from "./status";
 import { isSubagentExecutionContext } from "./subagent-context";
@@ -78,7 +78,7 @@ export interface ExtensionRuntime {
   lastActiveToolsCacheKey: string | null;
   lastPromptStateCacheKey: string | null;
   lastConfigWarning: string | null;
-  readonly sessionApprovalCache: SessionApprovalCache;
+  readonly sessionRules: SessionRules;
 
   // ── Forwarding polling state ───────────────────────────────────────────
   permissionForwardingContext: ExtensionContext | null;
@@ -432,7 +432,7 @@ export function createExtensionRuntime(options?: {
     lastActiveToolsCacheKey: null,
     lastPromptStateCacheKey: null,
     lastConfigWarning: null,
-    sessionApprovalCache: new SessionApprovalCache(),
+    sessionRules: new SessionRules(),
     permissionForwardingContext: null,
     permissionForwardingTimer: null,
     isProcessingForwardedRequests: false,

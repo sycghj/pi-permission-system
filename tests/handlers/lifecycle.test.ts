@@ -8,7 +8,7 @@ import {
 import type { HandlerDeps } from "../../src/handlers/types";
 import type { PermissionManager } from "../../src/permission-manager";
 import type { ExtensionRuntime } from "../../src/runtime";
-import type { SessionApprovalCache } from "../../src/session-approval-cache";
+import type { SessionRules } from "../../src/session-rules";
 import type { SkillPromptEntry } from "../../src/skill-prompt-sanitizer";
 
 // ── active-agent stub ──────────────────────────────────────────────────────
@@ -59,13 +59,12 @@ function makePermissionManager(
   };
 }
 
-function makeSessionApprovalCache(): SessionApprovalCache {
+function makeSessionRules(): SessionRules {
   return {
     approve: vi.fn(),
-    has: vi.fn().mockReturnValue(false),
-    findMatchingPrefix: vi.fn().mockReturnValue(null),
+    getRuleset: vi.fn().mockReturnValue([]),
     clear: vi.fn(),
-  } as unknown as SessionApprovalCache;
+  } as unknown as SessionRules;
 }
 
 function makeRuntime(
@@ -85,7 +84,7 @@ function makeRuntime(
     lastActiveToolsCacheKey: null,
     lastPromptStateCacheKey: null,
     lastConfigWarning: null,
-    sessionApprovalCache: makeSessionApprovalCache(),
+    sessionRules: makeSessionRules(),
     permissionForwardingContext: null,
     permissionForwardingTimer: null,
     isProcessingForwardedRequests: false,
@@ -330,10 +329,10 @@ describe("handleSessionShutdown", () => {
     expect(deps.runtime.lastPromptStateCacheKey).toBeNull();
   });
 
-  it("clears the session approval cache", async () => {
+  it("clears the session rules", async () => {
     const deps = makeDeps();
     await handleSessionShutdown(deps);
-    expect(deps.runtime.sessionApprovalCache.clear).toHaveBeenCalledOnce();
+    expect(deps.runtime.sessionRules.clear).toHaveBeenCalledOnce();
   });
 
   it("stops forwarded permission polling", async () => {

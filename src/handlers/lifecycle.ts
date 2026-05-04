@@ -76,6 +76,6 @@ export async function handleSessionShutdown(deps: HandlerDeps): Promise<void> {
   deps.runtime.activeSkillEntries = [];
   deps.runtime.lastActiveToolsCacheKey = null;
   deps.runtime.lastPromptStateCacheKey = null;
-  deps.runtime.sessionApprovalCache.clear();
+  deps.runtime.sessionRules.clear();
   deps.stopForwardedPermissionPolling();
 }
