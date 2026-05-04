@@ -187,6 +187,22 @@ describe("wildcardMatch", () => {
     expect(wildcardMatch("*", "bash")).toBe(true);
   });
 
+  test("'*' pattern matches values containing newlines", () => {
+    expect(wildcardMatch("*", "line1\nline2")).toBe(true);
+    expect(wildcardMatch("*", "a\nb\nc")).toBe(true);
+  });
+
+  test("prefix-wildcard pattern matches value with embedded newlines", () => {
+    const command =
+      "node -e \"\nimport('x').then(() => {\n  console.log('done');\n});\n\"";
+    expect(wildcardMatch("node *", command)).toBe(true);
+  });
+
+  test("compileWildcardPattern regex matches multiline string", () => {
+    const compiled = compileWildcardPattern("*", "allow");
+    expect(compiled.regex.test("a\nb")).toBe(true);
+  });
+
   test("exact pattern matches identical value", () => {
     expect(wildcardMatch("read", "read")).toBe(true);
     expect(wildcardMatch("external_directory", "external_directory")).toBe(
