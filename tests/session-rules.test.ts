@@ -20,6 +20,7 @@ describe("SessionRules", () => {
           surface: "external_directory",
           pattern: "/other/project/*",
           action: "allow",
+          layer: "session",
         },
       ]);
     });
