@@ -428,6 +428,73 @@ describe("extractExternalPathsFromBashCommand", () => {
     });
   });
 
+  describe("command substitution", () => {
+    test("detects path inside command substitution", async () => {
+      const result = await extractExternalPathsFromBashCommand(
+        "echo $(cat /etc/hosts)",
+        cwd,
+      );
+      expect(result).toContain("/etc/hosts");
+    });
+
+    test("detects path inside nested command substitution", async () => {
+      const result = await extractExternalPathsFromBashCommand(
+        "echo $(echo $(cat /etc/hosts))",
+        cwd,
+      );
+      expect(result).toContain("/etc/hosts");
+    });
+
+    test("does not flag command substitution inside single-quoted heredoc", async () => {
+      // Single-quoted heredoc delimiter prevents expansion — content is literal.
+      const cmd = "cat << 'EOF'\n$(cat /etc/hosts)\nEOF";
+      const result = await extractExternalPathsFromBashCommand(cmd, cwd);
+      expect(result).toHaveLength(0);
+    });
+
+    test("detects path in subshell", async () => {
+      const result = await extractExternalPathsFromBashCommand(
+        "(cat /etc/hosts)",
+        cwd,
+      );
+      expect(result).toContain("/etc/hosts");
+    });
+  });
+
+  describe("redirect targets", () => {
+    test("detects path in output redirect", async () => {
+      const result = await extractExternalPathsFromBashCommand(
+        "echo hello > /tmp/out.txt",
+        cwd,
+      );
+      expect(result).toContain("/tmp/out.txt");
+    });
+
+    test("detects path in append redirect", async () => {
+      const result = await extractExternalPathsFromBashCommand(
+        "echo hello >> /tmp/out.txt",
+        cwd,
+      );
+      expect(result).toContain("/tmp/out.txt");
+    });
+
+    test("detects path in input redirect", async () => {
+      const result = await extractExternalPathsFromBashCommand(
+        "sort < /etc/hosts",
+        cwd,
+      );
+      expect(result).toContain("/etc/hosts");
+    });
+
+    test("detects path in stderr redirect", async () => {
+      const result = await extractExternalPathsFromBashCommand(
+        "command 2>/tmp/errors.log",
+        cwd,
+      );
+      expect(result).toContain("/tmp/errors.log");
+    });
+  });
+
   describe("deduplication", () => {
     test("returns deduplicated paths", async () => {
       const result = await extractExternalPathsFromBashCommand(
