@@ -1,88 +1,25 @@
 import type { Rule, Ruleset } from "./rule";
-import type { PermissionDefaultPolicy, PermissionState } from "./types";
+import type { PermissionState } from "./types";
 
 /**
- * Convert the merged `defaultPolicy` into catch-all rules at the lowest
- * priority position in the composed ruleset.
+ * Synthesize a single universal catch-all rule from the universal default.
  *
- * Produces 5 rules:
- * 1. `{ surface: "*", pattern: "*" }` — universal fallback (tools default)
- * 2. `{ surface: "bash", pattern: "*" }` — bash default
- * 3. `{ surface: "mcp", pattern: "*" }` — mcp default
- * 4. `{ surface: "skill", pattern: "*" }` — skill default
- * 5. `{ surface: "special", pattern: "*" }` — special / external_directory default
+ * Produces one rule:
+ * `{ surface: "*", pattern: "*", action: universalDefault, layer: "default" }`
  *
- * All rules carry `layer: "default"`. `evaluate()` ignores this field.
- * The specific per-surface rules come after the universal rule so they win
- * via last-match-wins when a surface-specific default differs from the
- * tools default.
+ * Per-surface catch-alls (`bash["*"]`, `mcp["*"]`, etc.) are expressed as
+ * regular config rules from `normalizeFlatConfig()` and sit at higher indices
+ * in the composed array, so they override this default via last-match-wins.
  */
-export function synthesizeDefaults(defaults: PermissionDefaultPolicy): Ruleset {
+export function synthesizeDefaults(universalDefault: PermissionState): Ruleset {
   return [
-    { surface: "*", pattern: "*", action: defaults.tools, layer: "default" },
-    { surface: "bash", pattern: "*", action: defaults.bash, layer: "default" },
-    { surface: "mcp", pattern: "*", action: defaults.mcp, layer: "default" },
     {
-      surface: "skill",
+      surface: "*",
       pattern: "*",
-      action: defaults.skills,
-      layer: "default",
-    },
-    {
-      surface: "special",
-      pattern: "*",
-      action: defaults.special,
+      action: universalDefault,
       layer: "default",
     },
   ];
-}
-
-/**
- * Per-scope override shape — the relevant keys extracted from `tools`.
- * `undefined` means the scope did not configure that override.
- */
-export interface OverrideScope {
-  bash?: PermissionState;
-  mcp?: PermissionState;
-}
-
-/**
- * Convert per-scope `tools.bash` / `tools.mcp` entries into catch-all rules
- * placed between defaults and config rules.
- *
- * Scopes must be passed in precedence order (lowest first, e.g. global →
- * project → agent → project-agent). Later scopes produce later rules and
- * therefore win via last-match-wins — identical to the current last-scope-wins
- * logic for `bashDefault` / `mcpToolLevel`.
- *
- * Only scopes that explicitly define a value contribute a rule; `undefined`
- * entries are skipped.
- *
- * All rules carry `layer: "override"`.
- */
-export function synthesizeOverrides(
-  scopes: ReadonlyArray<OverrideScope>,
-): Ruleset {
-  const rules: Rule[] = [];
-  for (const scope of scopes) {
-    if (scope.bash !== undefined) {
-      rules.push({
-        surface: "bash",
-        pattern: "*",
-        action: scope.bash,
-        layer: "override",
-      });
-    }
-    if (scope.mcp !== undefined) {
-      rules.push({
-        surface: "mcp",
-        pattern: "*",
-        action: scope.mcp,
-        layer: "override",
-      });
-    }
-  }
-  return rules;
 }
 
 /**
@@ -104,13 +41,12 @@ const MCP_BASELINE_TARGETS: readonly string[] = [
  * contains at least one `surface: "mcp", action: "allow"` rule. This replicates
  * the `hasAnyMcpAllowRule` heuristic as actual rules.
  *
- * When `defaults.mcp === "allow"`, the synthesized default catch-all already
- * covers all MCP targets — no separate baseline rules are needed (and this
- * function is not called in that case).
+ * When `permission["mcp"]` is `"allow"` (or `mcp["*"]` is `"allow"`), the
+ * synthesized config catch-all already covers all MCP targets — no separate
+ * baseline rules are needed (and this function is not called in that case).
  *
- * Baseline rules are placed BEFORE override rules in the composed array so
- * that `tools.mcp` overrides beat baseline (preserving current behaviour where
- * an explicit `tools.mcp` value always terminates the MCP decision).
+ * Baseline rules are placed BEFORE config rules in the composed array so
+ * that explicit config deny rules can still override them.
  *
  * All rules carry `layer: "baseline"`.
  */
@@ -135,7 +71,7 @@ export function synthesizeBaseline(configRules: Ruleset): Ruleset {
  * Concatenate all rule layers into a single flat ruleset.
  *
  * Priority order (lowest → highest, i.e. earlier index → later index):
- *   defaults → baseline → overrides → config
+ *   defaults → baseline → config
  *
  * Session rules are NOT included here — they are appended at call-time inside
  * `checkPermission()` so that the cached composed ruleset remains session-agnostic.
@@ -145,8 +81,7 @@ export function synthesizeBaseline(configRules: Ruleset): Ruleset {
 export function composeRuleset(
   defaults: Ruleset,
   baseline: Ruleset,
-  overrides: Ruleset,
   config: Ruleset,
 ): Ruleset {
-  return [...defaults, ...baseline, ...overrides, ...config];
+  return [...defaults, ...baseline, ...config];
 }
