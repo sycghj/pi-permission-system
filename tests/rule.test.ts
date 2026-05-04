@@ -137,4 +137,35 @@ describe("evaluate", () => {
     expect(result.pattern).toBe("git status");
     expect(result.action).toBe("ask");
   });
+
+  test("rule.layer is ignored by evaluate() — matching is identical with or without it", () => {
+    const withLayer: Rule = {
+      surface: "bash",
+      pattern: "git *",
+      action: "allow",
+      layer: "config",
+    };
+    const withoutLayer: Rule = {
+      surface: "bash",
+      pattern: "git *",
+      action: "allow",
+    };
+    const withDefault: Rule = {
+      surface: "bash",
+      pattern: "*",
+      action: "ask",
+      layer: "default",
+    };
+    // Both rules with and without layer field produce the same match.
+    expect(evaluate("bash", "git status", [withLayer]).action).toBe("allow");
+    expect(evaluate("bash", "git status", [withoutLayer]).action).toBe("allow");
+    // Layer metadata does not affect last-match-wins ordering.
+    const ruleset: Rule[] = [withDefault, withLayer];
+    expect(evaluate("bash", "git status", ruleset)).toEqual(withLayer);
+    // A rule with layer: "default" still wins if it is last in the array.
+    const reversedRuleset: Rule[] = [withLayer, withDefault];
+    expect(evaluate("bash", "git status", reversedRuleset)).toEqual(
+      withDefault,
+    );
+  });
 });
