@@ -29,7 +29,8 @@ import {
   formatUnknownToolReason,
   formatUserDeniedReason,
 } from "../permission-prompts";
-import { deriveApprovalPrefix } from "../session-approval-cache";
+import { evaluate } from "../rule";
+import { deriveApprovalPattern } from "../session-rules";
 import { findSkillPathMatch } from "../skill-prompt-sanitizer";
 import { getPermissionLogContext } from "../tool-input-preview";
 import {
@@ -169,12 +170,15 @@ export async function handleToolCall(
       externalDirectoryPath,
       ctx.cwd,
     );
-    const sessionPrefix = deps.runtime.sessionApprovalCache.findMatchingPrefix(
+    const sessionRuleset = deps.runtime.sessionRules.getRuleset();
+    const sessionMatch = evaluate(
       "external_directory",
       normalizedExtPath,
+      sessionRuleset,
     );
+    const isSessionApproved = sessionRuleset.includes(sessionMatch);
 
-    if (sessionPrefix) {
+    if (isSessionApproved) {
       deps.runtime.writeReviewLog("permission_request.session_approved", {
         source: "tool_call",
         toolCallId: (event as { toolCallId: string }).toolCallId,
@@ -182,7 +186,7 @@ export async function handleToolCall(
         agentName,
         path: externalDirectoryPath,
         resolution: "session_approved",
-        sessionApprovalPrefix: sessionPrefix,
+        sessionApprovalPattern: sessionMatch.pattern,
       });
       // Fall through to normal permission check
     } else {
@@ -245,8 +249,8 @@ export async function handleToolCall(
       }
 
       if (extDirDecision?.state === "approved_for_session") {
-        const prefix = deriveApprovalPrefix(normalizedExtPath);
-        deps.runtime.sessionApprovalCache.approve("external_directory", prefix);
+        const pattern = deriveApprovalPattern(normalizedExtPath);
+        deps.runtime.sessionRules.approve("external_directory", pattern);
       }
     }
     // Fall through to normal permission check
@@ -261,9 +265,12 @@ export async function handleToolCall(
         ctx.cwd,
       );
       if (externalPaths.length > 0) {
+        const bashSessionRuleset = deps.runtime.sessionRules.getRuleset();
         const uncoveredPaths = externalPaths.filter(
           (p) =>
-            !deps.runtime.sessionApprovalCache.has("external_directory", p),
+            !bashSessionRuleset.includes(
+              evaluate("external_directory", p, bashSessionRuleset),
+            ),
         );
 
         if (uncoveredPaths.length === 0) {
@@ -339,11 +346,8 @@ export async function handleToolCall(
 
           if (bashExtDecision?.state === "approved_for_session") {
             for (const extPath of uncoveredPaths) {
-              const prefix = deriveApprovalPrefix(extPath);
-              deps.runtime.sessionApprovalCache.approve(
-                "external_directory",
-                prefix,
-              );
+              const pattern = deriveApprovalPattern(extPath);
+              deps.runtime.sessionRules.approve("external_directory", pattern);
             }
           }
         }

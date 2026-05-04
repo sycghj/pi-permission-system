@@ -74,12 +74,11 @@ function makeRuntime(
     lastActiveToolsCacheKey: null,
     lastPromptStateCacheKey: null,
     lastConfigWarning: null,
-    sessionApprovalCache: {
+    sessionRules: {
       approve: vi.fn(),
-      has: vi.fn().mockReturnValue(false),
-      findMatchingPrefix: vi.fn().mockReturnValue(null),
+      getRuleset: vi.fn().mockReturnValue([]),
       clear: vi.fn(),
-    } as unknown as ExtensionRuntime["sessionApprovalCache"],
+    } as unknown as ExtensionRuntime["sessionRules"],
     permissionForwardingContext: null,
     permissionForwardingTimer: null,
     isProcessingForwardedRequests: false,
@@ -339,12 +338,17 @@ describe("handleToolCall — external-directory gate", () => {
   it("allows when session has an existing approval for the external path", async () => {
     const deps = makeDeps({
       runtime: makeRuntime({
-        sessionApprovalCache: {
+        sessionRules: {
           approve: vi.fn(),
-          has: vi.fn().mockReturnValue(false),
-          findMatchingPrefix: vi.fn().mockReturnValue("/outside/project/"),
+          getRuleset: vi.fn().mockReturnValue([
+            {
+              surface: "external_directory",
+              pattern: "/outside/project/*",
+              action: "allow",
+            },
+          ]),
           clear: vi.fn(),
-        } as unknown as ExtensionRuntime["sessionApprovalCache"],
+        } as unknown as ExtensionRuntime["sessionRules"],
       }),
       getAllTools: vi.fn().mockReturnValue([{ name: "read" }]),
     });
@@ -359,18 +363,17 @@ describe("handleToolCall — external-directory gate", () => {
   });
 
   it("approves session when user selects approved_for_session", async () => {
-    const approveCache = {
+    const sessionRules = {
       approve: vi.fn(),
-      has: vi.fn().mockReturnValue(false),
-      findMatchingPrefix: vi.fn().mockReturnValue(null),
+      getRuleset: vi.fn().mockReturnValue([]),
       clear: vi.fn(),
-    } as unknown as ExtensionRuntime["sessionApprovalCache"];
+    } as unknown as ExtensionRuntime["sessionRules"];
     const deps = makeDeps({
       runtime: makeRuntime({
         permissionManager: {
           checkPermission: vi.fn().mockReturnValue(makePermissionResult("ask")),
         } as unknown as ExtensionRuntime["permissionManager"],
-        sessionApprovalCache: approveCache,
+        sessionRules,
       }),
       getAllTools: vi.fn().mockReturnValue([{ name: "read" }]),
       canRequestPermissionConfirmation: vi.fn().mockReturnValue(true),
@@ -385,7 +388,7 @@ describe("handleToolCall — external-directory gate", () => {
       input: { path: "/outside/project/file.ts" },
     };
     await handleToolCall(deps, event, makeCtx());
-    expect(approveCache.approve).toHaveBeenCalledWith(
+    expect(sessionRules.approve).toHaveBeenCalledWith(
       "external_directory",
       expect.any(String),
     );
@@ -419,13 +422,18 @@ describe("handleToolCall — bash external-directory gate", () => {
   it("skips bash external gate when all referenced paths are session-approved", async () => {
     const deps = makeDeps({
       runtime: makeRuntime({
-        sessionApprovalCache: {
+        sessionRules: {
           approve: vi.fn(),
-          // All paths are covered
-          has: vi.fn().mockReturnValue(true),
-          findMatchingPrefix: vi.fn().mockReturnValue(null),
+          // /outside/project/* covers /outside/project/file.ts
+          getRuleset: vi.fn().mockReturnValue([
+            {
+              surface: "external_directory",
+              pattern: "/outside/project/*",
+              action: "allow",
+            },
+          ]),
           clear: vi.fn(),
-        } as unknown as ExtensionRuntime["sessionApprovalCache"],
+        } as unknown as ExtensionRuntime["sessionRules"],
       }),
       getAllTools: vi.fn().mockReturnValue([{ name: "bash" }]),
     });
