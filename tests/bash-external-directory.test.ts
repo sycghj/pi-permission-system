@@ -310,6 +310,36 @@ describe("extractExternalPathsFromBashCommand", () => {
     });
   });
 
+  describe("shell-quote tokenizer edge cases", () => {
+    test("does not flag path inside string when escaped quote is present", () => {
+      // stripQuotedStrings regex breaks at \" — content after it leaks into the token stream.
+      // shell-quote correctly parses the escaped quote and keeps the path inside the string.
+      const result = extractExternalPathsFromBashCommand(
+        'git commit -m "fix: update \\"the /etc/hosts\\" handler"',
+        cwd,
+      );
+      expect(result).toHaveLength(0);
+    });
+
+    test("does not flag path appearing only in a shell comment", () => {
+      const result = extractExternalPathsFromBashCommand(
+        "echo hello # /etc/shadow",
+        cwd,
+      );
+      expect(result).toHaveLength(0);
+    });
+
+    test("flags real path before comment but not path inside comment", () => {
+      const result = extractExternalPathsFromBashCommand(
+        "cat /etc/hosts # see also /etc/shadow",
+        cwd,
+      );
+      expect(result).toContain("/etc/hosts");
+      expect(result).not.toContain("/etc/shadow");
+      expect(result).toHaveLength(1);
+    });
+  });
+
   describe("deduplication", () => {
     test("returns deduplicated paths", () => {
       const result = extractExternalPathsFromBashCommand(
