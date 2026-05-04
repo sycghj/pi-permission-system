@@ -91,7 +91,7 @@ The extension integrates via Pi's lifecycle hooks:
 - Generic extension-tool approval prompts include a bounded input preview; built-in file tools use concise human-readable summaries instead of raw multiline JSON
 - Permission review logs include bounded `toolInputPreview` values for non-bash/non-MCP tool calls so approvals can be audited without writing raw full payloads
 - Path-bearing file tools (`read`, `write`, `edit`, `find`, `grep`, `ls`) evaluate `permission.external_directory` before their normal tool permission when an explicit path points outside `ctx.cwd`
-- Bash commands are scanned for path tokens (absolute, `~/`, or `..`-relative) that resolve outside `ctx.cwd`; matching commands trigger the same `permission.external_directory` gate before the normal bash pattern check
+- Bash commands are parsed with a full bash AST (`web-tree-sitter` + `tree-sitter-bash`) to extract path-bearing arguments; only genuine command arguments and redirect destinations are checked — heredoc bodies, comments, and quoted string contents are correctly excluded — and paths that resolve outside `ctx.cwd` trigger the same `permission.external_directory` gate before the normal bash pattern check
 
 ## Configuration
 
