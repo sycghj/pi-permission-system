@@ -7,7 +7,10 @@ import {
   getActiveAgentNameFromSystemPrompt,
 } from "../active-agent";
 import { toRecord } from "../common";
-import type { PermissionPromptDecision } from "../permission-dialog";
+import type {
+  PermissionPromptDecision,
+  RequestPermissionOptions,
+} from "../permission-dialog";
 import {
   type ForwardedPermissionRequest,
   type ForwardedPermissionResponse,
@@ -42,6 +45,7 @@ export interface PermissionForwardingDeps {
     ui: ExtensionContext["ui"],
     title: string,
     message: string,
+    options?: RequestPermissionOptions,
   ) => Promise<PermissionPromptDecision>;
   shouldAutoApprove: () => boolean;
 }
@@ -339,12 +343,14 @@ export async function confirmPermission(
   ctx: ExtensionContext,
   message: string,
   deps: PermissionForwardingDeps,
+  options?: RequestPermissionOptions,
 ): Promise<PermissionPromptDecision> {
   if (ctx.hasUI) {
     return deps.requestPermissionDecisionFromUi(
       ctx.ui,
       "Permission Required",
       message,
+      options,
     );
   }
 

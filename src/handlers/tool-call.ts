@@ -18,6 +18,7 @@ import {
   normalizePathForComparison,
   PATH_BEARING_TOOLS,
 } from "../external-directory";
+import { suggestSessionPattern } from "../pattern-suggest";
 import type { PermissionPromptDecision } from "../permission-dialog";
 import { applyPermissionGate } from "../permission-gate";
 import {
@@ -359,11 +360,34 @@ export async function handleToolCall(
     agentName ?? undefined,
     deps.runtime.sessionRules.getRuleset(),
   );
+
+  // Session-hit: already approved by a session rule — skip the gate entirely.
+  if (check.source === "session") {
+    deps.runtime.writeReviewLog("permission_request.session_approved", {
+      source: "tool_call",
+      toolCallId: (event as { toolCallId: string }).toolCallId,
+      toolName,
+      agentName,
+      resolution: "session_approved",
+      sessionApprovalPattern: check.matchedPattern,
+    });
+    return {};
+  }
+
   const permissionLogContext = getPermissionLogContext(
     check,
     input,
     PATH_BEARING_TOOLS,
   );
+
+  // Compute session approval suggestion for the "for this session" option.
+  const suggestionValue =
+    toolName === "bash"
+      ? (check.command ?? "")
+      : toolName === "mcp"
+        ? (check.target ?? "mcp")
+        : "*";
+  const suggestion = suggestSessionPattern(toolName, suggestionValue);
 
   const toolUnavailableReason =
     toolName === "bash" && isToolCallEventType("bash", event as ToolCallEvent)
@@ -376,6 +400,10 @@ export async function handleToolCall(
   const toolGate = await applyPermissionGate({
     state: check.state,
     canConfirm: deps.canRequestPermissionConfirmation(ctx),
+    sessionApproval: {
+      surface: suggestion.surface,
+      pattern: suggestion.pattern,
+    },
     promptForApproval: () =>
       deps.promptPermission(ctx, {
         requestId: (event as { toolCallId: string }).toolCallId,
@@ -384,6 +412,7 @@ export async function handleToolCall(
         message: toolAskMessage,
         toolCallId: (event as { toolCallId: string }).toolCallId,
         toolName,
+        sessionLabel: suggestion.label,
         ...permissionLogContext,
       }),
     writeLog: deps.runtime.writeReviewLog,
@@ -405,6 +434,13 @@ export async function handleToolCall(
 
   if (toolGate.action === "block") {
     return { block: true, reason: toolGate.reason };
+  }
+
+  if (toolGate.sessionApproval) {
+    deps.runtime.sessionRules.approve(
+      toolGate.sessionApproval.surface,
+      toolGate.sessionApproval.pattern,
+    );
   }
 
   return {};

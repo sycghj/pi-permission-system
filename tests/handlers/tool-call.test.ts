@@ -447,3 +447,215 @@ describe("handleToolCall — bash external-directory gate", () => {
     expect(result).toEqual({});
   });
 });
+
+// ── session approval ───────────────────────────────────────────────
+
+describe("handleToolCall — session-hit detection (normal gate)", () => {
+  it("skips gate and logs session_approved when bash check returns source=session", async () => {
+    const sessionRules = {
+      approve: vi.fn(),
+      getRuleset: vi.fn().mockReturnValue([]),
+      clear: vi.fn(),
+    } as unknown as ExtensionRuntime["sessionRules"];
+    const deps = makeDeps({
+      runtime: makeRuntime({
+        permissionManager: {
+          checkPermission: vi.fn().mockReturnValue({
+            state: "allow",
+            toolName: "bash",
+            source: "session",
+            command: "git status",
+            matchedPattern: "git *",
+          }),
+        } as unknown as ExtensionRuntime["permissionManager"],
+        sessionRules,
+      }),
+    });
+    const event = makeToolCallEvent("bash", {
+      input: { command: "git status" },
+    });
+    const result = await handleToolCall(deps, event, makeCtx());
+    expect(result).toEqual({});
+    expect(deps.runtime.writeReviewLog).toHaveBeenCalledWith(
+      "permission_request.session_approved",
+      expect.objectContaining({
+        resolution: "session_approved",
+        toolName: "bash",
+      }),
+    );
+  });
+
+  it("skips gate and logs session_approved when mcp check returns source=session", async () => {
+    const deps = makeDeps({
+      runtime: makeRuntime({
+        permissionManager: {
+          checkPermission: vi.fn().mockReturnValue({
+            state: "allow",
+            toolName: "mcp",
+            source: "session",
+            target: "exa:search",
+            matchedPattern: "exa:*",
+          }),
+        } as unknown as ExtensionRuntime["permissionManager"],
+      }),
+      getAllTools: vi.fn().mockReturnValue([{ name: "mcp" }]),
+    });
+    const event = makeToolCallEvent("mcp", { input: { tool: "exa:search" } });
+    const result = await handleToolCall(deps, event, makeCtx());
+    expect(result).toEqual({});
+    expect(deps.runtime.writeReviewLog).toHaveBeenCalledWith(
+      "permission_request.session_approved",
+      expect.objectContaining({
+        resolution: "session_approved",
+        toolName: "mcp",
+      }),
+    );
+  });
+
+  it("does NOT call sessionRules.approve when source is session (already recorded)", async () => {
+    const sessionRules = {
+      approve: vi.fn(),
+      getRuleset: vi.fn().mockReturnValue([]),
+      clear: vi.fn(),
+    } as unknown as ExtensionRuntime["sessionRules"];
+    const deps = makeDeps({
+      runtime: makeRuntime({
+        permissionManager: {
+          checkPermission: vi.fn().mockReturnValue({
+            state: "allow",
+            toolName: "bash",
+            source: "session",
+            command: "git status",
+            matchedPattern: "git *",
+          }),
+        } as unknown as ExtensionRuntime["permissionManager"],
+        sessionRules,
+      }),
+    });
+    const event = makeToolCallEvent("bash", {
+      input: { command: "git status" },
+    });
+    await handleToolCall(deps, event, makeCtx());
+    expect(sessionRules.approve).not.toHaveBeenCalled();
+  });
+});
+
+describe("handleToolCall — session recording on approved_for_session", () => {
+  it("records bash session approval with suggestBashPattern result", async () => {
+    const sessionRules = {
+      approve: vi.fn(),
+      getRuleset: vi.fn().mockReturnValue([]),
+      clear: vi.fn(),
+    } as unknown as ExtensionRuntime["sessionRules"];
+    const deps = makeDeps({
+      runtime: makeRuntime({
+        permissionManager: {
+          checkPermission: vi.fn().mockReturnValue({
+            state: "ask",
+            toolName: "bash",
+            source: "bash",
+            command: "git status",
+          }),
+        } as unknown as ExtensionRuntime["permissionManager"],
+        sessionRules,
+      }),
+      canRequestPermissionConfirmation: vi.fn().mockReturnValue(true),
+      promptPermission: vi
+        .fn()
+        .mockResolvedValue({ approved: true, state: "approved_for_session" }),
+    });
+    const event = makeToolCallEvent("bash", {
+      input: { command: "git status" },
+    });
+    await handleToolCall(deps, event, makeCtx());
+    expect(sessionRules.approve).toHaveBeenCalledWith("bash", "git *");
+  });
+
+  it("records mcp session approval with suggestMcpPattern result", async () => {
+    const sessionRules = {
+      approve: vi.fn(),
+      getRuleset: vi.fn().mockReturnValue([]),
+      clear: vi.fn(),
+    } as unknown as ExtensionRuntime["sessionRules"];
+    const deps = makeDeps({
+      runtime: makeRuntime({
+        permissionManager: {
+          checkPermission: vi.fn().mockReturnValue({
+            state: "ask",
+            toolName: "mcp",
+            source: "mcp",
+            target: "exa:search",
+          }),
+        } as unknown as ExtensionRuntime["permissionManager"],
+        sessionRules,
+      }),
+      getAllTools: vi.fn().mockReturnValue([{ name: "mcp" }]),
+      canRequestPermissionConfirmation: vi.fn().mockReturnValue(true),
+      promptPermission: vi
+        .fn()
+        .mockResolvedValue({ approved: true, state: "approved_for_session" }),
+    });
+    const event = makeToolCallEvent("mcp", { input: { tool: "exa:search" } });
+    await handleToolCall(deps, event, makeCtx());
+    expect(sessionRules.approve).toHaveBeenCalledWith("mcp", "exa:*");
+  });
+
+  it("records tool session approval with * pattern for read surface", async () => {
+    const sessionRules = {
+      approve: vi.fn(),
+      getRuleset: vi.fn().mockReturnValue([]),
+      clear: vi.fn(),
+    } as unknown as ExtensionRuntime["sessionRules"];
+    const deps = makeDeps({
+      runtime: makeRuntime({
+        permissionManager: {
+          checkPermission: vi.fn().mockReturnValue({
+            state: "ask",
+            toolName: "read",
+            source: "tool",
+          }),
+        } as unknown as ExtensionRuntime["permissionManager"],
+        sessionRules,
+      }),
+      canRequestPermissionConfirmation: vi.fn().mockReturnValue(true),
+      promptPermission: vi
+        .fn()
+        .mockResolvedValue({ approved: true, state: "approved_for_session" }),
+    });
+    const event = makeToolCallEvent("read", {
+      input: { path: "/test/project/foo.ts" },
+    });
+    await handleToolCall(deps, event, makeCtx());
+    expect(sessionRules.approve).toHaveBeenCalledWith("read", "*");
+  });
+
+  it("does NOT call sessionRules.approve when user approves once (not for session)", async () => {
+    const sessionRules = {
+      approve: vi.fn(),
+      getRuleset: vi.fn().mockReturnValue([]),
+      clear: vi.fn(),
+    } as unknown as ExtensionRuntime["sessionRules"];
+    const deps = makeDeps({
+      runtime: makeRuntime({
+        permissionManager: {
+          checkPermission: vi.fn().mockReturnValue({
+            state: "ask",
+            toolName: "bash",
+            source: "bash",
+            command: "git status",
+          }),
+        } as unknown as ExtensionRuntime["permissionManager"],
+        sessionRules,
+      }),
+      canRequestPermissionConfirmation: vi.fn().mockReturnValue(true),
+      promptPermission: vi
+        .fn()
+        .mockResolvedValue({ approved: true, state: "approved" }),
+    });
+    const event = makeToolCallEvent("bash", {
+      input: { command: "git status" },
+    });
+    await handleToolCall(deps, event, makeCtx());
+    expect(sessionRules.approve).not.toHaveBeenCalled();
+  });
+});

@@ -332,6 +332,7 @@ export async function promptPermission(
     ctx,
     details.message,
     forwardingDeps,
+    details.sessionLabel ? { sessionLabel: details.sessionLabel } : undefined,
   );
   reviewPermissionDecision(
     runtime.writeReviewLog,

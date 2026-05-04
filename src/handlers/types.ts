@@ -19,6 +19,8 @@ export interface PromptPermissionDetails {
   command?: string;
   target?: string;
   toolInputPreview?: string;
+  /** Override label for the "for this session" dialog option. */
+  sessionLabel?: string;
 }
 
 /**
