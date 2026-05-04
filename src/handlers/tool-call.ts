@@ -29,7 +29,6 @@ import {
   formatUnknownToolReason,
   formatUserDeniedReason,
 } from "../permission-prompts";
-import { evaluate } from "../rule";
 import { deriveApprovalPattern } from "../session-rules";
 import { findSkillPathMatch } from "../skill-prompt-sanitizer";
 import { getPermissionLogContext } from "../tool-input-preview";
@@ -170,15 +169,14 @@ export async function handleToolCall(
       externalDirectoryPath,
       ctx.cwd,
     );
-    const sessionRuleset = deps.runtime.sessionRules.getRuleset();
-    const sessionMatch = evaluate(
+    const extCheck = deps.runtime.permissionManager.checkPermission(
       "external_directory",
-      normalizedExtPath,
-      sessionRuleset,
+      { path: normalizedExtPath },
+      agentName ?? undefined,
+      deps.runtime.sessionRules.getRuleset(),
     );
-    const isSessionApproved = sessionRuleset.includes(sessionMatch);
 
-    if (isSessionApproved) {
+    if (extCheck.source === "session") {
       deps.runtime.writeReviewLog("permission_request.session_approved", {
         source: "tool_call",
         toolCallId: (event as { toolCallId: string }).toolCallId,
@@ -186,16 +184,10 @@ export async function handleToolCall(
         agentName,
         path: externalDirectoryPath,
         resolution: "session_approved",
-        sessionApprovalPattern: sessionMatch.pattern,
+        sessionApprovalPattern: extCheck.matchedPattern,
       });
       // Fall through to normal permission check
     } else {
-      const extCheck = deps.runtime.permissionManager.checkPermission(
-        "external_directory",
-        {},
-        agentName ?? undefined,
-      );
-
       let extDirDecision: PermissionPromptDecision | null = null;
       const extDirMessage = formatExternalDirectoryAskPrompt(
         toolName,
@@ -265,12 +257,15 @@ export async function handleToolCall(
         ctx.cwd,
       );
       if (externalPaths.length > 0) {
-        const bashSessionRuleset = deps.runtime.sessionRules.getRuleset();
+        const bashSessionRules = deps.runtime.sessionRules.getRuleset();
         const uncoveredPaths = externalPaths.filter(
           (p) =>
-            !bashSessionRuleset.includes(
-              evaluate("external_directory", p, bashSessionRuleset),
-            ),
+            deps.runtime.permissionManager.checkPermission(
+              "external_directory",
+              { path: p },
+              agentName ?? undefined,
+              bashSessionRules,
+            ).source !== "session",
         );
 
         if (uncoveredPaths.length === 0) {
@@ -285,6 +280,7 @@ export async function handleToolCall(
           });
           // Fall through to normal bash permission check
         } else {
+          // Get the config-level policy (no path → no session check).
           const extCheck = deps.runtime.permissionManager.checkPermission(
             "external_directory",
             {},
@@ -361,6 +357,7 @@ export async function handleToolCall(
     toolName,
     input,
     agentName ?? undefined,
+    deps.runtime.sessionRules.getRuleset(),
   );
   const permissionLogContext = getPermissionLogContext(
     check,
