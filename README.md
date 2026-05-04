@@ -529,7 +529,7 @@ This makes it easy to verify which files the extension actually loaded:
 index.ts                    → Root Pi entrypoint shim
 src/
 ├── index.ts                → Extension bootstrap, permission checks, readable prompts, review logging, reload handling, and subagent forwarding
-├── session-approval-cache.ts → Ephemeral session-scoped approval cache for external-directory access
+├── session-rules.ts          → Ephemeral session-scoped approval rules (Ruleset-based, external-directory access)
 ├── config-loader.ts        → Unified config loader, merger, and legacy-path detection
 ├── config-paths.ts         → Path derivation for global, project, and legacy config locations
 ├── config-reporter.ts      → Resolved config path reporting for diagnostic logs

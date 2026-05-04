@@ -58,7 +58,7 @@ src/
 ├── permission-manager.ts     Config loading + merge + checkPermission(), ~940 lines
 ├── permission-gate.ts        Pure deny/ask/allow gate (injected IO)
 ├── permission-dialog.ts      Dialog options: Yes / Yes for session / No / No with reason
-├── session-approval-cache.ts Ephemeral session approvals (external_directory only)
+├── session-rules.ts          Ephemeral session approvals — Ruleset-based, external_directory only
 ├── bash-filter.ts            Wildcard matching for bash commands
 ├── wildcard-matcher.ts       Compiled glob → RegExp engine
 ├── external-directory.ts     Path-outside-cwd detection and prompt formatting
@@ -210,11 +210,10 @@ Only MCP has genuinely different logic (multi-name lookup + baseline auto-allow)
 Four aliases for the same shape.
 The compiler cannot distinguish them, so they add cognitive overhead without type safety.
 
-### 3. Two separate matching mechanisms for session approvals
+### 3. ~~Two separate matching mechanisms for session approvals~~ *(resolved by #57)*
 
-`SessionApprovalCache` uses directory-prefix matching via `isPathWithinDirectory()`.
-All other permission surfaces use wildcard-regex matching via `findCompiledWildcardMatch()`.
-Two matching engines for the same conceptual operation.
+`SessionRules` now stores approvals as a plain `Ruleset` and evaluates them via `evaluate()` / `wildcardMatch()`.
+The former `SessionApprovalCache` prefix-matching engine (`isPathWithinDirectory()`) has been removed.
 
 ### 4. Monolithic `index.ts`
 
