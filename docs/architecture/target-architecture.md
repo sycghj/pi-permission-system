@@ -1,6 +1,6 @@
 # Target Architecture
 
-This document describes the target internal design for the permission system, informed by [OpenCode's permission model](https://opencode.ai/docs/permissions/) and the structural debt identified in [current-architecture.md](./current-architecture.md).
+This document describes the target internal design for the permission system, informed by [OpenCode's permission model](https://opencode.ai/docs/permissions/) and the structural debt identified in [v3-architecture.md](./v3-architecture.md).
 
 ## Design principles
 
