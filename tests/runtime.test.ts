@@ -68,8 +68,9 @@ vi.mock("../src/subagent-context", () => ({
   isSubagentExecutionContext: vi.fn().mockReturnValue(false),
 }));
 
-vi.mock("../src/session-approval-cache", () => ({
-  SessionApprovalCache: vi.fn(),
+vi.mock("../src/session-rules", () => ({
+  SessionRules: vi.fn(),
+  deriveApprovalPattern: vi.fn(),
 }));
 
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
@@ -184,9 +185,9 @@ describe("createExtensionRuntime", () => {
     expect(runtime.isProcessingForwardedRequests).toBe(false);
   });
 
-  it("creates a sessionApprovalCache instance", () => {
+  it("creates a sessionRules instance", () => {
     const runtime = createExtensionRuntime({ agentDir: "/test/agent" });
-    expect(runtime.sessionApprovalCache).toBeDefined();
+    expect(runtime.sessionRules).toBeDefined();
   });
 
   // ── Mutable state is writable ──────────────────────────────────────────

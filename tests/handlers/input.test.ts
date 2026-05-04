@@ -53,12 +53,11 @@ function makeRuntime(
     lastActiveToolsCacheKey: null,
     lastPromptStateCacheKey: null,
     lastConfigWarning: null,
-    sessionApprovalCache: {
+    sessionRules: {
       approve: vi.fn(),
-      has: vi.fn(),
-      findMatchingPrefix: vi.fn(),
+      getRuleset: vi.fn().mockReturnValue([]),
       clear: vi.fn(),
-    } as unknown as ExtensionRuntime["sessionApprovalCache"],
+    } as unknown as ExtensionRuntime["sessionRules"],
     permissionForwardingContext: null,
     permissionForwardingTimer: null,
     isProcessingForwardedRequests: false,
