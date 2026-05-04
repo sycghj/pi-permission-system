@@ -27,8 +27,8 @@ Read `docs/plans/` before making architectural changes (created by `/plan-issue`
 - Preserve the `/permission-system` slash command name — renaming it is a breaking change.
   Config and log paths intentionally diverge from upstream as of #10 and are not preserved.
 - `tools.bash` and `tools.mcp` are fallback overrides, not catch-all rules — they set the default when no bash/mcp pattern matches, but specific patterns from any scope always have priority.
-  `normalizeConfig()` in `src/normalize.ts` excludes these keys (see `TOOL_SURFACE_OVERRIDE_KEYS`); they are extracted separately in `resolvePermissions()`.
-  Do not normalize them into the `Ruleset` without also changing how `checkPermission()` resolves bash and MCP defaults.
+  `normalizeConfig()` in `src/normalize.ts` excludes these keys (see `TOOL_SURFACE_OVERRIDE_KEYS`); `synthesizeOverrides()` in `src/synthesize.ts` converts them into catch-all rules placed between synthesized defaults and config rules in the composed ruleset.
+  Specific config patterns always win because they sit at higher array indices (last-match-wins).
 - Wildcard matching (bash patterns, skill globs) must be explicit and tested — silent over-matching is a permission bypass.
 - When a config pattern or documented recommendation can solve a problem, prefer that over a new runtime mechanism. Mechanism is forever; docs are reversible.
 - Treat any declared config field not read at runtime as a maintenance trap. Remove it or document its purpose.
