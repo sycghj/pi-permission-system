@@ -1,5 +1,6 @@
+import { isPermissionState } from "./common";
 import type { Rule, Ruleset } from "./rule";
-import type { PermissionState } from "./types";
+import type { FlatPermissionConfig, PermissionState } from "./types";
 
 /**
  * Subset of UnifiedPermissionConfig covering only policy fields.
@@ -42,6 +43,31 @@ export const TOOL_SURFACE_OVERRIDE_KEYS: ReadonlySet<string> = new Set([
  * `tools.bash` and `tools.mcp` are excluded — see TOOL_SURFACE_OVERRIDE_KEYS.
  * `defaultPolicy` is NOT included — handled separately by the caller.
  */
+/**
+ * Convert a flat permission config into a Ruleset.
+ *
+ * Each key is a surface name. A string value is shorthand for
+ * `{ "*": action }`. An object value maps patterns to actions.
+ * Invalid action values are silently skipped.
+ */
+export function normalizeFlatConfig(permission: FlatPermissionConfig): Ruleset {
+  const rules: Rule[] = [];
+  for (const [surface, value] of Object.entries(permission)) {
+    if (typeof value === "string") {
+      if (isPermissionState(value)) {
+        rules.push({ surface, pattern: "*", action: value });
+      }
+    } else if (typeof value === "object" && value !== null) {
+      for (const [pattern, action] of Object.entries(value)) {
+        if (isPermissionState(action)) {
+          rules.push({ surface, pattern, action });
+        }
+      }
+    }
+  }
+  return rules;
+}
+
 export function normalizeConfig(config: NormalizableConfig): Ruleset {
   const rules: Rule[] = [];
 

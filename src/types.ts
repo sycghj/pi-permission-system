@@ -1,5 +1,15 @@
 export type PermissionState = "allow" | "deny" | "ask";
 
+/**
+ * The on-disk permission shape inside the `"permission"` key.
+ * Each key is a surface name; values are either a PermissionState string
+ * (shorthand for `{ "*": action }`) or a pattern→action map.
+ */
+export type FlatPermissionConfig = Record<
+  string,
+  PermissionState | Record<string, PermissionState>
+>;
+
 export type BuiltInToolName =
   | "bash"
   | "read"
