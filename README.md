@@ -437,20 +437,28 @@ Current agent requested tool 'edit' for '.gitignore' (1 replacement: edit #1 rep
 
 ### Session-Scoped Approvals
 
-When `external_directory` resolves to `ask`, the permission dialog offers four options:
+When any permission resolves to `ask`, the permission dialog offers four options:
 
 ```text
-Yes | Yes, for this session | No | No, provide reason
+Yes | Yes, allow "<pattern>" for this session | No | No, provide reason
 ```
 
-Selecting **Yes, for this session** approves the current request and caches the directory prefix so that subsequent accesses under the same directory skip the prompt for the remainder of the session.
-For example, approving access to `~/other-project/src/foo.ts` covers all paths under `~/other-project/src/` until the session ends.
+Selecting **Yes, allow "\<pattern\>" for this session** approves the current request and records the suggested wildcard pattern as a session rule.
+Subsequent requests that match the pattern skip the prompt for the remainder of the session.
+
+The suggested pattern is surface-specific:
+
+|Surface|Example request|Suggested session pattern|
+|---|---|---|
+|bash|`git status --short`|`git *`|
+|mcp (qualified)|`exa:search`|`exa:*`|
+|mcp (munged)|`exa_search`|`exa_*`|
+|skill|`librarian`|`librarian`|
+|tool (read, write, …)|`read`|`*`|
+|external_directory|`/other/project/src/foo.ts`|`/other/project/src/*`|
 
 Session approvals are ephemeral — they are never persisted to disk and are cleared on `session_shutdown`.
-The review log records these decisions with `resolution: "session_approved"` so they remain auditable.
-
-This is currently scoped to the `external_directory` surface only.
-Other permission surfaces (tools, bash patterns, MCP, skills) always use the standard one-time approval flow.
+The review log records these decisions: `resolution: "approved_for_session"` when the user approves, and `resolution: "session_approved"` when a later request is matched by an existing session rule.
 
 ### Subagent Permission Forwarding
 
@@ -496,7 +504,8 @@ This makes it easy to verify which files the extension actually loaded:
 index.ts                    → Root Pi entrypoint shim
 src/
 ├── index.ts                → Extension bootstrap, permission checks, readable prompts, review logging, reload handling, and subagent forwarding
-├── session-rules.ts          → Ephemeral session-scoped approval rules (Ruleset-based, external-directory access)
+├── pattern-suggest.ts        → Per-surface session approval pattern suggestions
+├── session-rules.ts          → Ephemeral session-scoped approval rules (Ruleset-based, wildcard patterns across all surfaces)
 ├── config-loader.ts        → Unified config loader, merger, and legacy-path detection
 ├── config-paths.ts         → Path derivation for global, project, and legacy config locations
 ├── config-reporter.ts      → Resolved config path reporting for diagnostic logs
