@@ -635,6 +635,27 @@ test("PermissionManager canonical built-in permission checking", () => {
   }
 });
 
+test("multiline bash command resolves to allow via universal fallback", () => {
+  // Regression test for #73: node -e "..." with embedded newlines was
+  // falling through to the hard-coded 'ask' default because wildcardMatch
+  // used /^.*$/ (no dotAll), which does not match '\n'.
+  const { manager, cleanup } = createManager({
+    permission: {
+      "*": "allow",
+      bash: { "rm -rf *": "deny", "sudo *": "ask" },
+    },
+  });
+
+  try {
+    const command =
+      "node -e \"\nimport('x').then(() => {\n  console.log('done');\n});\n\"";
+    const result = manager.checkPermission("bash", { command });
+    assert.equal(result.state, "allow");
+  } finally {
+    cleanup();
+  }
+});
+
 test("Bash specific deny patterns override catch-all within the same config", () => {
   // In the flat format, patterns within a surface map are ordered by insertion.
   // Last-match-wins means specific patterns placed AFTER the catch-all override it.
