@@ -123,6 +123,7 @@ issue_title: "Per-agent permission frontmatter overrides" # required
   Either fold the test updates into the same step or place a dedicated test-update step immediately before the feat step — never after it.
 - When a TDD plan lists separate steps that share a type definition (e.g. `ResolvedPermissions`), changing that type in step N breaks steps N+1 … N+k.
   Either fold them into one step or introduce the new type alongside the old one in step N and migrate callers incrementally.
+- When a plan adds a parameter that flows through callback chains (e.g. handler → runtime → forwarding → dialog), the “Module-Level Changes” section must list every file in the chain, not just the entry and exit points.
 - When a fix changes shared helper functions (e.g. `findSection`, `normalizePolicy`), run the full test suite (`npx vitest run`) before committing — not just the directly affected test file.
   Helpers are often exercised by integration-level tests in other files.
 - When integrating an unfamiliar library or data structure (AST parsers, WASM modules, new SDK types), write a disposable exploratory script first to inspect the actual runtime shape before writing production code or tests.
