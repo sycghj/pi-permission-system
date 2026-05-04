@@ -20,7 +20,7 @@ describe("loadUnifiedConfig", () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it("parses a valid JSON file with runtime knobs and policy", () => {
+  it("parses a valid JSON file with runtime knobs and flat permission", () => {
     const configPath = join(tempDir, "config.json");
     writeFileSync(
       configPath,
@@ -28,9 +28,11 @@ describe("loadUnifiedConfig", () => {
         debugLog: true,
         permissionReviewLog: false,
         yoloMode: true,
-        defaultPolicy: { tools: "allow", bash: "deny" },
-        tools: { read: "allow", write: "deny" },
-        bash: { "git status": "allow" },
+        permission: {
+          "*": "ask",
+          read: "allow",
+          bash: { "git status": "allow" },
+        },
       }),
     );
 
@@ -39,12 +41,11 @@ describe("loadUnifiedConfig", () => {
     expect(result.config.debugLog).toBe(true);
     expect(result.config.permissionReviewLog).toBe(false);
     expect(result.config.yoloMode).toBe(true);
-    expect(result.config.defaultPolicy).toEqual({
-      tools: "allow",
-      bash: "deny",
+    expect(result.config.permission).toEqual({
+      "*": "ask",
+      read: "allow",
+      bash: { "git status": "allow" },
     });
-    expect(result.config.tools).toEqual({ read: "allow", write: "deny" });
-    expect(result.config.bash).toEqual({ "git status": "allow" });
   });
 
   it("strips JSONC comments before parsing", () => {
@@ -55,14 +56,14 @@ describe("loadUnifiedConfig", () => {
   // This is a comment
   "debugLog": true,
   /* block comment */
-  "defaultPolicy": { "tools": "ask" }
+  "permission": { "*": "ask" }
 }`,
     );
 
     const result = loadUnifiedConfig(configPath);
     expect(result.issues).toEqual([]);
     expect(result.config.debugLog).toBe(true);
-    expect(result.config.defaultPolicy).toEqual({ tools: "ask" });
+    expect(result.config.permission).toEqual({ "*": "ask" });
   });
 
   it("ignores unknown keys without emitting issues", () => {
@@ -82,16 +83,15 @@ describe("loadUnifiedConfig", () => {
     expect(result.config).not.toHaveProperty("unknownField");
   });
 
-  it("returns defaults and no issues when the file does not exist", () => {
+  it("returns empty config and no issues when the file does not exist", () => {
     const configPath = join(tempDir, "nonexistent.json");
     const result = loadUnifiedConfig(configPath);
     expect(result.issues).toEqual([]);
     expect(result.config.debugLog).toBeUndefined();
-    expect(result.config.defaultPolicy).toBeUndefined();
-    expect(result.config.tools).toBeUndefined();
+    expect(result.config.permission).toBeUndefined();
   });
 
-  it("returns defaults and an issue when the file contains invalid JSON", () => {
+  it("returns empty config and an issue when the file contains invalid JSON", () => {
     const configPath = join(tempDir, "config.json");
     writeFileSync(configPath, "not valid json {{{");
 
@@ -112,65 +112,121 @@ describe("loadUnifiedConfig", () => {
     );
 
     const result = loadUnifiedConfig(configPath);
-    // Non-boolean values are not included
     expect(result.config.debugLog).toBeUndefined();
     expect(result.config.permissionReviewLog).toBeUndefined();
     expect(result.config.yoloMode).toBeUndefined();
   });
 
-  it("normalizes permission maps, keeping only valid PermissionState values", () => {
+  it("normalizes permission map, keeping only valid PermissionState values", () => {
     const configPath = join(tempDir, "config.json");
     writeFileSync(
       configPath,
       JSON.stringify({
-        tools: { read: "allow", write: "invalid", edit: "deny" },
-        bash: { "git *": "ask", "rm -rf": 42 },
+        permission: {
+          read: "allow",
+          write: "invalid",
+          bash: { "git *": "ask", "rm -rf": 42 },
+        },
       }),
     );
 
     const result = loadUnifiedConfig(configPath);
-    expect(result.config.tools).toEqual({ read: "allow", edit: "deny" });
-    expect(result.config.bash).toEqual({ "git *": "ask" });
+    expect(result.config.permission).toEqual({
+      read: "allow",
+      bash: { "git *": "ask" },
+    });
   });
 
-  it("collects deprecated special key issues (doom_loop and tool_call_limit)", () => {
+  it("accepts permission as object with mixed string and object values", () => {
     const configPath = join(tempDir, "config.json");
     writeFileSync(
       configPath,
       JSON.stringify({
-        special: { doom_loop: "deny", tool_call_limit: "ask" },
+        permission: {
+          "*": "ask",
+          read: "allow",
+          bash: { "*": "ask", "git *": "allow" },
+          external_directory: "ask",
+        },
       }),
     );
 
     const result = loadUnifiedConfig(configPath);
-    expect(result.issues).toHaveLength(2);
-    expect(result.issues.some((i) => i.includes("doom_loop"))).toBe(true);
-    expect(result.issues.some((i) => i.includes("tool_call_limit"))).toBe(true);
-    expect(result.config.special).toBeUndefined();
+    expect(result.issues).toEqual([]);
+    expect(result.config.permission).toEqual({
+      "*": "ask",
+      read: "allow",
+      bash: { "*": "ask", "git *": "allow" },
+      external_directory: "ask",
+    });
+  });
+
+  it("returns no permission when the permission field is absent", () => {
+    const configPath = join(tempDir, "config.json");
+    writeFileSync(configPath, JSON.stringify({ debugLog: false }));
+
+    const result = loadUnifiedConfig(configPath);
+    expect(result.config.permission).toBeUndefined();
+  });
+
+  it("ignores a non-object permission field", () => {
+    const configPath = join(tempDir, "config.json");
+    writeFileSync(configPath, JSON.stringify({ permission: "allow" }));
+
+    const result = loadUnifiedConfig(configPath);
+    expect(result.config.permission).toBeUndefined();
   });
 });
 
 describe("mergeUnifiedConfigs", () => {
-  it("deep-merges object fields so project overrides global per-key", () => {
+  it("deep-merges permission objects so project overrides global per-key", () => {
     const merged = mergeUnifiedConfigs(
       {
-        defaultPolicy: { tools: "ask", bash: "deny" },
-        tools: { read: "allow", write: "deny" },
-        bash: { "git status": "allow" },
+        permission: {
+          "*": "ask",
+          read: "allow",
+          bash: { "git status": "allow" },
+        },
       },
       {
-        defaultPolicy: { tools: "allow" },
-        tools: { write: "allow", edit: "ask" },
+        permission: {
+          "*": "allow",
+          bash: { "rm -rf *": "deny" },
+        },
       },
     );
 
-    expect(merged.defaultPolicy).toEqual({ tools: "allow", bash: "deny" });
-    expect(merged.tools).toEqual({
+    expect(merged.permission).toEqual({
+      "*": "allow",
       read: "allow",
-      write: "allow",
-      edit: "ask",
+      bash: { "git status": "allow", "rm -rf *": "deny" },
     });
-    expect(merged.bash).toEqual({ "git status": "allow" });
+  });
+
+  it("string permission value in override replaces base string for same key", () => {
+    const merged = mergeUnifiedConfigs(
+      { permission: { read: "ask" } },
+      { permission: { read: "allow" } },
+    );
+    expect(merged.permission).toEqual({ read: "allow" });
+  });
+
+  it("object replaces string when override uses object for same surface", () => {
+    const merged = mergeUnifiedConfigs(
+      { permission: { bash: "ask" } },
+      { permission: { bash: { "*": "allow", "rm -rf *": "deny" } } },
+    );
+    expect(merged.permission).toEqual({
+      bash: { "*": "allow", "rm -rf *": "deny" },
+    });
+  });
+
+  it("string replaces object when override uses string for same surface", () => {
+    const merged = mergeUnifiedConfigs(
+      { permission: { bash: { "git *": "allow" } } },
+      { permission: { bash: "deny" } },
+    );
+    expect(merged.permission).toEqual({ bash: "deny" });
   });
 
   it("replaces scalar runtime knobs (project wins)", () => {
@@ -187,25 +243,23 @@ describe("mergeUnifiedConfigs", () => {
   it("returns base unchanged when override is empty", () => {
     const base = {
       debugLog: true,
-      defaultPolicy: { tools: "ask" as const },
-      tools: { read: "allow" as const },
+      permission: { read: "allow" as const },
     };
     const merged = mergeUnifiedConfigs(base, {});
 
     expect(merged.debugLog).toBe(true);
-    expect(merged.defaultPolicy).toEqual({ tools: "ask" });
-    expect(merged.tools).toEqual({ read: "allow" });
+    expect(merged.permission).toEqual({ read: "allow" });
   });
 
   it("returns override unchanged when base is empty", () => {
     const override = {
       yoloMode: true,
-      bash: { "rm -rf": "deny" as const },
+      permission: { bash: { "rm -rf *": "deny" as const } },
     };
     const merged = mergeUnifiedConfigs({}, override);
 
     expect(merged.yoloMode).toBe(true);
-    expect(merged.bash).toEqual({ "rm -rf": "deny" });
+    expect(merged.permission).toEqual({ bash: { "rm -rf *": "deny" } });
   });
 
   it("does not set undefined keys in the merged result", () => {
@@ -214,8 +268,7 @@ describe("mergeUnifiedConfigs", () => {
     expect(merged.debugLog).toBe(true);
     expect(merged.yoloMode).toBe(false);
     expect(merged).not.toHaveProperty("permissionReviewLog");
-    expect(merged).not.toHaveProperty("defaultPolicy");
-    expect(merged).not.toHaveProperty("tools");
+    expect(merged).not.toHaveProperty("permission");
   });
 });
 
@@ -270,22 +323,20 @@ describe("loadAndMergeConfigs", () => {
   it("merges global and project new-layout configs", () => {
     writeGlobal({
       debugLog: true,
-      defaultPolicy: { tools: "ask", bash: "deny" },
-      tools: { read: "allow" },
+      permission: { "*": "ask", read: "allow" },
     });
     writeProject({
-      defaultPolicy: { tools: "allow" },
-      tools: { write: "deny" },
+      permission: { "*": "allow", write: "deny" },
     });
 
     const result = loadAndMergeConfigs(agentDir, cwd, extensionRoot);
     expect(result.issues).toEqual([]);
     expect(result.merged.debugLog).toBe(true);
-    expect(result.merged.defaultPolicy).toEqual({
-      tools: "allow",
-      bash: "deny",
+    expect(result.merged.permission).toEqual({
+      "*": "allow",
+      read: "allow",
+      write: "deny",
     });
-    expect(result.merged.tools).toEqual({ read: "allow", write: "deny" });
   });
 
   it("detects legacy global policy and emits migration issue", () => {
@@ -298,9 +349,8 @@ describe("loadAndMergeConfigs", () => {
     expect(result.issues).toHaveLength(1);
     expect(result.issues[0]).toContain("pi-permissions.jsonc");
     expect(result.issues[0]).toContain("extensions/pi-permission-system");
-    // Legacy values are merged
-    expect(result.merged.defaultPolicy).toEqual({ tools: "allow" });
-    expect(result.merged.tools).toEqual({ read: "allow" });
+    // Legacy file has no flat-format permission key — no rules extracted
+    expect(result.merged.permission).toBeUndefined();
   });
 
   it("detects legacy project policy and emits migration issue", () => {
@@ -312,7 +362,8 @@ describe("loadAndMergeConfigs", () => {
     expect(result.issues).toHaveLength(1);
     expect(result.issues[0]).toContain(".pi/agent/pi-permissions.jsonc");
     expect(result.issues[0]).toContain(".pi/extensions/pi-permission-system");
-    expect(result.merged.bash).toEqual({ "git status": "allow" });
+    // Legacy file has no flat-format permission key — no rules extracted
+    expect(result.merged.permission).toBeUndefined();
   });
 
   it("detects legacy extension runtime config and emits migration issue", () => {
@@ -329,7 +380,6 @@ describe("loadAndMergeConfigs", () => {
   });
 
   it("does not emit legacy extension config issue when path equals new global path", () => {
-    // If the extension happens to be installed at the new path, no warning
     const newGlobalDir = join(agentDir, "extensions", "pi-permission-system");
     mkdirSync(newGlobalDir, { recursive: true });
     writeFileSync(
@@ -348,15 +398,15 @@ describe("loadAndMergeConfigs", () => {
 
   it("new-layout config takes precedence over legacy config at same scope", () => {
     writeGlobal({
-      defaultPolicy: { tools: "deny" },
+      permission: { "*": "deny" },
     });
     writeLegacyGlobalPolicy({
-      defaultPolicy: { tools: "allow" },
+      permission: { "*": "allow" },
     });
 
     const result = loadAndMergeConfigs(agentDir, cwd, extensionRoot);
-    // New layout wins
-    expect(result.merged.defaultPolicy).toEqual({ tools: "deny" });
+    // New layout wins (legacy loaded first, new layout loaded second → new wins)
+    expect(result.merged.permission).toEqual({ "*": "deny" });
     // But legacy still emits a migration warning
     expect(result.issues.some((i) => i.includes("pi-permissions.jsonc"))).toBe(
       true,

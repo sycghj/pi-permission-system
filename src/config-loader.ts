@@ -9,10 +9,10 @@ import {
   getLegacyProjectPolicyPath,
   getProjectConfigPath,
 } from "./config-paths";
-import type { PermissionDefaultPolicy, PermissionState } from "./types";
+import type { FlatPermissionConfig } from "./types";
 
 /**
- * Unified config shape combining runtime knobs and policy in one object.
+ * Unified config shape combining runtime knobs and flat permission policy.
  * All fields are optional so partial configs (project-only, global-only) work.
  */
 export interface UnifiedPermissionConfig {
@@ -21,36 +21,14 @@ export interface UnifiedPermissionConfig {
   permissionReviewLog?: boolean;
   yoloMode?: boolean;
 
-  // Policy
-  defaultPolicy?: Partial<PermissionDefaultPolicy>;
-  tools?: Record<string, PermissionState>;
-  bash?: Record<string, PermissionState>;
-  mcp?: Record<string, PermissionState>;
-  skills?: Record<string, PermissionState>;
-  special?: Record<string, PermissionState>;
+  // Flat permission policy
+  permission?: FlatPermissionConfig;
 }
 
 export interface UnifiedConfigLoadResult {
   config: UnifiedPermissionConfig;
   issues: string[];
 }
-
-const DEPRECATED_SPECIAL_KEYS: ReadonlySet<string> = new Set([
-  "doom_loop",
-  "tool_call_limit",
-]);
-
-const BUILT_IN_TOOL_PERMISSION_NAMES = new Set([
-  "bash",
-  "read",
-  "write",
-  "edit",
-  "grep",
-  "find",
-  "ls",
-]);
-
-const SPECIAL_PERMISSION_KEYS = new Set(["external_directory"]);
 
 export function stripJsonComments(input: string): string {
   let output = "";
@@ -124,40 +102,6 @@ export function stripJsonComments(input: string): string {
   return output;
 }
 
-function normalizePartialPolicy(
-  value: unknown,
-): Partial<PermissionDefaultPolicy> | undefined {
-  const record = toRecord(value);
-  const normalized: Partial<PermissionDefaultPolicy> = {};
-  let hasAny = false;
-
-  for (const key of ["tools", "bash", "mcp", "skills", "special"] as const) {
-    if (isPermissionState(record[key])) {
-      normalized[key] = record[key] as PermissionState;
-      hasAny = true;
-    }
-  }
-
-  return hasAny ? normalized : undefined;
-}
-
-function normalizePermissionRecord(
-  value: unknown,
-): Record<string, PermissionState> | undefined {
-  const record = toRecord(value);
-  const normalized: Record<string, PermissionState> = {};
-  let hasAny = false;
-
-  for (const [key, state] of Object.entries(record)) {
-    if (isPermissionState(state)) {
-      normalized[key] = state;
-      hasAny = true;
-    }
-  }
-
-  return hasAny ? normalized : undefined;
-}
-
 function normalizeOptionalBoolean(value: unknown): boolean | undefined {
   if (typeof value === "boolean") {
     return value;
@@ -166,9 +110,78 @@ function normalizeOptionalBoolean(value: unknown): boolean | undefined {
 }
 
 /**
+ * Normalize a raw `permission` value from parsed JSON into a FlatPermissionConfig.
+ * Drops non-object top-level values, invalid PermissionState strings, and
+ * invalid action values inside object maps.
+ */
+function normalizeFlatPermissionValue(
+  value: unknown,
+): FlatPermissionConfig | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const normalized: FlatPermissionConfig = {};
+  let hasAny = false;
+
+  for (const [key, val] of Object.entries(record)) {
+    if (typeof val === "string") {
+      if (isPermissionState(val)) {
+        normalized[key] = val;
+        hasAny = true;
+      }
+    } else if (typeof val === "object" && val !== null && !Array.isArray(val)) {
+      const map: Record<string, import("./types").PermissionState> = {};
+      let mapHasAny = false;
+      for (const [pattern, action] of Object.entries(
+        val as Record<string, unknown>,
+      )) {
+        if (isPermissionState(action)) {
+          map[pattern] = action;
+          mapHasAny = true;
+        }
+      }
+      if (mapHasAny) {
+        normalized[key] = map;
+        hasAny = true;
+      }
+    }
+  }
+
+  return hasAny ? normalized : undefined;
+}
+
+/**
+ * Deep-shallow merge two flat permission configs.
+ * - Both objects for same key → shallow-merge the pattern maps.
+ * - Otherwise → override replaces base.
+ */
+function mergeFlatPermissions(
+  base: FlatPermissionConfig,
+  override: FlatPermissionConfig,
+): FlatPermissionConfig {
+  const merged: FlatPermissionConfig = { ...base };
+  for (const [key, value] of Object.entries(override)) {
+    const baseVal = merged[key];
+    if (
+      typeof baseVal === "object" &&
+      baseVal !== null &&
+      typeof value === "object" &&
+      value !== null
+    ) {
+      merged[key] = {
+        ...(baseVal as Record<string, import("./types").PermissionState>),
+        ...(value as Record<string, import("./types").PermissionState>),
+      };
+    } else {
+      merged[key] = value;
+    }
+  }
+  return merged;
+}
+
+/**
  * Normalize raw parsed JSON into the unified config shape.
- * Handles top-level shorthand keys (e.g. `bash: "allow"` at root)
- * and deprecated special keys, collecting issues along the way.
  */
 export function normalizeUnifiedConfig(raw: unknown): {
   config: UnifiedPermissionConfig;
@@ -176,7 +189,6 @@ export function normalizeUnifiedConfig(raw: unknown): {
 } {
   const record = toRecord(raw);
   const issues: string[] = [];
-
   const config: UnifiedPermissionConfig = {};
 
   // Runtime knobs
@@ -192,60 +204,18 @@ export function normalizeUnifiedConfig(raw: unknown): {
   const yoloMode = normalizeOptionalBoolean(record.yoloMode);
   if (yoloMode !== undefined) config.yoloMode = yoloMode;
 
-  // Policy
-  const defaultPolicy = normalizePartialPolicy(record.defaultPolicy);
-  if (defaultPolicy) config.defaultPolicy = defaultPolicy;
-
-  const tools = normalizePermissionRecord(record.tools);
-  if (tools) config.tools = tools;
-
-  const bash = normalizePermissionRecord(record.bash);
-  if (bash) config.bash = bash;
-
-  const mcp = normalizePermissionRecord(record.mcp);
-  if (mcp) config.mcp = mcp;
-
-  const skills = normalizePermissionRecord(record.skills);
-  if (skills) config.skills = skills;
-
-  const special = normalizePermissionRecord(record.special);
-  if (special) config.special = special;
-
-  // Detect deprecated special keys
-  const rawSpecial = toRecord(record.special);
-  for (const key of DEPRECATED_SPECIAL_KEYS) {
-    if (key in rawSpecial) {
-      issues.push(
-        `special.${key} is deprecated and ignored — remove it from your config file.`,
-      );
-      if (config.special) {
-        delete config.special[key];
-        if (Object.keys(config.special).length === 0) {
-          delete config.special;
-        }
-      }
-    }
-  }
-
-  // Handle top-level shorthand keys (e.g. `bash: "allow"` at root level)
-  for (const [key, value] of Object.entries(record)) {
-    if (!isPermissionState(value)) continue;
-
-    if (BUILT_IN_TOOL_PERMISSION_NAMES.has(key)) {
-      config.tools = { ...(config.tools || {}), [key]: value };
-    } else if (SPECIAL_PERMISSION_KEYS.has(key)) {
-      config.special = { ...(config.special || {}), [key]: value };
-    }
-  }
+  // Flat permission policy
+  const permission = normalizeFlatPermissionValue(record.permission);
+  if (permission !== undefined) config.permission = permission;
 
   return { config, issues };
 }
 
 /**
- * Merge two unified configs. Object-shaped fields (defaultPolicy, tools, bash,
- * mcp, skills, special) are shallow-merged (override wins per-key). Scalar
- * fields (debugLog, permissionReviewLog, yoloMode) are replaced when present
- * in the override.
+ * Merge two unified configs.
+ * - `permission` is deep-shallow merged (surface-level object maps are shallow-merged).
+ * - Scalar fields (debugLog, permissionReviewLog, yoloMode) are replaced when
+ *   present in the override.
  */
 export function mergeUnifiedConfigs(
   base: UnifiedPermissionConfig,
@@ -261,20 +231,15 @@ export function mergeUnifiedConfigs(
     }
   }
 
-  // Object fields: shallow spread merge
-  for (const key of [
-    "defaultPolicy",
-    "tools",
-    "bash",
-    "mcp",
-    "skills",
-    "special",
-  ] as const) {
-    const baseVal = base[key];
-    const overrideVal = override[key];
-    if (baseVal || overrideVal) {
-      merged[key] = { ...(baseVal || {}), ...(overrideVal || {}) } as never;
-    }
+  // Permission: deep-shallow merge
+  const basePerm = base.permission;
+  const overridePerm = override.permission;
+  if (basePerm && overridePerm) {
+    merged.permission = mergeFlatPermissions(basePerm, overridePerm);
+  } else if (basePerm) {
+    merged.permission = basePerm;
+  } else if (overridePerm) {
+    merged.permission = overridePerm;
   }
 
   return merged;
@@ -297,6 +262,10 @@ export interface MergedConfigResult {
  * 3. New global config
  * 4. Legacy project policy (if present)
  * 5. New project config — highest precedence
+ *
+ * Legacy files are detected and warned about. Their content is parsed with the
+ * flat-format parser — legacy-format keys (defaultPolicy, tools, bash, etc.)
+ * are not translated and contribute no permission rules.
  */
 export function loadAndMergeConfigs(
   agentDir: string,
