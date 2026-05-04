@@ -322,6 +322,12 @@ describe("extractExternalPathsFromBashCommand", () => {
       expect(result).toHaveLength(0);
     });
 
+    test("bare double-slash guard with tree-sitter", async () => {
+      // tree-sitter also emits '//' as a word node — guard must reject it.
+      const result = await extractExternalPathsFromBashCommand("echo //", cwd);
+      expect(result).toHaveLength(0);
+    });
+
     test("still flags real external path alongside //", async () => {
       const result = await extractExternalPathsFromBashCommand(
         "cat /etc/hosts; echo //",
@@ -424,6 +430,39 @@ describe("extractExternalPathsFromBashCommand", () => {
     test("does not flag path inside indented heredoc (<<-)", async () => {
       const cmd = "cat <<- 'EOF'\n\t/etc/hosts\nEOF";
       const result = await extractExternalPathsFromBashCommand(cmd, cwd);
+      expect(result).toHaveLength(0);
+    });
+  });
+
+  describe("defense-in-depth guards with tree-sitter", () => {
+    test("env assignment is a variable_assignment node, not a command argument", async () => {
+      // tree-sitter parses FOO=/usr/local/bin as a variable_assignment node.
+      // The walker skips variable_assignment, so the env-assignment guard in
+      // classifyTokenAsPathCandidate is defense-in-depth.
+      const result = await extractExternalPathsFromBashCommand(
+        "FOO=/usr/local/bin command",
+        cwd,
+      );
+      expect(result).toHaveLength(0);
+    });
+
+    test("URL is a word argument, classifyTokenAsPathCandidate rejects it", async () => {
+      // tree-sitter emits the URL as a plain word argument.
+      // classifyTokenAsPathCandidate's URL pattern must still reject it.
+      const result = await extractExternalPathsFromBashCommand(
+        "curl https://example.com/etc/hosts",
+        cwd,
+      );
+      expect(result).toHaveLength(0);
+    });
+
+    test("flag arguments are word nodes, classifyTokenAsPathCandidate rejects them", async () => {
+      // tree-sitter emits '-la' as a word argument.
+      // classifyTokenAsPathCandidate's flag check must still reject it.
+      const result = await extractExternalPathsFromBashCommand(
+        "ls -la --color=auto",
+        cwd,
+      );
       expect(result).toHaveLength(0);
     });
   });
