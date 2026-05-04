@@ -187,7 +187,7 @@ flowchart TD
         MCP["MCP target derivation<br/>→ candidate values[]"]
         Bash["Bash command extraction<br/>→ command string"]
         Skill["Skill name extraction<br/>→ skill name"]
-        ExtDir["External directory detection<br/>→ normalized path"]
+        ExtDir["External directory detection<br/>(tree-sitter-bash AST for bash; direct path for tools)<br/>→ normalized path"]
     end
 
     PreProcess --> E

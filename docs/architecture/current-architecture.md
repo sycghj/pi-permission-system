@@ -61,7 +61,7 @@ src/
 ├── session-rules.ts          Ephemeral session approvals — Ruleset-based, external_directory only
 ├── bash-filter.ts            Wildcard matching for bash commands
 ├── wildcard-matcher.ts       Compiled glob → RegExp engine
-├── external-directory.ts     Path-outside-cwd detection and prompt formatting
+├── external-directory.ts     Path-outside-cwd detection and prompt formatting (tree-sitter-bash AST for bash commands)
 ├── skill-prompt-sanitizer.ts Skill prompt filtering by policy
 ├── system-prompt-sanitizer.ts Remove denied tools from system prompt text
 ├── tool-input-preview.ts     Extract loggable context from tool inputs
