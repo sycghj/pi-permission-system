@@ -104,6 +104,12 @@ issue_title: "Per-agent permission frontmatter overrides" # required
 - Do not duplicate frontmatter fields as inline metadata in the body (e.g. `Issue #N` in the H1 is fine; a separate `**Issue:** #N` line is not).
 - Other doc types (`README.md`) do not use frontmatter.
 
+## Architecture docs
+
+- `docs/architecture/v3-architecture.md` is a historical snapshot — do not update it to reflect new work.
+- `docs/architecture/target-architecture.md` is the living target — update it when work is completed or new gaps are identified.
+- Per-module architecture notes (`docs/architecture/<module>.md`) describe the current implementation of that module.
+
 ## Testing
 
 - Add focused tests for permission resolution (allow/deny/ask decisions across tools, bash, MCP, skills, special).
