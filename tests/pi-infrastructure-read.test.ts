@@ -1,5 +1,18 @@
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
+
+// Hoisted stub so the vi.mock factory can reference it.
+const { mockSpawnSync } = vi.hoisted(() => ({
+  mockSpawnSync: vi.fn(),
+}));
+
+// Mock node:child_process so tests that exercise the subprocess fallback path
+// don't actually invoke npm.  Default: subprocess fails (non-zero exit), so
+// tests focused on the walk-up strategy continue to expect null.
+vi.mock("node:child_process", () => ({
+  spawnSync: mockSpawnSync,
+  default: { spawnSync: mockSpawnSync },
+}));
 
 import {
   discoverGlobalNodeModulesRoot,
@@ -9,6 +22,13 @@ import {
 // ── discoverGlobalNodeModulesRoot ──────────────────────────────────────────
 
 describe("discoverGlobalNodeModulesRoot", () => {
+  beforeEach(() => {
+    // Default: subprocess fails, so walk-up-focused tests see null for URLs
+    // with no node_modules ancestor.
+    mockSpawnSync.mockReset();
+    mockSpawnSync.mockReturnValue({ status: 1, stdout: "" });
+  });
+
   test("returns the node_modules dir when the file is inside one", () => {
     const url =
       "file:///opt/homebrew/lib/node_modules/pi-permission-system/dist/external-directory.js";
