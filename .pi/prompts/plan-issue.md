@@ -43,7 +43,7 @@ issue_title: "<exact title from `gh issue view`>"
 ---
 ```
 
-Then the body, sections in this order:
+Then an H1 title (e.g., `# <short descriptive title>`) — required by markdownlint MD041 — followed by the body sections:
 
 - **Problem Statement** — quote the issue's framing in your own words.
 - **Goals** — bullet list, scoped to this change.
