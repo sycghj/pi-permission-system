@@ -64,6 +64,7 @@ function makeRuntime(
     subagentSessionsDir: "/test/agent/subagent-sessions",
     forwardingDir: "/test/agent/sessions/permission-forwarding",
     globalLogsDir: "/test/agent/extensions/pi-permission-system/logs",
+    piInfrastructureDirs: ["/test/agent", "/test/agent/git"],
     config: { debugLog: false, permissionReviewLog: true, yoloMode: false },
     runtimeContext: null,
     permissionManager: {
@@ -392,6 +393,152 @@ describe("handleToolCall — external-directory gate", () => {
       "external_directory",
       expect.any(String),
     );
+  });
+});
+
+// ── Pi infrastructure read bypass ───────────────────────────────────────────
+
+describe("handleToolCall — Pi infrastructure read bypass", () => {
+  const infraPath = "/test/agent/git/some-package/SKILL.md";
+
+  it("skips external-directory gate for read tool targeting an infra dir", async () => {
+    const deps = makeDeps({
+      runtime: makeRuntime({
+        permissionManager: {
+          checkPermission: vi
+            .fn()
+            .mockReturnValue(makePermissionResult("allow")),
+        } as unknown as ExtensionRuntime["permissionManager"],
+      }),
+      getAllTools: vi.fn().mockReturnValue([{ name: "read" }]),
+    });
+    const event = {
+      type: "tool_call",
+      toolCallId: "tc-infra-read",
+      name: "read",
+      input: { path: infraPath },
+    };
+    const result = await handleToolCall(deps, event, makeCtx());
+    expect(result).toEqual({});
+    // external_directory permission check must NOT have been called.
+    const checkPermission = deps.runtime.permissionManager
+      .checkPermission as ReturnType<typeof vi.fn>;
+    const calls = checkPermission.mock.calls as Array<[string, ...unknown[]]>;
+    const extDirCalls = calls.filter(
+      ([surface]) => surface === "external_directory",
+    );
+    expect(extDirCalls).toHaveLength(0);
+  });
+
+  it("does NOT skip gate for write tool targeting an infra dir", async () => {
+    const deps = makeDeps({
+      runtime: makeRuntime({
+        permissionManager: {
+          checkPermission: vi
+            .fn()
+            .mockReturnValue(makePermissionResult("deny")),
+        } as unknown as ExtensionRuntime["permissionManager"],
+      }),
+      getAllTools: vi.fn().mockReturnValue([{ name: "write" }]),
+    });
+    const event = {
+      type: "tool_call",
+      toolCallId: "tc-infra-write",
+      name: "write",
+      input: { path: infraPath },
+    };
+    const result = await handleToolCall(deps, event, makeCtx());
+    expect(result).toMatchObject({ block: true });
+    const checkPermission = deps.runtime.permissionManager
+      .checkPermission as ReturnType<typeof vi.fn>;
+    const calls = checkPermission.mock.calls as Array<[string, ...unknown[]]>;
+    const extDirCalls = calls.filter(
+      ([surface]) => surface === "external_directory",
+    );
+    expect(extDirCalls.length).toBeGreaterThan(0);
+  });
+
+  it("does NOT skip gate for read tool targeting a non-infra external path", async () => {
+    const deps = makeDeps({
+      runtime: makeRuntime({
+        permissionManager: {
+          checkPermission: vi
+            .fn()
+            .mockReturnValue(makePermissionResult("deny")),
+        } as unknown as ExtensionRuntime["permissionManager"],
+      }),
+      getAllTools: vi.fn().mockReturnValue([{ name: "read" }]),
+    });
+    const event = {
+      type: "tool_call",
+      toolCallId: "tc-non-infra",
+      name: "read",
+      input: { path: "/etc/passwd" },
+    };
+    const result = await handleToolCall(deps, event, makeCtx());
+    expect(result).toMatchObject({ block: true });
+    const checkPermission = deps.runtime.permissionManager
+      .checkPermission as ReturnType<typeof vi.fn>;
+    const calls = checkPermission.mock.calls as Array<[string, ...unknown[]]>;
+    const extDirCalls = calls.filter(
+      ([surface]) => surface === "external_directory",
+    );
+    expect(extDirCalls.length).toBeGreaterThan(0);
+  });
+
+  it("writes a review log entry when bypassing the gate", async () => {
+    const writeReviewLog = vi.fn();
+    const deps = makeDeps({
+      runtime: makeRuntime({ writeReviewLog }),
+      getAllTools: vi.fn().mockReturnValue([{ name: "read" }]),
+    });
+    const event = {
+      type: "tool_call",
+      toolCallId: "tc-infra-log",
+      name: "read",
+      input: { path: infraPath },
+    };
+    await handleToolCall(deps, event, makeCtx());
+    expect(writeReviewLog).toHaveBeenCalledWith(
+      "permission_request.infrastructure_auto_allowed",
+      expect.objectContaining({ toolName: "read", path: infraPath }),
+    );
+  });
+
+  it("respects config piInfrastructureReadPaths for bypass", async () => {
+    const customInfraPath = "/custom/infra/packages/SKILL.md";
+    const deps = makeDeps({
+      runtime: makeRuntime({
+        piInfrastructureDirs: [],
+        config: {
+          debugLog: false,
+          permissionReviewLog: true,
+          yoloMode: false,
+          piInfrastructureReadPaths: ["/custom/infra/packages"],
+        },
+        permissionManager: {
+          checkPermission: vi
+            .fn()
+            .mockReturnValue(makePermissionResult("allow")),
+        } as unknown as ExtensionRuntime["permissionManager"],
+      }),
+      getAllTools: vi.fn().mockReturnValue([{ name: "read" }]),
+    });
+    const event = {
+      type: "tool_call",
+      toolCallId: "tc-config-infra",
+      name: "read",
+      input: { path: customInfraPath },
+    };
+    const result = await handleToolCall(deps, event, makeCtx());
+    expect(result).toEqual({});
+    const checkPermission = deps.runtime.permissionManager
+      .checkPermission as ReturnType<typeof vi.fn>;
+    const calls = checkPermission.mock.calls as Array<[string, ...unknown[]]>;
+    const extDirCalls = calls.filter(
+      ([surface]) => surface === "external_directory",
+    );
+    expect(extDirCalls).toHaveLength(0);
   });
 });
 

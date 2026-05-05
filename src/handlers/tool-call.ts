@@ -15,6 +15,7 @@ import {
   formatExternalDirectoryUserDeniedReason,
   getPathBearingToolPath,
   isPathOutsideWorkingDirectory,
+  isPiInfrastructureRead,
   normalizePathForComparison,
   PATH_BEARING_TOOLS,
 } from "../external-directory";
@@ -170,82 +171,107 @@ export async function handleToolCall(
       externalDirectoryPath,
       ctx.cwd,
     );
-    const extCheck = deps.runtime.permissionManager.checkPermission(
-      "external_directory",
-      { path: normalizedExtPath },
-      agentName ?? undefined,
-      deps.runtime.sessionRules.getRuleset(),
-    );
 
-    if (extCheck.source === "session") {
-      deps.runtime.writeReviewLog("permission_request.session_approved", {
-        source: "tool_call",
-        toolCallId: (event as { toolCallId: string }).toolCallId,
-        toolName,
-        agentName,
-        path: externalDirectoryPath,
-        resolution: "session_approved",
-        sessionApprovalPattern: extCheck.matchedPattern,
-      });
-      // Fall through to normal permission check
-    } else {
-      let extDirDecision: PermissionPromptDecision | null = null;
-      const extDirMessage = formatExternalDirectoryAskPrompt(
-        toolName,
-        externalDirectoryPath,
-        ctx.cwd,
-        agentName ?? undefined,
-      );
-      const extDirGate = await applyPermissionGate({
-        state: extCheck.state,
-        canConfirm: deps.canRequestPermissionConfirmation(ctx),
-        promptForApproval: async () => {
-          const decision = await deps.promptPermission(ctx, {
-            requestId: (event as { toolCallId: string }).toolCallId,
-            source: "tool_call",
-            agentName,
-            message: extDirMessage,
-            toolCallId: (event as { toolCallId: string }).toolCallId,
-            toolName,
-            path: externalDirectoryPath,
-          });
-          extDirDecision = decision;
-          return decision;
-        },
-        writeLog: deps.runtime.writeReviewLog,
-        logContext: {
+    // ── Pi infrastructure read bypass ──────────────────────────────────
+    // Auto-allow read-only tools targeting Pi infrastructure directories
+    // (agent dir, global node_modules, project-local .pi/npm|git, and
+    // any user-configured extras).  Writes are never bypassed.
+    const allInfraDirs = [
+      ...deps.runtime.piInfrastructureDirs,
+      ...(deps.runtime.config.piInfrastructureReadPaths ?? []),
+    ];
+    if (
+      isPiInfrastructureRead(toolName, normalizedExtPath, allInfraDirs, ctx.cwd)
+    ) {
+      deps.runtime.writeReviewLog(
+        "permission_request.infrastructure_auto_allowed",
+        {
           source: "tool_call",
           toolCallId: (event as { toolCallId: string }).toolCallId,
           toolName,
           agentName,
           path: externalDirectoryPath,
-          message: extDirMessage,
         },
-        messages: {
-          denyReason: formatExternalDirectoryDenyReason(
+      );
+      // Fall through to normal tool-permission check.
+    } else {
+      const extCheck = deps.runtime.permissionManager.checkPermission(
+        "external_directory",
+        { path: normalizedExtPath },
+        agentName ?? undefined,
+        deps.runtime.sessionRules.getRuleset(),
+      );
+
+      if (extCheck.source === "session") {
+        deps.runtime.writeReviewLog("permission_request.session_approved", {
+          source: "tool_call",
+          toolCallId: (event as { toolCallId: string }).toolCallId,
+          toolName,
+          agentName,
+          path: externalDirectoryPath,
+          resolution: "session_approved",
+          sessionApprovalPattern: extCheck.matchedPattern,
+        });
+        // Fall through to normal permission check
+      } else {
+        let extDirDecision: PermissionPromptDecision | null = null;
+        const extDirMessage = formatExternalDirectoryAskPrompt(
+          toolName,
+          externalDirectoryPath,
+          ctx.cwd,
+          agentName ?? undefined,
+        );
+        const extDirGate = await applyPermissionGate({
+          state: extCheck.state,
+          canConfirm: deps.canRequestPermissionConfirmation(ctx),
+          promptForApproval: async () => {
+            const decision = await deps.promptPermission(ctx, {
+              requestId: (event as { toolCallId: string }).toolCallId,
+              source: "tool_call",
+              agentName,
+              message: extDirMessage,
+              toolCallId: (event as { toolCallId: string }).toolCallId,
+              toolName,
+              path: externalDirectoryPath,
+            });
+            extDirDecision = decision;
+            return decision;
+          },
+          writeLog: deps.runtime.writeReviewLog,
+          logContext: {
+            source: "tool_call",
+            toolCallId: (event as { toolCallId: string }).toolCallId,
             toolName,
-            externalDirectoryPath,
-            ctx.cwd,
-            agentName ?? undefined,
-          ),
-          unavailableReason: `Accessing '${externalDirectoryPath}' outside the working directory requires approval, but no interactive UI is available.`,
-          userDeniedReason: (decision) =>
-            formatExternalDirectoryUserDeniedReason(
+            agentName,
+            path: externalDirectoryPath,
+            message: extDirMessage,
+          },
+          messages: {
+            denyReason: formatExternalDirectoryDenyReason(
               toolName,
               externalDirectoryPath,
-              decision.denialReason,
+              ctx.cwd,
+              agentName ?? undefined,
             ),
-        },
-      });
-      if (extDirGate.action === "block") {
-        return { block: true, reason: extDirGate.reason };
-      }
+            unavailableReason: `Accessing '${externalDirectoryPath}' outside the working directory requires approval, but no interactive UI is available.`,
+            userDeniedReason: (decision) =>
+              formatExternalDirectoryUserDeniedReason(
+                toolName,
+                externalDirectoryPath,
+                decision.denialReason,
+              ),
+          },
+        });
+        if (extDirGate.action === "block") {
+          return { block: true, reason: extDirGate.reason };
+        }
 
-      if (extDirDecision?.state === "approved_for_session") {
-        const pattern = deriveApprovalPattern(normalizedExtPath);
-        deps.runtime.sessionRules.approve("external_directory", pattern);
+        if (extDirDecision?.state === "approved_for_session") {
+          const pattern = deriveApprovalPattern(normalizedExtPath);
+          deps.runtime.sessionRules.approve("external_directory", pattern);
+        }
       }
-    }
+    } // end else (not Pi infrastructure read)
     // Fall through to normal permission check
   }
 
