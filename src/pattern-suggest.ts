@@ -1,3 +1,4 @@
+import { prefix } from "./bash-arity";
 import { deriveApprovalPattern } from "./session-rules";
 
 /** The suggestion returned for a "Yes, for this session" dialog option. */
@@ -13,20 +14,24 @@ export interface SessionApprovalSuggestion {
 /**
  * Suggest a bash session-approval pattern from a command string.
  *
- * Heuristic: split on the first space to get the base command.
- * Multi-word commands → `<command> *`.
- * Single-word commands → exact command (no wildcard).
+ * Uses the arity table (`src/bash-arity.ts`) to identify the semantically
+ * meaningful prefix tokens for the command, then produces a wildcard pattern:
  *
- * This is intentionally conservative. The arity table (#52) will refine
- * suggestions later (e.g. `git checkout *` instead of `git *`).
+ * - Single bare token (no args): exact command (`ls`).
+ * - Arity prefix covers all tokens: trailing wildcard (`npm run build*`).
+ * - Arity prefix shorter than token list: space + wildcard (`git checkout *`).
+ * - Unknown command: first token + space wildcard (`mytool *`).
  */
 export function suggestBashPattern(command: string): string {
   const trimmed = command.trim();
-  const spaceIndex = trimmed.indexOf(" ");
-  if (spaceIndex === -1) {
-    return trimmed;
+  if (!trimmed) return "";
+  const tokens = trimmed.split(/\s+/);
+  if (tokens.length === 1) return trimmed;
+  const meaningful = prefix(tokens);
+  if (meaningful.length >= tokens.length) {
+    return `${trimmed}*`;
   }
-  return `${trimmed.slice(0, spaceIndex)} *`;
+  return `${meaningful.join(" ")} *`;
 }
 
 /**

@@ -6,24 +6,41 @@ import {
 } from "../src/pattern-suggest";
 
 describe("suggestBashPattern", () => {
-  it("returns <command> * for a multi-word command", () => {
-    expect(suggestBashPattern("git status --short")).toBe("git *");
+  it("returns <command> <subcommand> * using the arity table", () => {
+    // git arity=2: include the subcommand in the prefix.
+    expect(suggestBashPattern("git status --short")).toBe("git status *");
   });
 
-  it("uses only the first word as the base", () => {
-    expect(suggestBashPattern("npm run build")).toBe("npm *");
+  it("appends trailing * when arity covers all tokens (multi-word script name)", () => {
+    // npm run arity=3: prefix covers all three tokens → trailing wildcard.
+    expect(suggestBashPattern("npm run build")).toBe("npm run build*");
   });
 
   it("returns the exact command when there are no arguments", () => {
     expect(suggestBashPattern("ls")).toBe("ls");
   });
 
-  it("trims leading and trailing whitespace", () => {
-    expect(suggestBashPattern("  git log  ")).toBe("git *");
+  it("trims leading and trailing whitespace before lookup", () => {
+    // git arity=2, tokens=["git","log"], prefix covers all → trailing wildcard.
+    expect(suggestBashPattern("  git log  ")).toBe("git log*");
   });
 
   it("handles empty string gracefully", () => {
     expect(suggestBashPattern("")).toBe("");
+  });
+
+  it("falls back to first-word prefix for unknown commands", () => {
+    expect(suggestBashPattern("mytool --verbose run")).toBe("mytool *");
+  });
+
+  it("returns first-word * for known arity-1 commands with args", () => {
+    expect(suggestBashPattern("rm -rf node_modules")).toBe("rm *");
+  });
+
+  it("produces tighter pattern for docker compose than plain docker", () => {
+    expect(suggestBashPattern("docker compose up --build")).toBe(
+      "docker compose up *",
+    );
   });
 });
 
