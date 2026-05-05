@@ -493,7 +493,6 @@ export class PermissionManager {
  *
  * - session          → "session" (always, all surfaces)
  * - mcp + default    → "default"
- * - mcp + override   → "tool"
  * - mcp + other      → "mcp"
  * - special          → "special" (always)
  * - skill            → "skill" (always)
@@ -509,7 +508,6 @@ function deriveSource(
 
   if (toolName === "mcp") {
     if (rule.layer === "default") return "default";
-    if (rule.layer === "override") return "tool";
     return "mcp";
   }
 

@@ -13,7 +13,7 @@ export interface Rule {
    * Origin layer — used to derive PermissionCheckResult.source after evaluation.
    * Not used by evaluate(); purely informational metadata.
    */
-  layer?: "default" | "override" | "baseline" | "config" | "session";
+  layer?: "default" | "baseline" | "config" | "session";
 }
 
 /** An ordered list of rules. Later rules take priority (last-match-wins). */
