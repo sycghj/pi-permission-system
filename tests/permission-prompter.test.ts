@@ -78,7 +78,11 @@ describe("PermissionPrompter", () => {
 
       const decision = await prompter.prompt(makeCtx(false), makeDetails());
 
-      expect(decision).toEqual({ approved: true, state: "approved" });
+      expect(decision).toEqual({
+        approved: true,
+        state: "approved",
+        autoApproved: true,
+      });
       expect(mockConfirmPermission).not.toHaveBeenCalled();
     });
 

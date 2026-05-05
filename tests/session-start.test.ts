@@ -60,6 +60,7 @@ describe("session_start handler consolidation", () => {
       registerProvider: (): void => {},
       events: {
         emit: (): void => {},
+        on: (): (() => void) => () => undefined,
       },
     } as never);
 
@@ -82,6 +83,7 @@ describe("session_start handler consolidation", () => {
       registerProvider: (): void => {},
       events: {
         emit: (): void => {},
+        on: (): (() => void) => () => undefined,
       },
     } as never);
 

@@ -407,9 +407,7 @@ describe("registerPermissionRpcHandlers — permissions:rpc:prompt", () => {
 
     const reply = await replyPromise;
     expect(reply.success).toBe(false);
-    if (!reply.success) {
-      expect(reply.error).toBe("no_ui");
-    }
+    expect((reply as { success: false; error: string }).error).toBe("no_ui");
   });
 
   it("replies with no_ui error when context hasUI is false", async () => {
@@ -434,9 +432,7 @@ describe("registerPermissionRpcHandlers — permissions:rpc:prompt", () => {
 
     const reply = await replyPromise;
     expect(reply.success).toBe(false);
-    if (!reply.success) {
-      expect(reply.error).toBe("no_ui");
-    }
+    expect((reply as { success: false; error: string }).error).toBe("no_ui");
   });
 
   it("writes to the review log after a prompt decision", async () => {

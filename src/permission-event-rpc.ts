@@ -11,6 +11,7 @@ import type {
   RequestPermissionOptions,
 } from "./permission-dialog";
 import type {
+  PermissionEventBus,
   PermissionsCheckReplyData,
   PermissionsCheckRequest,
   PermissionsPromptReplyData,
@@ -24,12 +25,6 @@ import {
 } from "./permission-events";
 import type { PermissionManager } from "./permission-manager";
 import type { Rule } from "./rule";
-
-/** Minimal event bus surface needed by the RPC handlers. */
-export interface RpcEventBus {
-  emit(channel: string, data: unknown): void;
-  on(channel: string, handler: (data: unknown) => void): () => void;
-}
 
 /** Dependencies injected into the RPC handler registry. */
 export interface PermissionRpcDeps {
@@ -108,7 +103,7 @@ function buildInputForSurface(
 
 function handleCheckRpc(
   raw: unknown,
-  events: RpcEventBus,
+  events: PermissionEventBus,
   deps: PermissionRpcDeps,
 ): void {
   const req = raw as Partial<PermissionsCheckRequest>;
@@ -149,7 +144,7 @@ function handleCheckRpc(
 
 async function handlePromptRpc(
   raw: unknown,
-  events: RpcEventBus,
+  events: PermissionEventBus,
   deps: PermissionRpcDeps,
 ): Promise<void> {
   const req = raw as Partial<PermissionsPromptRequest>;
@@ -219,7 +214,7 @@ async function handlePromptRpc(
  * handlers and prevent memory leaks.
  */
 export function registerPermissionRpcHandlers(
-  events: RpcEventBus,
+  events: PermissionEventBus,
   deps: PermissionRpcDeps,
 ): PermissionRpcHandles {
   const unsubCheck = events.on(PERMISSIONS_RPC_CHECK_CHANNEL, (raw) => {

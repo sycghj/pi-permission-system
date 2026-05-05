@@ -16,10 +16,8 @@ import type { PermissionCheckResult } from "../../src/types";
 
 function makeEvents() {
   return {
-    emit: vi.fn<[string, unknown], void>(),
-    on: vi
-      .fn<[string, (data: unknown) => void], () => void>()
-      .mockReturnValue(() => undefined),
+    emit: vi.fn(),
+    on: vi.fn().mockReturnValue(() => undefined),
   };
 }
 
@@ -357,6 +355,35 @@ describe("handleToolCall decision events — infrastructure_auto_allowed", () =>
     expect(infraEvents[0]).toMatchObject({
       result: "allow",
       resolution: "infrastructure_auto_allowed",
+    });
+  });
+});
+
+// ── auto_approved path (yolo mode) ───────────────────────────────────
+
+describe("handleToolCall decision events — auto_approved", () => {
+  it("emits allow with auto_approved when promptPermission returns autoApproved:true", async () => {
+    const deps = makeDeps({
+      runtime: makeRuntime({
+        permissionManager: {
+          checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
+        } as unknown as ExtensionRuntime["permissionManager"],
+      }),
+      // Simulate what PermissionPrompter returns in yolo mode
+      promptPermission: vi.fn().mockResolvedValue({
+        approved: true,
+        state: "approved",
+        autoApproved: true,
+      }),
+    });
+
+    await handleToolCall(deps, makeToolCallEvent("read"), makeCtx());
+
+    const events = getDecisionEvents(deps);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      result: "allow",
+      resolution: "auto_approved",
     });
   });
 });

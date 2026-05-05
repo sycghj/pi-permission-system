@@ -28,10 +28,8 @@ import {
 
 function makeEventBus() {
   return {
-    emit: vi.fn<[string, unknown], void>(),
-    on: vi
-      .fn<[string, (data: unknown) => void], () => void>()
-      .mockReturnValue(() => undefined),
+    emit: vi.fn(),
+    on: vi.fn().mockReturnValue(() => undefined),
   };
 }
 
@@ -280,7 +278,7 @@ describe("piPermissionSystemExtension ready event wiring", () => {
   });
 
   it("emits permissions:ready with protocolVersion when extension loads", () => {
-    const emitSpy = vi.fn<[string, unknown], void>();
+    const emitSpy = vi.fn();
     piPermissionSystemExtension({
       on: vi.fn(),
       registerCommand: vi.fn(),

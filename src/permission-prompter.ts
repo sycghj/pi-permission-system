@@ -66,7 +66,7 @@ export class PermissionPrompter implements PermissionPrompterApi {
   ): Promise<PermissionPromptDecision> {
     if (shouldAutoApprovePermissionState("ask", this.deps.getConfig())) {
       this.writeReviewEntry("permission_request.auto_approved", details);
-      return { approved: true, state: "approved" };
+      return { approved: true, state: "approved", autoApproved: true };
     }
 
     this.writeReviewEntry("permission_request.waiting", details);

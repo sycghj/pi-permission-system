@@ -74,11 +74,13 @@ function deriveResolution(
   action: "allow" | "block",
   hasSession: boolean,
   canConfirm: boolean,
+  autoApproved = false,
 ): PermissionDecisionResolution {
   if (state === "allow") return "policy_allow";
   if (state === "deny") return "policy_deny";
   // state === "ask"
   if (action === "allow") {
+    if (autoApproved) return "auto_approved";
     return hasSession ? "user_approved_for_session" : "user_approved";
   }
   return canConfirm ? "user_denied" : "confirmation_unavailable";
@@ -525,6 +527,7 @@ export async function handleToolCall(
 
   const toolAskMessage = formatAskPrompt(check, agentName ?? undefined, input);
   const toolCanConfirm = deps.canRequestPermissionConfirmation(ctx);
+  let toolDecisionAutoApproved = false;
   const toolGate = await applyPermissionGate({
     state: check.state,
     canConfirm: toolCanConfirm,
@@ -532,8 +535,8 @@ export async function handleToolCall(
       surface: suggestion.surface,
       pattern: suggestion.pattern,
     },
-    promptForApproval: () =>
-      deps.promptPermission(ctx, {
+    promptForApproval: async () => {
+      const decision = await deps.promptPermission(ctx, {
         requestId: (event as { toolCallId: string }).toolCallId,
         source: "tool_call",
         agentName,
@@ -542,7 +545,10 @@ export async function handleToolCall(
         toolName,
         sessionLabel: suggestion.label,
         ...permissionLogContext,
-      }),
+      });
+      toolDecisionAutoApproved = decision.autoApproved === true;
+      return decision;
+    },
     writeLog: deps.runtime.writeReviewLog,
     logContext: {
       source: "tool_call",
@@ -560,6 +566,8 @@ export async function handleToolCall(
     },
   });
 
+  const toolGateHasSession =
+    toolGate.action === "allow" && toolGate.sessionApproval !== undefined;
   emitDecisionEvent(deps.events, {
     surface: toolName,
     value: deriveDecisionValue(toolName, check),
@@ -567,8 +575,9 @@ export async function handleToolCall(
     resolution: deriveResolution(
       check.state,
       toolGate.action,
-      toolGate.sessionApproval !== undefined,
+      toolGateHasSession,
       toolCanConfirm,
+      toolDecisionAutoApproved,
     ),
     origin: check.origin ?? null,
     agentName: agentName ?? null,

@@ -175,6 +175,7 @@ function createToolCallHarness(
       registerProvider: (): void => {},
       events: {
         emit: (): void => {},
+        on: (): (() => void) => () => undefined,
       },
     } as never);
   } finally {

@@ -14,10 +14,8 @@ import type { ExtensionRuntime } from "../../src/runtime";
 
 function makeEvents() {
   return {
-    emit: vi.fn<[string, unknown], void>(),
-    on: vi
-      .fn<[string, (data: unknown) => void], () => void>()
-      .mockReturnValue(() => undefined),
+    emit: vi.fn(),
+    on: vi.fn().mockReturnValue(() => undefined),
   };
 }
 
@@ -49,6 +47,7 @@ function makeRuntime(
     subagentSessionsDir: "/test/agent/subagent-sessions",
     forwardingDir: "/test/agent/sessions/permission-forwarding",
     globalLogsDir: "/test/agent/extensions/pi-permission-system/logs",
+    piInfrastructureDirs: ["/test/agent"],
     config: { debugLog: false, permissionReviewLog: true, yoloMode: false },
     runtimeContext: null,
     permissionManager: {
@@ -201,6 +200,27 @@ describe("handleInput decision events — skill gate", () => {
       value: "explorer",
       result: "deny",
       resolution: "confirmation_unavailable",
+    });
+  });
+
+  it("emits allow with auto_approved when promptPermission returns autoApproved:true", async () => {
+    const deps = makeDeps("ask", {
+      // Simulate what PermissionPrompter returns in yolo mode
+      promptPermission: vi.fn().mockResolvedValue({
+        approved: true,
+        state: "approved",
+        autoApproved: true,
+      }),
+    });
+    await handleInput(deps, { text: "/skill:explorer" }, makeCtx());
+
+    const events = getDecisionEvents(deps);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      surface: "skill",
+      value: "explorer",
+      result: "allow",
+      resolution: "auto_approved",
     });
   });
 });

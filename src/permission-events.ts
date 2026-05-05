@@ -8,9 +8,10 @@
  * removed or renamed without a semver-major version bump.
  */
 
-/** Minimal event bus interface required by the emit helpers. */
+/** Minimal event bus interface required by the emit helpers and RPC handlers. */
 export interface PermissionEventBus {
   emit(channel: string, data: unknown): void;
+  on(channel: string, handler: (data: unknown) => void): () => void;
 }
 
 // ── Protocol version ───────────────────────────────────────────────────────

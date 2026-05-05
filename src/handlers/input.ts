@@ -67,17 +67,21 @@ export async function handleInput(
     agentName ?? undefined,
   );
   const skillInputCanConfirm = deps.canRequestPermissionConfirmation(ctx);
+  let skillInputAutoApproved = false;
   const skillInputGate = await applyPermissionGate({
     state: check.state,
     canConfirm: skillInputCanConfirm,
-    promptForApproval: () =>
-      deps.promptPermission(ctx, {
+    promptForApproval: async () => {
+      const decision = await deps.promptPermission(ctx, {
         requestId: deps.createPermissionRequestId("skill-input"),
         source: "skill_input",
         agentName,
         message: skillInputMessage,
         skillName,
-      }),
+      });
+      skillInputAutoApproved = decision.autoApproved === true;
+      return decision;
+    },
     writeLog: deps.runtime.writeReviewLog,
     logContext: {
       source: "skill_input",
@@ -103,7 +107,9 @@ export async function handleInput(
         : check.state === "deny"
           ? "policy_deny"
           : skillInputGate.action === "allow"
-            ? "user_approved"
+            ? skillInputAutoApproved
+              ? "auto_approved"
+              : "user_approved"
             : skillInputCanConfirm
               ? "user_denied"
               : "confirmation_unavailable",

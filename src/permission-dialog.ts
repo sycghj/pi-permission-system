@@ -8,6 +8,12 @@ export type PermissionPromptDecision = {
   approved: boolean;
   state: PermissionDecisionState;
   denialReason?: string;
+  /**
+   * True when the decision was made automatically by yolo mode rather than
+   * by an interactive user prompt. Used by handlers to emit "auto_approved"
+   * rather than "user_approved" in the permissions:decision broadcast.
+   */
+  autoApproved?: true;
 };
 
 export interface PermissionDecisionUi {
