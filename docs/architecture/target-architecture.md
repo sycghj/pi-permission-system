@@ -449,6 +449,7 @@ src/
 ├── session-rules.ts          Session approval store (Ruleset wrapper)
 ├── permission-checker.ts     Pure: evaluate() + input normalization per surface
 ├── permission-gate.ts        IO boundary: the "elicitor" — ask-path handler
+├── permission-prompter.ts    Yolo-mode check, review logging, UI/forwarding branch (interim; subsumed by permission-gate.ts in target)
 ├── permission-dialog.ts      Dialog options (once / session / deny)
 │
 ├── handlers/                 Extracted event handlers
