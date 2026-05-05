@@ -138,6 +138,8 @@ issue_title: "Per-agent permission frontmatter overrides" # required
   Helpers are often exercised by integration-level tests in other files.
 - When integrating an unfamiliar library or data structure (AST parsers, WASM modules, new SDK types), write a disposable exploratory script first to inspect the actual runtime shape before writing production code or tests.
 - When a test reveals a pre-existing bug rather than a wrong assumption, use `test.fails` to document the expected behavior and file a GitHub issue. Do not adjust the test to match the buggy behavior.
+- Prefer a concrete test asserting current (even imperfect) behavior over `test.todo`.
+  A real assertion documents the limitation and lets a future fix flip the expectation; a `test.todo` is invisible friction that never triggers CI.
 - Vitest uses esbuild and does not typecheck. Run `pnpm run build` (`tsc -p tsconfig.json`) for type-only changes.
 - Do not insert no-op statements (`void 0;`, unused locals) in tests just to make an `Edit` tool's `oldText` unique — widen `oldText` with surrounding context instead.
 
