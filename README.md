@@ -170,22 +170,21 @@ Override global permissions for specific agents via YAML frontmatter in the glob
 ---
 name: my-agent
 permission:
-  tools:
-    read: allow
-    write: deny
-    mcp: allow
+  read: allow
+  write: deny
+  mcp: allow
   bash:
     git status: allow
     git *: ask
   mcp:
     chrome_devtools_*: deny
     exa_*: allow
-  skills:
+  skill:
     "*": ask
 ---
 ```
 
-**MCP behavior:** `permission.tools.mcp` is the coarse entry/fallback permission for a registered `mcp` tool when one is available. More specific `permission.mcp` target rules override that fallback when they match.
+**MCP behavior:** `permission.mcp` is the coarse entry/fallback permission for a registered `mcp` tool when one is available. More specific `permission.mcp` target rules override that fallback when they match.
 
 **Limitations:** The frontmatter parser is intentionally minimal. Use only `key: value` scalars and nested maps. Avoid arrays, multi-line scalars, and YAML anchors.
 
