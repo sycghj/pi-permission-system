@@ -1,3 +1,5 @@
+import { expandHomePath } from "./expand-home";
+
 export type CompiledWildcardPattern<TState> = {
   pattern: string;
   state: TState;
@@ -18,7 +20,8 @@ export function compileWildcardPattern<TState>(
   pattern: string,
   state: TState,
 ): CompiledWildcardPattern<TState> {
-  const escaped = pattern
+  const expanded = expandHomePath(pattern);
+  const escaped = expanded
     .split("*")
     .map((part) => escapeRegExp(part))
     .join(".*");

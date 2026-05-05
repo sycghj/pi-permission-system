@@ -1,4 +1,14 @@
+import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
+
+const mockHomedir = vi.hoisted(() => vi.fn(() => "/home/testuser"));
+
+vi.mock("node:os", () => ({
+  homedir: mockHomedir,
+  default: { homedir: mockHomedir },
+}));
+
+const FAKE_HOME = "/home/testuser";
 
 import {
   compileWildcardPattern,
@@ -9,6 +19,7 @@ import {
 } from "../src/wildcard-matcher";
 
 afterEach(() => {
+  mockHomedir.mockClear();
   vi.restoreAllMocks();
 });
 
@@ -231,5 +242,52 @@ describe("wildcardMatch", () => {
   test("regex special characters in pattern are treated as literals", () => {
     expect(wildcardMatch("tool.name", "tool.name")).toBe(true);
     expect(wildcardMatch("tool.name", "toolXname")).toBe(false);
+  });
+});
+
+describe("home path expansion in patterns", () => {
+  test("wildcardMatch expands ~ prefix in pattern before matching", () => {
+    const expandedPath = join(FAKE_HOME, "dev/project");
+    expect(wildcardMatch("~/dev/project", expandedPath)).toBe(true);
+  });
+
+  test("wildcardMatch expands ~/glob in pattern", () => {
+    const expandedFile = join(FAKE_HOME, "dev/project/file.ts");
+    expect(wildcardMatch("~/dev/*", expandedFile)).toBe(true);
+  });
+
+  test("wildcardMatch ~/glob does not match a different home directory", () => {
+    expect(wildcardMatch("~/dev/*", "/other/user/dev/file.ts")).toBe(false);
+  });
+
+  test("wildcardMatch expands $HOME prefix in pattern before matching", () => {
+    const expandedPath = join(FAKE_HOME, "dev/project");
+    expect(wildcardMatch("$HOME/dev/project", expandedPath)).toBe(true);
+  });
+
+  test("wildcardMatch expands $HOME/glob in pattern", () => {
+    const expandedFile = join(FAKE_HOME, "work/file.ts");
+    expect(wildcardMatch("$HOME/work/*", expandedFile)).toBe(true);
+  });
+
+  test("compileWildcardPattern retains original ~ pattern in .pattern field", () => {
+    const compiled = compileWildcardPattern("~/dev/*", "allow");
+    expect(compiled.pattern).toBe("~/dev/*");
+  });
+
+  test("compileWildcardPattern retains original $HOME pattern in .pattern field", () => {
+    const compiled = compileWildcardPattern("$HOME/dev/*", "allow");
+    expect(compiled.pattern).toBe("$HOME/dev/*");
+  });
+
+  test("compileWildcardPattern expanded regex matches the expanded path", () => {
+    const compiled = compileWildcardPattern("~/dev/*", "allow");
+    const expandedFile = join(FAKE_HOME, "dev/file.ts");
+    expect(compiled.regex.test(expandedFile)).toBe(true);
+  });
+
+  test("non-home pattern is unaffected", () => {
+    expect(wildcardMatch("/absolute/path/*", "/absolute/path/file")).toBe(true);
+    expect(wildcardMatch("/absolute/path/*", "/other/file")).toBe(false);
   });
 });
