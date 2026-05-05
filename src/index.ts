@@ -12,6 +12,7 @@ import {
   handleToolCall,
 } from "./handlers";
 import { requestPermissionDecisionFromUi } from "./permission-dialog";
+import { registerPermissionRpcHandlers } from "./permission-event-rpc";
 import { emitReadyEvent } from "./permission-events";
 import { PermissionPrompter } from "./permission-prompter";
 import {
@@ -96,6 +97,14 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
     getAllTools: () => pi.getAllTools(),
     setActiveTools: (names) => pi.setActiveTools(names),
   };
+
+  registerPermissionRpcHandlers(pi.events, {
+    getPermissionManager: () => runtime.permissionManager,
+    getSessionRules: () => runtime.sessionRules.getRuleset(),
+    getRuntimeContext: () => runtime.runtimeContext,
+    requestPermissionDecisionFromUi,
+    writeReviewLog: runtime.writeReviewLog.bind(runtime),
+  });
 
   emitReadyEvent(pi.events);
 
