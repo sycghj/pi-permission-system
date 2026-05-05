@@ -7,7 +7,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "vitest";
 
@@ -1826,6 +1826,188 @@ test("external_directory permission is not affected by unrelated surface keys", 
     const extResult = manager.checkPermission("external_directory", {});
     assert.equal(extResult.state, "allow");
     assert.equal(extResult.matchedPattern, "*");
+  } finally {
+    cleanup();
+  }
+});
+
+test("skill pattern map in agent frontmatter overrides global skill policy", () => {
+  const { manager, cleanup } = createManager(
+    {
+      permission: { "*": "deny", skill: "deny" },
+    },
+    {
+      reviewer: `---
+name: reviewer
+permission:
+  skill:
+    "*": ask
+    "pi-*": allow
+---
+`,
+    },
+  );
+
+  try {
+    // Matches agent frontmatter pi-* pattern
+    const allowed = manager.checkPermission(
+      "skill",
+      { name: "pi-code-review" },
+      "reviewer",
+    );
+    assert.equal(allowed.state, "allow");
+    assert.equal(allowed.matchedPattern, "pi-*");
+    assert.equal(allowed.source, "skill");
+
+    // Falls through to agent frontmatter catch-all
+    const asked = manager.checkPermission(
+      "skill",
+      { name: "other-skill" },
+      "reviewer",
+    );
+    assert.equal(asked.state, "ask");
+    assert.equal(asked.matchedPattern, "*");
+
+    // No agent override — global deny applies
+    const denied = manager.checkPermission("skill", { name: "pi-code-review" });
+    assert.equal(denied.state, "deny");
+    assert.equal(denied.source, "skill");
+  } finally {
+    cleanup();
+  }
+});
+
+test("external_directory pattern map in agent frontmatter overrides global policy", () => {
+  const { manager, cleanup } = createManager(
+    {
+      permission: { "*": "allow", external_directory: "deny" },
+    },
+    {
+      trusted: `---
+name: trusted
+permission:
+  external_directory:
+    "*": deny
+    "~/Downloads/*": allow
+---
+`,
+    },
+  );
+
+  try {
+    // Matches agent frontmatter ~/Downloads/* pattern
+    const allowed = manager.checkPermission(
+      "external_directory",
+      { path: `${homedir()}/Downloads/file.txt` },
+      "trusted",
+    );
+    assert.equal(allowed.state, "allow");
+    assert.equal(allowed.matchedPattern, "~/Downloads/*");
+    assert.equal(allowed.source, "special");
+
+    // Falls through to agent frontmatter catch-all deny
+    const denied = manager.checkPermission(
+      "external_directory",
+      { path: `${homedir()}/Documents/secret.txt` },
+      "trusted",
+    );
+    assert.equal(denied.state, "deny");
+    assert.equal(denied.matchedPattern, "*");
+
+    // No agent override — global deny applies
+    const globalDenied = manager.checkPermission("external_directory", {});
+    assert.equal(globalDenied.state, "deny");
+    assert.equal(globalDenied.source, "special");
+  } finally {
+    cleanup();
+  }
+});
+
+test("project-agent frontmatter skill rules override global-agent frontmatter skill rules", () => {
+  const { manager, cleanup } = createManagerWithProject(
+    {
+      permission: { "*": "deny" },
+    },
+    {
+      analyst: `---
+name: analyst
+permission:
+  skill:
+    "*": ask
+---
+`,
+    },
+    {
+      projectAgentFiles: {
+        analyst: `---
+name: analyst
+permission:
+  skill:
+    "pi-*": allow
+    "*": deny
+---
+`,
+      },
+    },
+  );
+
+  try {
+    // Project-agent pi-* wins over global-agent *: ask
+    const allowed = manager.checkPermission(
+      "skill",
+      { name: "pi-code-review" },
+      "analyst",
+    );
+    assert.equal(allowed.state, "allow");
+    assert.equal(allowed.matchedPattern, "pi-*");
+
+    // Project-agent *: deny wins over global-agent *: ask
+    const denied = manager.checkPermission(
+      "skill",
+      { name: "other-skill" },
+      "analyst",
+    );
+    assert.equal(denied.state, "deny");
+    assert.equal(denied.matchedPattern, "*");
+  } finally {
+    cleanup();
+  }
+});
+
+test("project-agent frontmatter external_directory rules override global-agent frontmatter rules", () => {
+  const { manager, cleanup } = createManagerWithProject(
+    {
+      permission: { "*": "allow", external_directory: "deny" },
+    },
+    {
+      analyst: `---
+name: analyst
+permission:
+  external_directory: ask
+---
+`,
+    },
+    {
+      projectAgentFiles: {
+        analyst: `---
+name: analyst
+permission:
+  external_directory: allow
+---
+`,
+      },
+    },
+  );
+
+  try {
+    // Project-agent allow wins over global-agent ask
+    const result = manager.checkPermission("external_directory", {}, "analyst");
+    assert.equal(result.state, "allow");
+    assert.equal(result.source, "special");
+
+    // Without agent context, global config deny applies
+    const globalResult = manager.checkPermission("external_directory", {});
+    assert.equal(globalResult.state, "deny");
   } finally {
     cleanup();
   }
