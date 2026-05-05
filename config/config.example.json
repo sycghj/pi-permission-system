@@ -17,6 +17,9 @@
     },
     "mcp": { "*": "ask", "mcp_status": "allow", "mcp_list": "allow" },
     "skill": { "*": "ask" },
-    "external_directory": "ask"
+    "external_directory": {
+      "*": "ask",
+      "~/development/*": "allow"
+    }
   }
 }

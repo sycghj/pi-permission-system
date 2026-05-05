@@ -88,10 +88,10 @@
     },
     "permissionMap": {
       "description": "A map of wildcard patterns to permission states. Last matching pattern wins.",
-      "markdownDescription": "A map of wildcard patterns to permission states.\n\nUse `*` for wildcard matching. When multiple patterns match, the **last matching rule wins** — put broad catch-alls first and specific overrides after them.",
+      "markdownDescription": "A map of wildcard patterns to permission states.\n\nUse `*` for wildcard matching. When multiple patterns match, the **last matching rule wins** — put broad catch-alls first and specific overrides after them.\n\nPattern keys support home directory expansion:\n- `~/path` or `$HOME/path` — expanded to the OS home directory at match time.\n- `~` or `$HOME` alone — expands to the home directory itself.\n\nThe stored pattern is always shown in logs and approval dialogs as written (e.g. `~/dev/*`).",
       "type": "object",
       "propertyNames": {
-        "description": "A non-empty pattern string. Use * for wildcard matching.",
+        "description": "A non-empty pattern string. Use * for wildcard matching. Prefix with ~/ or $HOME/ for home-relative paths.",
         "type": "string",
         "minLength": 1
       },

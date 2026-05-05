@@ -156,7 +156,7 @@ The `permission` object maps surface names to actions:
 | `bash` | string or object | Bash catch-all or `{ pattern: action }` map |
 | `mcp` | string or object | MCP catch-all or `{ pattern: action }` map |
 | `skill` | string or object | Skill catch-all or `{ pattern: action }` map |
-| `external_directory` | string | Controls access to paths outside `cwd` |
+| `external_directory` | string or object | Controls access to paths outside `cwd`; supports `~/` and `$HOME/` patterns |
 
 > **Note:** Trailing commas are **not** supported. If parsing fails, the extension falls back to `ask` for all categories.
 
@@ -330,14 +330,36 @@ Skill name patterns use `*` wildcards (note: surface is `skill`, not `skills`):
 }
 ```
 
-### `external_directory` surface
+### Home directory expansion in patterns
 
-Controls access to paths outside the active working directory:
+Pattern keys in any permission surface can start with `~/` or `$HOME/` (or be exactly `~` / `$HOME`).
+They are expanded to the OS home directory at match time, so configs are portable across machines and users.
 
 ```jsonc
 {
   "permission": {
-    "external_directory": "ask"
+    "external_directory": {
+      "*": "ask",
+      "~/development/*": "allow"
+    }
+  }
+}
+```
+
+The pattern is stored and displayed as written (e.g. `~/development/*`) in logs and approval dialogs.
+
+### `external_directory` surface
+
+Controls access to paths outside the active working directory.
+Use a pattern map to allow specific directories without opening all external access:
+
+```jsonc
+{
+  "permission": {
+    "external_directory": {
+      "*": "ask",
+      "~/development/*": "allow"
+    }
   }
 }
 ```
