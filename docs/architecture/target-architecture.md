@@ -396,6 +396,46 @@ The only surface-specific logic is input normalization (what `surface` and `valu
 ✅ **`checkPermission()` uses a single evaluate path** (#81).
 The ~200-line if/else if chain is replaced by: `normalizeInput()` → `evaluateFirst()` → `deriveSource()` → single result object.
 
+## Subagent detection and permission forwarding
+
+When `ask`-state permissions arise in a headless subagent child process, the extension forwards the dialog to the parent session rather than silently denying.
+This requires two detections:
+
+1. **Is the current process a subagent?** — `isSubagentExecutionContext()` in `src/subagent-context.ts`.
+2. **What is the parent session ID?** — `resolvePermissionForwardingTargetSessionId()` in `src/permission-forwarding.ts`.
+
+### Known extension env var inventory
+
+|Extension|Child-process env vars|Parent-session env var|
+|---|---|---|
+|pi-agent-router (original)|`PI_IS_SUBAGENT`, `PI_SUBAGENT_SESSION_ID`, `PI_AGENT_ROUTER_SUBAGENT`|`PI_AGENT_ROUTER_PARENT_SESSION_ID`|
+|[nicobailon/pi-subagents](https://github.com/nicobailon/pi-subagents)|`PI_SUBAGENT_CHILD`, `PI_SUBAGENT_RUN_ID`, `PI_SUBAGENT_CHILD_AGENT`, `PI_SUBAGENT_DEPTH`|none set (see #98)|
+|[tintinweb/pi-subagents](https://github.com/tintinweb/pi-subagents)|none — runs fully in-process via `createAgentSession()`|n/a — deferred to #29|
+|[HazAT/pi-interactive-subagents](https://github.com/HazAT/pi-interactive-subagents)|`PI_SUBAGENT_NAME`, `PI_SUBAGENT_ID`, `PI_SUBAGENT_SESSION`, `PI_SUBAGENT_ACTIVITY_FILE`|none set (see #98)|
+
+### Detection (`SUBAGENT_ENV_HINT_KEYS`)
+
+✅ Broadened in #96 to cover nicobailon and HazAT env vars.
+
+`isSubagentExecutionContext()` returns `true` when any key in `SUBAGENT_ENV_HINT_KEYS` is set to a non-empty, non-whitespace value.
+A session-directory path-based fallback (child session dir is nested under `subagentSessionsDir`) acts as a secondary guard.
+
+### Parent-session resolution (`SUBAGENT_PARENT_SESSION_ENV_CANDIDATES`)
+
+✅ Introduced in #96 as an ordered array.
+
+`resolvePermissionForwardingTargetSessionId()` iterates `SUBAGENT_PARENT_SESSION_ENV_CANDIDATES` and returns the first non-empty, non-`"unknown"` value.
+Currently only `PI_AGENT_ROUTER_PARENT_SESSION_ID` is in the list.
+Neither nicobailon nor HazAT sets a parent-session env var today, so forwarding still fails for those extensions with an explicit log message pointing to #98.
+Adding a new env var candidate when an extension adopts the convention is a one-line change to the array.
+
+### Deferred: tintinweb in-process case
+
+tintinweb/pi-subagents calls `createAgentSession()` directly — no child process is spawned and no env vars are ever set.
+Env-var detection cannot help here.
+The solution requires an event bus RPC so the child can surface permission requests to the parent within the same process.
+Tracked in #29.
+
 ## Module structure (target)
 
 Modules marked ✅ exist today.
