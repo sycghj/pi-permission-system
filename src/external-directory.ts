@@ -1,8 +1,37 @@
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
-import { join, normalize, resolve, sep } from "node:path";
+import { basename, dirname, join, normalize, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { getNonEmptyString, toRecord } from "./common";
+
+/**
+ * Discover the global node_modules root by walking up from the given file URL
+ * (defaults to this module's own `import.meta.url`).
+ *
+ * Works regardless of package manager (npm, pnpm, bun, Homebrew) because the
+ * extension itself is installed inside the directory we want to find.
+ * Returns `null` when the file is not inside any node_modules tree, or when
+ * the URL cannot be parsed — callers must degrade gracefully.
+ */
+export function discoverGlobalNodeModulesRoot(
+  fromUrl = import.meta.url,
+): string | null {
+  try {
+    const thisFile = fileURLToPath(fromUrl);
+    let dir = dirname(thisFile);
+    // Walk up until we find a directory named "node_modules" or hit the root.
+    while (dir !== dirname(dir)) {
+      if (basename(dir) === "node_modules") {
+        return dir;
+      }
+      dir = dirname(dir);
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Paths that are universally safe and should never trigger external-directory checks.
