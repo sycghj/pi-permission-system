@@ -8,6 +8,7 @@ interface InputPayload {
   text: string;
 }
 
+import { emitDecisionEvent } from "../permission-events";
 import { applyPermissionGate } from "../permission-gate";
 import { formatSkillAskPrompt } from "../permission-prompts";
 import type { HandlerDeps } from "./types";
@@ -65,9 +66,10 @@ export async function handleInput(
     skillName,
     agentName ?? undefined,
   );
+  const skillInputCanConfirm = deps.canRequestPermissionConfirmation(ctx);
   const skillInputGate = await applyPermissionGate({
     state: check.state,
-    canConfirm: deps.canRequestPermissionConfirmation(ctx),
+    canConfirm: skillInputCanConfirm,
     promptForApproval: () =>
       deps.promptPermission(ctx, {
         requestId: deps.createPermissionRequestId("skill-input"),
@@ -89,6 +91,25 @@ export async function handleInput(
         "Skill requires approval, but no interactive UI is available.",
       userDeniedReason: () => "User denied skill.",
     },
+  });
+
+  emitDecisionEvent(deps.events, {
+    surface: "skill",
+    value: skillName,
+    result: skillInputGate.action === "allow" ? "allow" : "deny",
+    resolution:
+      check.state === "allow"
+        ? "policy_allow"
+        : check.state === "deny"
+          ? "policy_deny"
+          : skillInputGate.action === "allow"
+            ? "user_approved"
+            : skillInputCanConfirm
+              ? "user_denied"
+              : "confirmation_unavailable",
+    origin: check.origin ?? null,
+    agentName: agentName ?? null,
+    matchedPattern: check.matchedPattern ?? null,
   });
 
   if (skillInputGate.action === "block") {
