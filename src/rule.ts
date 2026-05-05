@@ -1,8 +1,22 @@
 import type { PermissionState } from "./types";
 import { wildcardMatch } from "./wildcard-matcher";
 
-/** Which config scope contributed a rule. Only set for layer="config". */
-export type RuleOrigin = "global" | "project" | "agent" | "project-agent";
+/**
+ * Provenance of a rule — which source contributed it.
+ *
+ * Config scopes: "global", "project", "agent", "project-agent".
+ * Synthesized:   "builtin" (universal default / evaluate() fallback),
+ *                "baseline" (conditional MCP metadata auto-allow).
+ * Runtime:       "session" (session approvals).
+ */
+export type RuleOrigin =
+  | "global"
+  | "project"
+  | "agent"
+  | "project-agent"
+  | "builtin"
+  | "baseline"
+  | "session";
 
 /** A single permission rule — the atomic unit of policy. */
 export interface Rule {
@@ -17,11 +31,8 @@ export interface Rule {
    * Not used by evaluate(); purely informational metadata.
    */
   layer?: "default" | "baseline" | "config" | "session";
-  /**
-   * Which config scope contributed this rule.
-   * Only set for layer="config" rules; absent on default, baseline, and session rules.
-   */
-  origin?: RuleOrigin;
+  /** Which source contributed this rule. */
+  origin: RuleOrigin;
 }
 
 /** An ordered list of rules. Later rules take priority (last-match-wins). */
@@ -47,7 +58,12 @@ export function evaluate(
       wildcardMatch(r.surface, surface) && wildcardMatch(r.pattern, pattern),
   );
   if (rule !== undefined) return rule;
-  return { surface, pattern, action: defaultAction ?? "ask" };
+  return {
+    surface,
+    pattern,
+    action: defaultAction ?? "ask",
+    origin: "builtin",
+  };
 }
 
 /**

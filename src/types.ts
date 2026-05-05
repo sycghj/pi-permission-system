@@ -40,6 +40,6 @@ export interface PermissionCheckResult {
   command?: string;
   target?: string;
   source: "tool" | "bash" | "mcp" | "skill" | "special" | "default" | "session";
-  /** Which config scope contributed the winning rule. Only set for config-layer rules. */
-  origin?: RuleOrigin;
+  /** Which source contributed the winning rule. */
+  origin: RuleOrigin;
 }

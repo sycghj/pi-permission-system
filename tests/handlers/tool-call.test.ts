@@ -52,7 +52,7 @@ function makeToolCallEvent(
 function makePermissionResult(
   state: "allow" | "deny" | "ask",
 ): PermissionCheckResult {
-  return { state, toolName: "read", source: "tool" };
+  return { state, toolName: "read", source: "tool", origin: "builtin" };
 }
 
 function makeRuntime(
@@ -761,6 +761,7 @@ describe("handleToolCall — session recording on approved_for_session", () => {
             state: "ask",
             toolName: "read",
             source: "tool",
+            origin: "builtin",
           }),
         } as unknown as ExtensionRuntime["permissionManager"],
         sessionRules,

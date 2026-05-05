@@ -10,7 +10,7 @@ import {
 // ── synthesizeDefaults ─────────────────────────────────────────────────────
 
 describe("synthesizeDefaults", () => {
-  test("emits a single universal catch-all rule with layer 'default'", () => {
+  test("emits a single universal catch-all rule with layer 'default' and origin 'builtin'", () => {
     const rules = synthesizeDefaults("ask");
     expect(rules).toHaveLength(1);
     expect(rules[0]).toEqual({
@@ -18,6 +18,7 @@ describe("synthesizeDefaults", () => {
       pattern: "*",
       action: "ask",
       layer: "default",
+      origin: "builtin",
     });
   });
 
@@ -40,12 +41,12 @@ describe("synthesizeDefaults", () => {
     expect(evaluate("read", "*", rules).layer).toBe("default");
   });
 
-  test("universal rule has no origin when origin not supplied", () => {
+  test("defaults to origin 'builtin' when no origin supplied", () => {
     const rules = synthesizeDefaults("ask");
-    expect(rules[0].origin).toBeUndefined();
+    expect(rules[0].origin).toBe("builtin");
   });
 
-  test("universal rule carries origin when origin is supplied", () => {
+  test("universal rule carries config scope origin when supplied", () => {
     const origin: RuleOrigin = "global";
     const rules = synthesizeDefaults("ask", origin);
     expect(rules[0].origin).toBe("global");
@@ -57,12 +58,15 @@ describe("synthesizeDefaults", () => {
     expect(result.origin).toBe("project");
   });
 
-  test("all four RuleOrigin values are accepted", () => {
+  test("all RuleOrigin values are accepted", () => {
     const origins: RuleOrigin[] = [
       "global",
       "project",
       "agent",
       "project-agent",
+      "builtin",
+      "baseline",
+      "session",
     ];
     for (const origin of origins) {
       const rules = synthesizeDefaults("ask", origin);
@@ -81,6 +85,7 @@ describe("synthesizeBaseline", () => {
         pattern: "*",
         action: "deny" as const,
         layer: "config" as const,
+        origin: "global" as const,
       },
     ];
     expect(synthesizeBaseline(configRules)).toEqual([]);
@@ -97,19 +102,21 @@ describe("synthesizeBaseline", () => {
         pattern: "exa:*",
         action: "allow" as const,
         layer: "config" as const,
+        origin: "global" as const,
       },
     ];
     const rules = synthesizeBaseline(configRules);
     expect(rules).toHaveLength(5);
   });
 
-  test("baseline rules all have layer 'baseline' and action 'allow'", () => {
+  test("baseline rules all have layer 'baseline', action 'allow', and origin 'baseline'", () => {
     const configRules = [
       {
         surface: "mcp",
         pattern: "exa:*",
         action: "allow" as const,
         layer: "config" as const,
+        origin: "global" as const,
       },
     ];
     const rules = synthesizeBaseline(configRules);
@@ -117,6 +124,7 @@ describe("synthesizeBaseline", () => {
       expect(rule.layer).toBe("baseline");
       expect(rule.action).toBe("allow");
       expect(rule.surface).toBe("mcp");
+      expect(rule.origin).toBe("baseline");
     }
   });
 
@@ -127,6 +135,7 @@ describe("synthesizeBaseline", () => {
         pattern: "exa:*",
         action: "allow" as const,
         layer: "config" as const,
+        origin: "global" as const,
       },
     ];
     const rules = synthesizeBaseline(configRules);
@@ -145,6 +154,7 @@ describe("synthesizeBaseline", () => {
         pattern: "git *",
         action: "allow" as const,
         layer: "config" as const,
+        origin: "global" as const,
       },
     ];
     expect(synthesizeBaseline(configRules)).toEqual([]);
@@ -157,12 +167,14 @@ describe("synthesizeBaseline", () => {
         pattern: "exa:*",
         action: "allow" as const,
         layer: "config" as const,
+        origin: "global" as const,
       },
     ];
     const rules = synthesizeBaseline(configRules);
     const result = evaluate("mcp", "mcp_status", rules);
     expect(result.action).toBe("allow");
     expect(result.layer).toBe("baseline");
+    expect(result.origin).toBe("baseline");
   });
 });
 
@@ -172,10 +184,21 @@ describe("composeRuleset", () => {
   test("returns concatenation of all layers in order", () => {
     const defaults = synthesizeDefaults("ask");
     const baseline = synthesizeBaseline([
-      { surface: "mcp", pattern: "exa:*", action: "allow", layer: "config" },
+      {
+        surface: "mcp",
+        pattern: "exa:*",
+        action: "allow",
+        layer: "config",
+        origin: "global" as const,
+      },
     ]);
     const config = [
-      { surface: "bash", pattern: "rm -rf *", action: "deny" as const },
+      {
+        surface: "bash",
+        pattern: "rm -rf *",
+        action: "deny" as const,
+        origin: "global" as const,
+      },
     ];
     const composed = composeRuleset(defaults, baseline, config);
     expect(composed.length).toBe(
@@ -191,6 +214,7 @@ describe("composeRuleset", () => {
         pattern: "*",
         action: "deny" as const,
         layer: "config" as const,
+        origin: "global" as const,
       },
     ];
     const composed = composeRuleset(defaults, [], config);
@@ -207,6 +231,7 @@ describe("composeRuleset", () => {
         pattern: "*",
         action: "allow" as const,
         layer: "config" as const,
+        origin: "global" as const,
       },
     ];
     const composed = composeRuleset(defaults, [], config);
@@ -223,6 +248,7 @@ describe("composeRuleset", () => {
         pattern: "mcp_status",
         action: "allow" as const,
         layer: "baseline" as const,
+        origin: "baseline" as const,
       },
     ];
     const config = [
@@ -231,6 +257,7 @@ describe("composeRuleset", () => {
         pattern: "mcp_status",
         action: "deny" as const,
         layer: "config" as const,
+        origin: "global" as const,
       },
     ];
     const composed = composeRuleset(defaults, baseline, config);
@@ -247,6 +274,7 @@ describe("composeRuleset", () => {
         pattern: "mcp_status",
         action: "allow" as const,
         layer: "baseline" as const,
+        origin: "baseline" as const,
       },
     ];
     const config = [
@@ -255,6 +283,7 @@ describe("composeRuleset", () => {
         pattern: "exa_web_search",
         action: "allow" as const,
         layer: "config" as const,
+        origin: "global" as const,
       },
     ];
     const composed = composeRuleset(defaults, baseline, config);

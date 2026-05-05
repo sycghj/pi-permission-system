@@ -2477,6 +2477,7 @@ test("checkPermission returns source 'session' when session rules cover the exte
         pattern: "/other/project/*",
         action: "allow" as const,
         layer: "session" as const,
+        origin: "session" as const,
       },
     ];
 
@@ -2506,6 +2507,7 @@ test("checkPermission falls back to config policy when session rules do not cove
         pattern: "/other/project/*",
         action: "allow" as const,
         layer: "session" as const,
+        origin: "session" as const,
       },
     ];
 
@@ -2565,6 +2567,7 @@ test("session rules for one surface do not affect checks on other surfaces", () 
         pattern: "/other/project/*",
         action: "allow" as const,
         layer: "session" as const,
+        origin: "session" as const,
       },
     ];
 
@@ -2604,6 +2607,7 @@ test("session rules override config deny for external_directory", () => {
         pattern: "/other/project/*",
         action: "allow" as const,
         layer: "session" as const,
+        origin: "session" as const,
       },
     ];
 
@@ -2633,6 +2637,7 @@ test("checkPermission returns source 'session' for bash when session rules match
         pattern: "git *",
         action: "allow" as const,
         layer: "session" as const,
+        origin: "session" as const,
       },
     ];
 
@@ -2660,6 +2665,7 @@ test("checkPermission returns source 'session' for bash when session rule is exa
         pattern: "ls",
         action: "allow" as const,
         layer: "session" as const,
+        origin: "session" as const,
       },
     ];
 
@@ -2686,6 +2692,7 @@ test("checkPermission falls back to config for bash when session rules do not ma
         pattern: "git *",
         action: "allow" as const,
         layer: "session" as const,
+        origin: "session" as const,
       },
     ];
 
@@ -2712,6 +2719,7 @@ test("checkPermission returns source 'session' for mcp when session rules match 
         pattern: "exa:*",
         action: "allow" as const,
         layer: "session" as const,
+        origin: "session" as const,
       },
     ];
 
@@ -2738,6 +2746,7 @@ test("checkPermission returns source 'session' for skill when session rules matc
         pattern: "librarian",
         action: "allow" as const,
         layer: "session" as const,
+        origin: "session" as const,
       },
     ];
 
@@ -2765,6 +2774,7 @@ test("checkPermission returns source 'session' for tool surface when session rul
         pattern: "*",
         action: "allow" as const,
         layer: "session" as const,
+        origin: "session" as const,
       },
     ];
 
@@ -2786,6 +2796,7 @@ test("bash session rules do not bleed into mcp checks", () => {
         pattern: "git *",
         action: "allow" as const,
         layer: "session" as const,
+        origin: "session" as const,
       },
     ];
 

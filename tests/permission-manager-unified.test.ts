@@ -55,6 +55,7 @@ const sessionAllow = (surface: string, pattern: string): Rule => ({
   pattern,
   action: "allow",
   layer: "session",
+  origin: "session",
 });
 
 // ---------------------------------------------------------------------------
@@ -601,23 +602,29 @@ describe("checkPermission — rule origin provenance", () => {
     }
   });
 
-  it("no config match: origin is undefined (default layer)", () => {
+  it("no config match: origin is 'builtin' (default layer)", () => {
     // No config — falls back to synthesized default.
     const manager = makeManager();
     const result = manager.checkPermission("read", {});
     expect(result.state).toBe("ask");
-    expect(result.origin).toBeUndefined();
+    expect(result.origin).toBe("builtin");
   });
 
-  it("session rule: origin is undefined", () => {
+  it("session rule: origin is 'session'", () => {
     const manager = makeManager();
     const sessionRules: Ruleset = [
-      { surface: "read", pattern: "*", action: "allow", layer: "session" },
+      {
+        surface: "read",
+        pattern: "*",
+        action: "allow",
+        layer: "session",
+        origin: "session",
+      },
     ];
     const result = manager.checkPermission("read", {}, undefined, sessionRules);
     expect(result.state).toBe("allow");
     expect(result.source).toBe("session");
-    expect(result.origin).toBeUndefined();
+    expect(result.origin).toBe("session");
   });
 
   it("universal fallback (*) set in global config carries origin 'global'", () => {
@@ -646,11 +653,11 @@ describe("checkPermission — rule origin provenance", () => {
     }
   });
 
-  it("built-in fallback (no * in any config): origin is undefined", () => {
-    // Manager with no config file — built-in "ask" default, no user origin.
+  it("built-in fallback (no * in any config): origin is 'builtin'", () => {
+    // Manager with no config file — built-in "ask" default.
     const manager = makeManager();
     const result = manager.checkPermission("read", {});
     expect(result.state).toBe("ask");
-    expect(result.origin).toBeUndefined();
+    expect(result.origin).toBe("builtin");
   });
 });

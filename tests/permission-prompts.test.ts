@@ -34,7 +34,13 @@ function toolResult(
   toolName: string,
   overrides: Partial<PermissionCheckResult> = {},
 ): PermissionCheckResult {
-  return { toolName, state: "ask", source: "tool", ...overrides };
+  return {
+    toolName,
+    state: "ask",
+    source: "tool",
+    origin: "builtin",
+    ...overrides,
+  };
 }
 
 function mcpResult(
@@ -46,6 +52,7 @@ function mcpResult(
     target,
     state: "ask",
     source: "tool",
+    origin: "builtin",
     ...overrides,
   };
 }

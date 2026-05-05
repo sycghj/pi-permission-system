@@ -13,18 +13,17 @@ import type { PermissionState } from "./types";
  */
 export function synthesizeDefaults(
   universalDefault: PermissionState,
-  origin?: RuleOrigin,
+  origin: RuleOrigin = "builtin",
 ): Ruleset {
-  const rule: Rule = {
-    surface: "*",
-    pattern: "*",
-    action: universalDefault,
-    layer: "default",
-  };
-  if (origin !== undefined) {
-    rule.origin = origin;
-  }
-  return [rule];
+  return [
+    {
+      surface: "*",
+      pattern: "*",
+      action: universalDefault,
+      layer: "default",
+      origin,
+    },
+  ];
 }
 
 /**
@@ -68,6 +67,7 @@ export function synthesizeBaseline(configRules: Ruleset): Ruleset {
       pattern: target,
       action: "allow",
       layer: "baseline",
+      origin: "baseline",
     }),
   );
 }

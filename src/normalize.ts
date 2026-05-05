@@ -18,12 +18,12 @@ export function normalizeFlatConfig(permission: FlatPermissionConfig): Ruleset {
   for (const [surface, value] of Object.entries(permission)) {
     if (typeof value === "string") {
       if (isPermissionState(value)) {
-        rules.push({ surface, pattern: "*", action: value });
+        rules.push({ surface, pattern: "*", action: value, origin: "builtin" });
       }
     } else if (typeof value === "object" && value !== null) {
       for (const [pattern, action] of Object.entries(value)) {
         if (isPermissionState(action)) {
-          rules.push({ surface, pattern, action });
+          rules.push({ surface, pattern, action, origin: "builtin" });
         }
       }
     }

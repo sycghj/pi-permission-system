@@ -21,6 +21,7 @@ describe("SessionRules", () => {
           pattern: "/other/project/*",
           action: "allow",
           layer: "session",
+          origin: "session",
         },
       ]);
     });
@@ -29,7 +30,12 @@ describe("SessionRules", () => {
       const rules = new SessionRules();
       rules.approve("external_directory", "/other/project/*");
       const copy = rules.getRuleset();
-      copy.push({ surface: "bash", pattern: "*", action: "deny" });
+      copy.push({
+        surface: "bash",
+        pattern: "*",
+        action: "deny",
+        origin: "session",
+      });
       expect(rules.getRuleset()).toHaveLength(1);
     });
 

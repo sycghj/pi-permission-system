@@ -15,7 +15,13 @@ export class SessionRules {
 
   /** Record a wildcard pattern as approved for the given surface. */
   approve(surface: string, pattern: string): void {
-    this.rules.push({ surface, pattern, action: "allow", layer: "session" });
+    this.rules.push({
+      surface,
+      pattern,
+      action: "allow",
+      layer: "session",
+      origin: "session",
+    });
   }
 
   /** Return a defensive copy of the current session ruleset. */

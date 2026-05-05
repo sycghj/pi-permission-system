@@ -365,6 +365,7 @@ describe("getToolInputPreviewForLog", () => {
       toolName: "bash",
       state: "allow",
       source: "tool",
+      origin: "builtin",
     };
     expect(
       getToolInputPreviewForLog(result, { command: "ls" }, pathBearingTools),
@@ -376,6 +377,7 @@ describe("getToolInputPreviewForLog", () => {
       toolName: "mcp",
       state: "allow",
       source: "tool",
+      origin: "builtin",
     };
     expect(
       getToolInputPreviewForLog(result, {}, pathBearingTools),
@@ -387,6 +389,7 @@ describe("getToolInputPreviewForLog", () => {
       toolName: "some-server:some-tool",
       state: "allow",
       source: "mcp",
+      origin: "builtin",
     };
     expect(
       getToolInputPreviewForLog(result, {}, pathBearingTools),
@@ -398,6 +401,7 @@ describe("getToolInputPreviewForLog", () => {
       toolName: "read",
       state: "allow",
       source: "tool",
+      origin: "builtin",
     };
     const preview = getToolInputPreviewForLog(
       result,
@@ -413,6 +417,7 @@ describe("getToolInputPreviewForLog", () => {
       toolName: "task",
       state: "allow",
       source: "tool",
+      origin: "builtin",
     };
     const preview = getToolInputPreviewForLog(
       result,
@@ -431,6 +436,7 @@ describe("getPermissionLogContext", () => {
       toolName: "bash",
       state: "allow",
       source: "tool",
+      origin: "builtin",
       command: "ls -la",
     };
     const ctx = getPermissionLogContext(result, {}, pathBearingTools);
@@ -444,6 +450,7 @@ describe("getPermissionLogContext", () => {
       toolName: "read",
       state: "allow",
       source: "tool",
+      origin: "builtin",
     };
     const ctx = getPermissionLogContext(
       result,
@@ -464,13 +471,14 @@ describe("getPermissionLogContext", () => {
     expect(ctx.origin).toBe("project");
   });
 
-  test("origin is absent from context when check result has no origin", () => {
+  test("origin is 'builtin' when check result has builtin origin", () => {
     const result: PermissionCheckResult = {
       toolName: "read",
       state: "allow",
       source: "tool",
+      origin: "builtin",
     };
     const ctx = getPermissionLogContext(result, {}, pathBearingTools);
-    expect(ctx.origin).toBeUndefined();
+    expect(ctx.origin).toBe("builtin");
   });
 });

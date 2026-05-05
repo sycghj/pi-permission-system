@@ -7,23 +7,37 @@ describe("evaluate", () => {
     surface: "bash",
     pattern: "git *",
     action: "allow",
+    origin: "global",
   };
   const denyBashGitPush: Rule = {
     surface: "bash",
     pattern: "git push *",
     action: "deny",
+    origin: "global",
   };
-  const allowRead: Rule = { surface: "read", pattern: "*", action: "allow" };
-  const askMcp: Rule = { surface: "mcp", pattern: "*", action: "ask" };
+  const allowRead: Rule = {
+    surface: "read",
+    pattern: "*",
+    action: "allow",
+    origin: "global",
+  };
+  const askMcp: Rule = {
+    surface: "mcp",
+    pattern: "*",
+    action: "ask",
+    origin: "global",
+  };
   const allowSkillLibrarian: Rule = {
     surface: "skill",
     pattern: "librarian",
     action: "allow",
+    origin: "global",
   };
   const askSpecialExtDir: Rule = {
     surface: "special",
     pattern: "external_directory",
     action: "ask",
+    origin: "global",
   };
 
   test("returns matching rule when a rule matches", () => {
@@ -76,11 +90,17 @@ describe("evaluate", () => {
   });
 
   test("last-match-wins: broad deny followed by specific allow", () => {
-    const denyAll: Rule = { surface: "bash", pattern: "*", action: "deny" };
+    const denyAll: Rule = {
+      surface: "bash",
+      pattern: "*",
+      action: "deny",
+      origin: "global",
+    };
     const allowStatus: Rule = {
       surface: "bash",
       pattern: "git status",
       action: "allow",
+      origin: "global",
     };
     const result = evaluate("bash", "git status", [denyAll, allowStatus]);
     expect(result).toEqual(allowStatus);
@@ -91,6 +111,7 @@ describe("evaluate", () => {
       surface: "*",
       pattern: "*",
       action: "allow",
+      origin: "global",
     };
     expect(evaluate("bash", "anything", [universalAllow]).action).toBe("allow");
     expect(evaluate("mcp", "something", [universalAllow]).action).toBe("allow");
@@ -108,10 +129,10 @@ describe("evaluate", () => {
 
   test("merged rulesets: rules from later scope take priority", () => {
     const globalRules: Ruleset = [
-      { surface: "bash", pattern: "git *", action: "ask" },
+      { surface: "bash", pattern: "git *", action: "ask", origin: "global" },
     ];
     const agentRules: Ruleset = [
-      { surface: "bash", pattern: "git *", action: "allow" },
+      { surface: "bash", pattern: "git *", action: "allow", origin: "agent" },
     ];
     const merged = [...globalRules, ...agentRules];
     const result = evaluate("bash", "git status", merged);
@@ -120,10 +141,10 @@ describe("evaluate", () => {
 
   test("merged rulesets: earlier scope used when later scope has no match", () => {
     const globalRules: Ruleset = [
-      { surface: "bash", pattern: "git *", action: "allow" },
+      { surface: "bash", pattern: "git *", action: "allow", origin: "global" },
     ];
     const agentRules: Ruleset = [
-      { surface: "bash", pattern: "npm *", action: "deny" },
+      { surface: "bash", pattern: "npm *", action: "deny", origin: "agent" },
     ];
     // git status matches global but not agent rule
     const merged = [...globalRules, ...agentRules];
@@ -144,17 +165,20 @@ describe("evaluate", () => {
       pattern: "git *",
       action: "allow",
       layer: "config",
+      origin: "global",
     };
     const withoutLayer: Rule = {
       surface: "bash",
       pattern: "git *",
       action: "allow",
+      origin: "global",
     };
     const withDefault: Rule = {
       surface: "bash",
       pattern: "*",
       action: "ask",
       layer: "default",
+      origin: "builtin",
     };
     // Both rules with and without layer field produce the same match.
     expect(evaluate("bash", "git status", [withLayer]).action).toBe("allow");
@@ -182,28 +206,20 @@ describe("evaluate", () => {
     expect(result.origin).toBe("project");
   });
 
-  test("evaluate() returns undefined origin when matched rule has no origin", () => {
-    const rule: Rule = {
-      surface: "bash",
-      pattern: "git *",
-      action: "allow",
-      layer: "config",
-    };
-    const result = evaluate("bash", "git status", [rule]);
-    expect(result.origin).toBeUndefined();
-  });
-
-  test("evaluate() synthetic fallback rule has no origin", () => {
+  test("evaluate() synthetic fallback rule has origin 'builtin'", () => {
     const result = evaluate("bash", "npm install", []);
-    expect(result.origin).toBeUndefined();
+    expect(result.origin).toBe("builtin");
   });
 
-  test("RuleOrigin values are the four config scope names", () => {
+  test("RuleOrigin covers all seven provenance values", () => {
     const origins: RuleOrigin[] = [
       "global",
       "project",
       "agent",
       "project-agent",
+      "builtin",
+      "baseline",
+      "session",
     ];
     for (const origin of origins) {
       const rule: Rule = {
@@ -224,18 +240,21 @@ describe("evaluateFirst", () => {
     pattern: "*",
     action: "ask",
     layer: "default",
+    origin: "builtin",
   };
   const allowBash: Rule = {
     surface: "bash",
     pattern: "git *",
     action: "allow",
     layer: "config",
+    origin: "global",
   };
   const denyMcp: Rule = {
     surface: "mcp",
     pattern: "exa_search",
     action: "deny",
     layer: "config",
+    origin: "global",
   };
 
   test("returns the first candidate that matches a non-default rule", () => {
@@ -268,6 +287,7 @@ describe("evaluateFirst", () => {
       pattern: "mcp",
       action: "allow",
       layer: "config",
+      origin: "global",
     };
     const rules: Ruleset = [defaultRule, denyMcp, allowMcpCatchAll];
     const result = evaluateFirst("mcp", ["exa_search", "mcp"], rules);

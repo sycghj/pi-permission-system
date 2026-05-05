@@ -23,7 +23,7 @@ function makeManager(
       (_surface: string, input: { name?: string }): PermissionCheckResult => {
         const name = input.name ?? "";
         const state = overrides[name] ?? defaultState;
-        return { toolName: "skill", state, source: "tool" };
+        return { toolName: "skill", state, source: "tool", origin: "builtin" };
       },
     ),
   } as unknown as PermissionManager;
