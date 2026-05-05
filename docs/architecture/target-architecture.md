@@ -20,6 +20,9 @@ This document describes the target internal design for the permission system, in
 ✅ Implemented in `src/rule.ts` (#55, #56).
 
 ```typescript
+/** Which config scope contributed a rule. Only set for layer="config". */
+type RuleOrigin = "global" | "project" | "agent" | "project-agent";
+
 interface Rule {
   /** The permission surface: "bash", "edit", "mcp", "skill", "external_directory", etc. */
   surface: string;
@@ -28,10 +31,17 @@ interface Rule {
   /** The decision. */
   action: PermissionState;
   /**
-   * Origin layer - used to derive PermissionCheckResult.source after evaluation.
+   * Origin layer — used to derive PermissionCheckResult.source after evaluation.
    * Not used by evaluate(); purely informational metadata.
    */
-  layer?: "default" | "override" | "baseline" | "config" | "session";
+  layer?: "default" | "baseline" | "config" | "session";
+  /**
+   * Which config scope contributed this rule.
+   * Only set for layer="config" rules; absent on default, baseline, and session rules.
+   * When the universal fallback (permission["*"]) was set by a user config,
+   * the synthesized default rule also carries an origin.
+   */
+  origin?: RuleOrigin;
 }
 ```
 
@@ -88,12 +98,18 @@ Index position determines priority (higher index wins):
   │    { surface: "mcp", pattern: "mcp_connect",  action: "allow" } │
   │                                                                 │
   │  Index B+1..C: Config rules (global → project → agent,         │
-  │                              layer: "config")                   │
-  │    { surface: "bash",    pattern: "*",      action: "allow" }   │
-  │    { surface: "bash",    pattern: "git *",  action: "allow" }   │
-  │    { surface: "bash",    pattern: "rm *",   action: "deny"  }   │
-  │    { surface: "read",    pattern: "*",      action: "allow" }   │
-  │    { surface: "mcp",     pattern: "exa:*",  action: "allow" }   │
+  │                   layer: "config", origin: "global"|"project"   │
+  │                   |"agent"|"project-agent")                     │
+  │    { surface: "bash",  pattern: "*",     action: "allow",       │
+  │      origin: "global" }                                         │
+  │    { surface: "bash",  pattern: "git *", action: "allow",       │
+  │      origin: "global" }                                         │
+  │    { surface: "bash",  pattern: "rm *",  action: "deny",        │
+  │      origin: "project" }                                        │
+  │    { surface: "read",  pattern: "*",     action: "allow",       │
+  │      origin: "global" }                                         │
+  │    { surface: "mcp",   pattern: "exa:*", action: "allow",       │
+  │      origin: "agent" }                                          │
   │                                                                 │
   │  Index C+1..end: Session rules (layer: "session", highest)      │
   │    { surface: "external_directory", pattern: "/other/*",        │
@@ -108,7 +124,7 @@ Index position determines priority (higher index wins):
 ✅ **Synthesis and composition are implemented** in `src/synthesize.ts` (#65, #66).
 
 `synthesizeDefaults()` produces a single universal catch-all from `permission["*"]`.
-Per-surface catch-alls (e.g. `bash: { "*": "allow" }`) are expressed as regular config rules via `normalizeFlatConfig()` - no separate override layer is needed.
+Per-surface catch-alls (e.g. `bash: { "*": "allow" }`) are expressed as regular config rules via `normalizeFlatConfig()` — no separate override layer is needed.
 
 `synthesizeBaseline()` conditionally emits MCP metadata auto-allow rules.
 
