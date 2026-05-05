@@ -9,6 +9,7 @@ import {
   DEFAULT_EXTENSION_CONFIG,
   type PermissionSystemExtensionConfig,
 } from "./extension-config";
+import type { Ruleset } from "./rule";
 
 interface PermissionSystemConfigController {
   getConfig(): PermissionSystemExtensionConfig;
@@ -17,6 +18,8 @@ interface PermissionSystemConfigController {
     ctx: ExtensionCommandContext,
   ): void;
   getConfigPath(): string;
+  /** Optional: returns the composed config-layer ruleset for origin display. */
+  getComposedRules?(): Ruleset;
 }
 
 const ON_OFF = ["on", "off"];
@@ -57,12 +60,30 @@ function toOnOff(value: boolean): string {
   return value ? "on" : "off";
 }
 
-function summarizeConfig(config: PermissionSystemExtensionConfig): string {
-  return [
+function formatRulesSummary(rules: Ruleset): string {
+  const configRules = rules.filter((r) => r.layer === "config" && r.origin);
+  if (configRules.length === 0) return "";
+  const formatted = configRules
+    .map((r) => {
+      const key =
+        r.pattern === "*" ? r.surface : `${r.surface}["${r.pattern}"]`;
+      return `${key}=${r.action} (${r.origin})`;
+    })
+    .join(", ");
+  return `\n  rules: ${formatted}`;
+}
+
+function summarizeConfig(
+  config: PermissionSystemExtensionConfig,
+  rules?: Ruleset,
+): string {
+  const knobs = [
     `yoloMode=${toOnOff(config.yoloMode)}`,
     `permissionReviewLog=${toOnOff(config.permissionReviewLog)}`,
     `debugLog=${toOnOff(config.debugLog)}`,
   ].join(", ");
+  const rulesSuffix = rules ? formatRulesSummary(rules) : "";
+  return `${knobs}${rulesSuffix}`;
 }
 
 function buildSettingItems(
@@ -183,8 +204,9 @@ function handleArgs(
   }
 
   if (normalized === "show") {
+    const rules = controller.getComposedRules?.();
     ctx.ui.notify(
-      `permission-system: ${summarizeConfig(controller.getConfig())}`,
+      `permission-system: ${summarizeConfig(controller.getConfig(), rules)}`,
       "info",
     );
     return true;

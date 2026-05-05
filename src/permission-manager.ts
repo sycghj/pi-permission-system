@@ -462,6 +462,17 @@ export class PermissionManager {
   }
 
   /**
+   * Return the composed config-layer rules for the given agent scope.
+   * Used by the `/permission-system show` command to display effective rules
+   * with their origin annotations.
+   * Session rules are not included — they are runtime-only.
+   */
+  getComposedConfigRules(agentName?: string): Ruleset {
+    const { composedRules } = this.resolvePermissions(agentName);
+    return composedRules.filter((r) => r.layer === "config");
+  }
+
+  /**
    * Get the tool-level permission state for a tool, without considering
    * command-level rules. Used for tool injection decisions.
    */

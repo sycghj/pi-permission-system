@@ -58,6 +58,10 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
     getConfig: () => runtime.config,
     setConfig: (next, ctx) => saveExtensionConfig(runtime, next, ctx),
     getConfigPath: () => getGlobalConfigPath(runtime.agentDir),
+    getComposedRules: () =>
+      runtime.permissionManager.getComposedConfigRules(
+        runtime.lastKnownActiveAgentName ?? undefined,
+      ),
   });
 
   const createPermissionRequestId = (prefix: string): string =>

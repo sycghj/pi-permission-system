@@ -10,6 +10,7 @@ import {
   type PermissionSystemExtensionConfig,
   savePermissionSystemConfig,
 } from "../src/extension-config";
+import type { Rule } from "../src/rule";
 
 vi.mock("@mariozechner/pi-coding-agent", () => ({
   getSettingsListTheme: () => ({}),
@@ -233,4 +234,86 @@ test("permission-system command handlers manage config summary, persistence, and
   } finally {
     rmSync(baseDir, { recursive: true, force: true });
   }
+});
+
+test("show output includes rule origins when getComposedRules is provided", async () => {
+  const config = { ...DEFAULT_EXTENSION_CONFIG };
+  const composedRules: Rule[] = [
+    {
+      surface: "read",
+      pattern: "*",
+      action: "allow",
+      layer: "config",
+      origin: "global",
+    },
+    {
+      surface: "bash",
+      pattern: "rm *",
+      action: "deny",
+      layer: "config",
+      origin: "project",
+    },
+  ];
+
+  const controller = {
+    getConfig: () => config,
+    setConfig: () => {},
+    getConfigPath: () => "/fake/config.json",
+    getComposedRules: () => composedRules,
+  };
+
+  let definition: {
+    handler: (args: string, ctx: CommandContextStub) => Promise<void>;
+  } | null = null;
+
+  registerPermissionSystemCommand(
+    {
+      registerCommand(_name: string, nextDef: typeof definition) {
+        definition = nextDef;
+      },
+    } as never,
+    controller as never,
+  );
+
+  const ctx = createCommandContext(true);
+  await definition!.handler("show", ctx.ctx);
+  const msg = lastNotification(ctx.notifications).message;
+
+  assert.ok(msg.includes("global"), `expected 'global' in: ${msg}`);
+  assert.ok(msg.includes("project"), `expected 'project' in: ${msg}`);
+  assert.ok(msg.includes("read"), `expected 'read' in: ${msg}`);
+  assert.ok(msg.includes("bash"), `expected 'bash' in: ${msg}`);
+});
+
+test("show output omits rule summary when getComposedRules is not provided", async () => {
+  const config = { ...DEFAULT_EXTENSION_CONFIG, yoloMode: true };
+
+  const controller = {
+    getConfig: () => config,
+    setConfig: () => {},
+    getConfigPath: () => "/fake/config.json",
+    // no getComposedRules
+  };
+
+  let definition: {
+    handler: (args: string, ctx: CommandContextStub) => Promise<void>;
+  } | null = null;
+
+  registerPermissionSystemCommand(
+    {
+      registerCommand(_name: string, nextDef: typeof definition) {
+        definition = nextDef;
+      },
+    } as never,
+    controller as never,
+  );
+
+  const ctx = createCommandContext(true);
+  await definition!.handler("show", ctx.ctx);
+  const msg = lastNotification(ctx.notifications).message;
+
+  // Config knobs still present.
+  assert.ok(msg.includes("yoloMode=on"), `expected yoloMode=on in: ${msg}`);
+  // No rule annotation lines.
+  assert.ok(!msg.includes("(global)"), `unexpected '(global)' in: ${msg}`);
 });
