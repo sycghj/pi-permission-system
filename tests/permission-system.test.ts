@@ -2543,6 +2543,7 @@ test("checkPermission with empty session rules is identical to call without sess
       state: "deny",
       matchedPattern: "*",
       source: "special",
+      origin: "global",
     };
     assert.deepEqual(withEmpty, expected);
     assert.deepEqual(withoutArg, expected);
