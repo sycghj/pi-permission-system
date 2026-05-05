@@ -436,6 +436,12 @@ Env-var detection cannot help here.
 The solution requires an event bus RPC so the child can surface permission requests to the parent within the same process.
 Tracked in #29.
 
+### External convention guide
+
+A [permission frontmatter convention guide](../guides/permission-frontmatter-for-subagent-extensions.md) documents how upstream subagent extensions can adopt the `permission:` frontmatter key as a shared convention.
+This is a documentation-only proposal — no code dependency is required.
+The guide covers the two-layer model, flat format reference, composition examples, and the optional event bus runtime integration.
+
 ## Module structure (target)
 
 Modules marked ✅ exist today.
