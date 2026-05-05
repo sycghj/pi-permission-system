@@ -544,6 +544,56 @@ describe("extractExternalPathsFromBashCommand", () => {
       expect(etcHostsCount).toBe(1);
     });
   });
+
+  describe("regex patterns are not mistaken for paths", () => {
+    test("grep -v with //.*pattern is not flagged", async () => {
+      const result = await extractExternalPathsFromBashCommand(
+        'grep -n "glob" src/foo.ts 2>/dev/null | grep -v "//.*glob\\|globalConfig" | head -30',
+        cwd,
+      );
+      expect(result).toHaveLength(0);
+    });
+
+    test("grep -v with //.*pattern without backslash-pipe is not flagged", async () => {
+      const result = await extractExternalPathsFromBashCommand(
+        'grep -v "//.*foo" file.txt',
+        cwd,
+      );
+      expect(result).toHaveLength(0);
+    });
+
+    test("grep with backslash-pipe alternation is not flagged", async () => {
+      const result = await extractExternalPathsFromBashCommand(
+        'grep "foo\\|bar\\|baz" src/file.ts',
+        cwd,
+      );
+      expect(result).toHaveLength(0);
+    });
+
+    test("grep -E with ^/ anchored regex is not flagged", async () => {
+      const result = await extractExternalPathsFromBashCommand(
+        'grep -E "^/usr/bin" file.txt',
+        cwd,
+      );
+      expect(result).toHaveLength(0);
+    });
+
+    test("sed with regex containing slashes is not flagged", async () => {
+      const result = await extractExternalPathsFromBashCommand(
+        'sed "s/foo.*/bar/g" file.txt',
+        cwd,
+      );
+      expect(result).toHaveLength(0);
+    });
+
+    test("real external paths are still detected alongside regex args", async () => {
+      const result = await extractExternalPathsFromBashCommand(
+        'grep -v "//.*pattern" /etc/hosts',
+        cwd,
+      );
+      expect(result).toContain("/etc/hosts");
+    });
+  });
 });
 
 describe("formatBashExternalDirectoryAskPrompt", () => {

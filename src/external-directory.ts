@@ -353,6 +353,13 @@ function collectPathCandidateTokens(node: TSNode, tokens: string[]): void {
 const URL_PATTERN = /^[a-z][a-z0-9+.-]*:\/\//i;
 
 /**
+ * Regex metacharacter sequences that are never found in real filesystem paths.
+ * If a token contains any of these, it is almost certainly a regex pattern
+ * (e.g. a grep argument) rather than a path.
+ */
+const REGEX_METACHAR_PATTERN = /\.\*|\.\+|\\\||\\\(|\\\)|\[.*?\]|\^\//;
+
+/**
  * Determines whether a token looks like a path candidate worth resolving.
  * Returns the raw token string if it's a candidate, or null to skip.
  */
@@ -379,6 +386,11 @@ function classifyTokenAsPathCandidate(token: string): string | null {
   // Skip bare-slash tokens (// JS comments, lone /, etc.) — they resolve to root
   // and are never meaningful path arguments in practice.
   if (/^\/+$/.test(token)) return null;
+
+  // Skip tokens that contain regex metacharacter sequences — these are almost
+  // certainly grep/sed/awk patterns, not filesystem paths.
+  // Matches: .*, .+, \|, \(, \), [...], or ^/ (anchored regex starting with /)
+  if (REGEX_METACHAR_PATTERN.test(token)) return null;
 
   // Must look like a path: starts with /, ~/, or contains ..
   if (token.startsWith("/")) return token;
