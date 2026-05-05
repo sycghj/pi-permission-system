@@ -5,7 +5,7 @@
  * Step 6: all five surfaces produce identical decisions to the old branching code.
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { PermissionManager } from "../src/permission-manager";
@@ -371,5 +371,78 @@ describe("checkPermission — source derivation and matchedPattern", () => {
       );
       expect(result.matchedPattern).toBe("librarian");
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Home directory expansion in external_directory patterns
+// ---------------------------------------------------------------------------
+
+describe("checkPermission — home path expansion in external_directory rules", () => {
+  it("~/glob pattern allows a path under the real home directory", () => {
+    const { manager, cleanup } = makeManagerWithConfig({
+      "*": "ask",
+      external_directory: { "~/trusted/*": "allow" },
+    });
+    try {
+      const result = manager.checkPermission("external_directory", {
+        path: join(homedir(), "trusted/repo"),
+      });
+      expect(result.state).toBe("allow");
+      expect(result.source).toBe("special");
+      expect(result.matchedPattern).toBe("~/trusted/*");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("$HOME/glob pattern allows a path under the real home directory", () => {
+    const { manager, cleanup } = makeManagerWithConfig({
+      "*": "ask",
+      external_directory: { "$HOME/trusted/*": "allow" },
+    });
+    try {
+      const result = manager.checkPermission("external_directory", {
+        path: join(homedir(), "trusted/repo"),
+      });
+      expect(result.state).toBe("allow");
+      expect(result.source).toBe("special");
+      expect(result.matchedPattern).toBe("$HOME/trusted/*");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("~/glob deny rule blocks a path under home", () => {
+    const { manager, cleanup } = makeManagerWithConfig({
+      "*": "allow",
+      external_directory: { "~/private/*": "deny" },
+    });
+    try {
+      const result = manager.checkPermission("external_directory", {
+        path: join(homedir(), "private/secrets.txt"),
+      });
+      expect(result.state).toBe("deny");
+      expect(result.matchedPattern).toBe("~/private/*");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("~/glob pattern does not match a path outside home", () => {
+    const { manager, cleanup } = makeManagerWithConfig({
+      "*": "ask",
+      external_directory: { "~/trusted/*": "allow" },
+    });
+    try {
+      const result = manager.checkPermission("external_directory", {
+        path: "/tmp/not-home/file",
+      });
+      // Falls back to the "*": "ask" default — no allow from the ~/trusted/* rule.
+      expect(result.state).toBe("ask");
+      expect(result.matchedPattern).toBeUndefined();
+    } finally {
+      cleanup();
+    }
   });
 });
