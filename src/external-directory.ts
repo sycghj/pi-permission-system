@@ -352,17 +352,252 @@ function resolveNodeText(node: TSNode): string {
   }
 }
 
+// ── Pattern-first command config ───────────────────────────────────────────
+
+interface PatternCommandConfig {
+  /** Flags that consume the next argument as a non-path value (pattern, separator, etc.) */
+  readonly argConsumingFlags: ReadonlySet<string>;
+  /** Flags that consume the next argument as a file path */
+  readonly fileConsumingFlags: ReadonlySet<string>;
+  /**
+   * Number of leading positional arguments that are patterns/scripts, not paths.
+   * Default: 1 (covers sed, awk, grep, rg).
+   * sd uses 2 (FIND and REPLACE_WITH are both non-path positionals).
+   */
+  readonly patternPositionals?: number;
+}
+
+/**
+ * Commands whose first N positional arguments are inline patterns/scripts,
+ * not filesystem paths. The map stores per-command flag configuration so
+ * the walker can correctly identify which arguments are consumed by flags
+ * vs. which are positional.
+ */
+const PATTERN_FIRST_COMMANDS: ReadonlyMap<string, PatternCommandConfig> =
+  new Map([
+    [
+      "sed",
+      {
+        argConsumingFlags: new Set(["-e", "-i"]),
+        fileConsumingFlags: new Set(["-f"]),
+      },
+    ],
+    [
+      "awk",
+      {
+        argConsumingFlags: new Set(["-e", "-F", "-v"]),
+        fileConsumingFlags: new Set(["-f"]),
+      },
+    ],
+    [
+      "gawk",
+      {
+        argConsumingFlags: new Set(["-e", "-F", "-v"]),
+        fileConsumingFlags: new Set(["-f"]),
+      },
+    ],
+    [
+      "nawk",
+      {
+        argConsumingFlags: new Set(["-e", "-F", "-v"]),
+        fileConsumingFlags: new Set(["-f"]),
+      },
+    ],
+    [
+      "grep",
+      {
+        argConsumingFlags: new Set(["-e", "-A", "-B", "-C", "-m"]),
+        fileConsumingFlags: new Set(["-f"]),
+      },
+    ],
+    [
+      "egrep",
+      {
+        argConsumingFlags: new Set(["-e", "-A", "-B", "-C", "-m"]),
+        fileConsumingFlags: new Set(["-f"]),
+      },
+    ],
+    [
+      "fgrep",
+      {
+        argConsumingFlags: new Set(["-e", "-A", "-B", "-C", "-m"]),
+        fileConsumingFlags: new Set(["-f"]),
+      },
+    ],
+    [
+      "rg",
+      {
+        argConsumingFlags: new Set([
+          "-e",
+          "-A",
+          "-B",
+          "-C",
+          "-m",
+          "-g",
+          "-t",
+          "-T",
+          "-j",
+          "-M",
+          "-r",
+          "-E",
+        ]),
+        fileConsumingFlags: new Set(["-f"]),
+      },
+    ],
+    [
+      "sd",
+      {
+        argConsumingFlags: new Set(["-n", "-f"]),
+        fileConsumingFlags: new Set([]),
+        patternPositionals: 2,
+      },
+    ],
+  ]);
+
+/** Node types that represent argument values in the AST. */
+const ARG_NODE_TYPES = new Set([
+  "word",
+  "concatenation",
+  "string",
+  "raw_string",
+]);
+
+/**
+ * Extract the command name from a `command` node.
+ * Returns the basename (e.g. `/usr/bin/sed` → `sed`), or undefined
+ * if the command name cannot be determined (e.g. variable expansion).
+ */
+function extractCommandName(node: TSNode): string | undefined {
+  for (let i = 0; i < node.childCount; i++) {
+    const child = node.child(i);
+    if (!child) continue;
+    if (child.type === "command_name") {
+      const text = resolveNodeText(child);
+      return text ? basename(text) : undefined;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Collect path-candidate tokens from a command known to have
+ * pattern/script arguments in leading positional slots.
+ *
+ * Uses position-based skipping: the first N positional arguments
+ * (where N = patternPositionals, default 1) are assumed to be
+ * inline patterns/scripts and are skipped. Remaining positional
+ * arguments are collected as path candidates.
+ *
+ * Flags listed in `argConsumingFlags` consume the next argument
+ * (skipped). Flags in `fileConsumingFlags` consume the next
+ * argument as a file path (collected). The flags `-e` and `-f`
+ * additionally signal that an explicit script was provided via
+ * flag, so no inline positional script is expected.
+ */
+function collectPatternCommandTokens(
+  node: TSNode,
+  tokens: string[],
+  config: PatternCommandConfig,
+): void {
+  const patternPositionals = config.patternPositionals ?? 1;
+  let hasExplicitScript = false;
+  let positionalsSeen = 0;
+  let nextArgAction: "skip" | "extract" | null = null;
+  let pastEndOfFlags = false;
+
+  for (let i = 0; i < node.childCount; i++) {
+    const child = node.child(i);
+    if (!child) continue;
+
+    // Skip command_name and variable_assignment nodes.
+    if (child.type === "command_name" || child.type === "variable_assignment")
+      continue;
+
+    // Only process argument-like nodes; recurse into others
+    // (e.g. command_substitution) for nested commands.
+    if (!ARG_NODE_TYPES.has(child.type)) {
+      collectPathCandidateTokens(child, tokens);
+      continue;
+    }
+
+    const text = resolveNodeText(child);
+
+    // Handle consumed argument from previous flag.
+    if (nextArgAction === "skip") {
+      nextArgAction = null;
+      continue;
+    }
+    if (nextArgAction === "extract") {
+      tokens.push(text);
+      nextArgAction = null;
+      continue;
+    }
+
+    // Flag detection (only before "--" end-of-flags marker).
+    if (
+      !pastEndOfFlags &&
+      child.type === "word" &&
+      text.startsWith("-") &&
+      text.length > 1
+    ) {
+      if (text === "--") {
+        pastEndOfFlags = true;
+        continue;
+      }
+      if (config.argConsumingFlags.has(text)) {
+        nextArgAction = "skip";
+        if (text === "-e" || text === "-f") {
+          hasExplicitScript = true;
+        }
+        continue;
+      }
+      if (config.fileConsumingFlags.has(text)) {
+        nextArgAction = "extract";
+        hasExplicitScript = true;
+        continue;
+      }
+      // Regular flag — skip it.
+      continue;
+    }
+
+    // Positional argument.
+    if (!hasExplicitScript && positionalsSeen < patternPositionals) {
+      positionalsSeen++;
+      continue; // Skip: this is an inline pattern/script.
+    }
+
+    // File argument — collect as path candidate.
+    tokens.push(text);
+  }
+}
+
 /**
  * Recursively visit the AST and collect resolved text of nodes that
  * represent command arguments or redirect destinations.
  *
  * Skips `heredoc_body`, `heredoc_end`, and `comment` subtrees entirely.
+ *
+ * For commands in `PATTERN_FIRST_COMMANDS`, uses position-based
+ * argument skipping to avoid collecting inline patterns/scripts
+ * as path candidates. For all other commands, collects all
+ * arguments generically.
  */
 function collectPathCandidateTokens(node: TSNode, tokens: string[]): void {
   if (SKIP_SUBTREE_TYPES.has(node.type)) return;
 
-  // Extract arguments from `command` nodes (skip the command name).
+  // Extract arguments from `command` nodes.
   if (node.type === "command") {
+    const commandName = extractCommandName(node);
+    const patternConfig = commandName
+      ? PATTERN_FIRST_COMMANDS.get(commandName)
+      : undefined;
+
+    if (patternConfig) {
+      collectPatternCommandTokens(node, tokens, patternConfig);
+      return;
+    }
+
+    // Generic extraction: collect all arguments (skip command name).
     let seenCommandName = false;
     for (let i = 0; i < node.childCount; i++) {
       const child = node.child(i);
@@ -377,24 +612,13 @@ function collectPathCandidateTokens(node: TSNode, tokens: string[]): void {
 
       // If there was no explicit command_name node, the first word-like
       // child is the command name itself — skip it.
-      if (
-        !seenCommandName &&
-        (child.type === "word" ||
-          child.type === "concatenation" ||
-          child.type === "string" ||
-          child.type === "raw_string")
-      ) {
+      if (!seenCommandName && ARG_NODE_TYPES.has(child.type)) {
         seenCommandName = true;
         continue;
       }
 
       // Argument nodes: resolve their text and collect.
-      if (
-        child.type === "word" ||
-        child.type === "concatenation" ||
-        child.type === "string" ||
-        child.type === "raw_string"
-      ) {
+      if (ARG_NODE_TYPES.has(child.type)) {
         tokens.push(resolveNodeText(child));
         continue;
       }

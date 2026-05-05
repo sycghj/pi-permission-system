@@ -545,6 +545,166 @@ describe("extractExternalPathsFromBashCommand", () => {
     });
   });
 
+  describe("command-aware extraction", () => {
+    describe("sed", () => {
+      test("issue #91 reproducer: sed address pattern is not flagged", async () => {
+        const cmd = `sed -i '' '/source: "tool",/{/origin:/!s/source: "tool",/source: "tool",\n      origin: "builtin",/;}' tests/tool-input-preview.test.ts`;
+        const result = await extractExternalPathsFromBashCommand(cmd, cwd);
+        expect(result).toHaveLength(0);
+      });
+
+      test("sed script is skipped but file argument is extracted", async () => {
+        const result = await extractExternalPathsFromBashCommand(
+          "sed 's/foo/bar/g' /etc/hosts",
+          cwd,
+        );
+        expect(result).toContain("/etc/hosts");
+      });
+
+      test("sed address pattern starting with / is skipped", async () => {
+        const result = await extractExternalPathsFromBashCommand(
+          "sed '/pattern/d' /etc/hosts",
+          cwd,
+        );
+        expect(result).toContain("/etc/hosts");
+        expect(result).toHaveLength(1);
+      });
+
+      test("sed with only in-CWD file returns empty", async () => {
+        const result = await extractExternalPathsFromBashCommand(
+          "sed 's/foo/bar/' src/index.ts",
+          cwd,
+        );
+        expect(result).toHaveLength(0);
+      });
+
+      test("sed -e: script consumed by flag, file extracted", async () => {
+        const result = await extractExternalPathsFromBashCommand(
+          "sed -e 's/foo/bar/' /etc/hosts",
+          cwd,
+        );
+        expect(result).toContain("/etc/hosts");
+        expect(result).toHaveLength(1);
+      });
+
+      test("sed -n: regular flag does not consume next arg", async () => {
+        const result = await extractExternalPathsFromBashCommand(
+          "sed -n '/pattern/p' /etc/hosts",
+          cwd,
+        );
+        expect(result).toContain("/etc/hosts");
+        expect(result).toHaveLength(1);
+      });
+
+      test("sed -f: script file is extracted as path", async () => {
+        const result = await extractExternalPathsFromBashCommand(
+          "sed -f /etc/sed-script.sed input.txt",
+          cwd,
+        );
+        expect(result).toContain("/etc/sed-script.sed");
+        expect(result).toHaveLength(1);
+      });
+
+      test("sed -i '': extension consumed, script skipped, file extracted", async () => {
+        const result = await extractExternalPathsFromBashCommand(
+          "sed -i '' 's/foo/bar/' /etc/hosts",
+          cwd,
+        );
+        expect(result).toContain("/etc/hosts");
+        expect(result).toHaveLength(1);
+      });
+    });
+
+    describe("grep", () => {
+      test("grep: pattern skipped, file extracted", async () => {
+        const result = await extractExternalPathsFromBashCommand(
+          "grep '/etc/' /var/log/syslog",
+          cwd,
+        );
+        expect(result).toContain("/var/log/syslog");
+        expect(result).toHaveLength(1);
+      });
+
+      test("grep -e: pattern consumed by flag, file extracted", async () => {
+        const result = await extractExternalPathsFromBashCommand(
+          "grep -e '/etc/' /var/log/syslog",
+          cwd,
+        );
+        expect(result).toContain("/var/log/syslog");
+        expect(result).toHaveLength(1);
+      });
+    });
+
+    describe("awk", () => {
+      test("awk: program skipped, file extracted", async () => {
+        const result = await extractExternalPathsFromBashCommand(
+          "awk '{print}' /etc/hosts",
+          cwd,
+        );
+        expect(result).toContain("/etc/hosts");
+        expect(result).toHaveLength(1);
+      });
+
+      test("awk -F: separator consumed, program skipped, file extracted", async () => {
+        const result = await extractExternalPathsFromBashCommand(
+          "awk -F: '{print $1}' /etc/passwd",
+          cwd,
+        );
+        expect(result).toContain("/etc/passwd");
+        expect(result).toHaveLength(1);
+      });
+    });
+
+    describe("rg", () => {
+      test("rg: pattern skipped, path extracted", async () => {
+        const result = await extractExternalPathsFromBashCommand(
+          "rg '/usr/local' /etc/profile.d/",
+          cwd,
+        );
+        expect(result).toContain("/etc/profile.d");
+        expect(result).toHaveLength(1);
+      });
+
+      test("rg -e: pattern consumed by flag, path extracted", async () => {
+        const result = await extractExternalPathsFromBashCommand(
+          "rg -e '/usr/local' /etc/profile.d/",
+          cwd,
+        );
+        expect(result).toContain("/etc/profile.d");
+        expect(result).toHaveLength(1);
+      });
+    });
+
+    describe("sd", () => {
+      test("sd: both pattern positionals skipped, file extracted", async () => {
+        const result = await extractExternalPathsFromBashCommand(
+          "sd '/usr/local/bin' '/opt/bin' /etc/profile",
+          cwd,
+        );
+        expect(result).toContain("/etc/profile");
+        expect(result).toHaveLength(1);
+      });
+
+      test("sd with only in-CWD file returns empty", async () => {
+        const result = await extractExternalPathsFromBashCommand(
+          "sd 'foo' 'bar' src/index.ts",
+          cwd,
+        );
+        expect(result).toHaveLength(0);
+      });
+    });
+
+    describe("unknown commands", () => {
+      test("unknown command: all args go through generic extraction", async () => {
+        const result = await extractExternalPathsFromBashCommand(
+          "some-tool /etc/hosts",
+          cwd,
+        );
+        expect(result).toContain("/etc/hosts");
+      });
+    });
+  });
+
   describe("regex patterns are not mistaken for paths", () => {
     test("grep -v with //.*pattern is not flagged", async () => {
       const result = await extractExternalPathsFromBashCommand(
