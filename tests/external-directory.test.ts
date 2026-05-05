@@ -1,5 +1,23 @@
 import { join } from "node:path";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+
+// Hoisted stubs for mocks that reference them in vi.mock factories.
+const { mockSpawnSync, mockExistsSync } = vi.hoisted(() => ({
+  mockSpawnSync: vi.fn(),
+  mockExistsSync: vi.fn(),
+}));
+
+// Mock node:child_process so tests don't spawn real subprocesses.
+vi.mock("node:child_process", () => ({
+  spawnSync: mockSpawnSync,
+  default: { spawnSync: mockSpawnSync },
+}));
+
+// Mock node:fs so existsSync is controllable.
+vi.mock("node:fs", () => ({
+  existsSync: mockExistsSync,
+  default: { existsSync: mockExistsSync },
+}));
 
 // Mock node:os so tilde-expansion is deterministic across platforms.
 vi.mock("node:os", () => {
@@ -11,6 +29,7 @@ vi.mock("node:os", () => {
 });
 
 import {
+  discoverGlobalNodeModulesRoot,
   formatExternalDirectoryAskPrompt,
   formatExternalDirectoryDenyReason,
   formatExternalDirectoryHardStopHint,
@@ -315,5 +334,92 @@ describe("formatExternalDirectoryUserDeniedReason", () => {
       "/etc/hosts",
     );
     expect(result).not.toContain("Reason:");
+  });
+});
+
+describe("discoverGlobalNodeModulesRoot", () => {
+  // The walk-up-from-self strategy uses import.meta.url which resolves to a
+  // path inside the source tree during tests — there is no node_modules
+  // ancestor. So the fallback path is exercised naturally here.
+  //
+  // For the "walk-up succeeds" case, we verify the subprocess is NOT called
+  // by confirming spawnSync call count stays at zero when the URL has a
+  // node_modules ancestor.
+
+  beforeEach(() => {
+    mockSpawnSync.mockReset();
+    mockExistsSync.mockReset();
+  });
+
+  test("returns node_modules root when URL is inside a node_modules tree", () => {
+    // Simulate a URL whose file path contains a node_modules ancestor.
+    const fakeUrl =
+      "file:///opt/homebrew/lib/node_modules/@gotgenes/pi-permission-system/dist/external-directory.js";
+    const result = discoverGlobalNodeModulesRoot(fakeUrl);
+    expect(result).toBe("/opt/homebrew/lib/node_modules");
+    // Subprocess should NOT have been invoked — walk-up succeeds.
+    expect(mockSpawnSync).not.toHaveBeenCalled();
+  });
+
+  test("calls npm root -g as fallback when walk-up finds no node_modules ancestor", () => {
+    const npmRootPath = "/opt/homebrew/lib/node_modules";
+    mockSpawnSync.mockReturnValue({
+      status: 0,
+      stdout: `${npmRootPath}\n`,
+    });
+    mockExistsSync.mockReturnValue(true);
+
+    // Use a file URL with no node_modules ancestor.
+    const fakeUrl = "file:///Users/dev/my-project/src/external-directory.ts";
+    const result = discoverGlobalNodeModulesRoot(fakeUrl);
+
+    expect(mockSpawnSync).toHaveBeenCalledWith(
+      "npm",
+      ["root", "-g"],
+      expect.objectContaining({ encoding: "utf-8" }),
+    );
+    expect(result).toBe(npmRootPath);
+  });
+
+  test("returns null when walk-up fails and npm root -g returns non-zero exit", () => {
+    mockSpawnSync.mockReturnValue({ status: 1, stdout: "" });
+
+    const fakeUrl = "file:///Users/dev/my-project/src/external-directory.ts";
+    const result = discoverGlobalNodeModulesRoot(fakeUrl);
+
+    expect(result).toBeNull();
+  });
+
+  test("returns null when walk-up fails and spawnSync throws", () => {
+    mockSpawnSync.mockImplementation(() => {
+      throw new Error("ENOENT");
+    });
+
+    const fakeUrl = "file:///Users/dev/my-project/src/external-directory.ts";
+    const result = discoverGlobalNodeModulesRoot(fakeUrl);
+
+    expect(result).toBeNull();
+  });
+
+  test("returns null when walk-up fails and npm root -g returns non-existent path", () => {
+    mockSpawnSync.mockReturnValue({
+      status: 0,
+      stdout: "/some/nonexistent/node_modules\n",
+    });
+    mockExistsSync.mockReturnValue(false);
+
+    const fakeUrl = "file:///Users/dev/my-project/src/external-directory.ts";
+    const result = discoverGlobalNodeModulesRoot(fakeUrl);
+
+    expect(result).toBeNull();
+  });
+
+  test("returns null when walk-up fails and npm root -g returns empty stdout", () => {
+    mockSpawnSync.mockReturnValue({ status: 0, stdout: "   " });
+
+    const fakeUrl = "file:///Users/dev/my-project/src/external-directory.ts";
+    const result = discoverGlobalNodeModulesRoot(fakeUrl);
+
+    expect(result).toBeNull();
   });
 });
