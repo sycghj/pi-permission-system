@@ -20,8 +20,22 @@ This document describes the target internal design for the permission system, in
 ✅ Implemented in `src/rule.ts` (#55, #56).
 
 ```typescript
-/** Which config scope contributed a rule. Only set for layer="config". */
-type RuleOrigin = "global" | "project" | "agent" | "project-agent";
+/**
+ * Provenance of a rule — which source contributed it.
+ *
+ * Config scopes: "global", "project", "agent", "project-agent".
+ * Synthesized:   "builtin" (universal default / evaluate() fallback),
+ *                "baseline" (conditional MCP metadata auto-allow).
+ * Runtime:       "session" (session approvals).
+ */
+type RuleOrigin =
+  | "global"
+  | "project"
+  | "agent"
+  | "project-agent"
+  | "builtin"
+  | "baseline"
+  | "session";
 
 interface Rule {
   /** The permission surface: "bash", "edit", "mcp", "skill", "external_directory", etc. */
@@ -35,13 +49,8 @@ interface Rule {
    * Not used by evaluate(); purely informational metadata.
    */
   layer?: "default" | "baseline" | "config" | "session";
-  /**
-   * Which config scope contributed this rule.
-   * Only set for layer="config" rules; absent on default, baseline, and session rules.
-   * When the universal fallback (permission["*"]) was set by a user config,
-   * the synthesized default rule also carries an origin.
-   */
-  origin?: RuleOrigin;
+  /** Which source contributed this rule. */
+  origin: RuleOrigin;
 }
 ```
 
