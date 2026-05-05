@@ -450,12 +450,31 @@ The suggested pattern is surface-specific:
 
 |Surface|Example request|Suggested session pattern|
 |---|---|---|
-|bash|`git status --short`|`git *`|
+|bash|`git status --short`|`git status *`|
 |mcp (qualified)|`exa:search`|`exa:*`|
 |mcp (munged)|`exa_search`|`exa_*`|
 |skill|`librarian`|`librarian`|
 |tool (read, write, …)|`read`|`*`|
 |external_directory|`/other/project/src/foo.ts`|`/other/project/src/*`|
+
+#### Bash arity table
+
+Bash pattern suggestions use a curated arity dictionary (`src/bash-arity.ts`) to determine how many tokens define the "human-understandable subcommand."
+Longest matching prefix wins, so `npm run` (arity 3) takes precedence over `npm` (arity 2).
+Unknown commands default to arity 1 (first word only).
+
+|Example command|Arity entry matched|Suggested pattern|
+|---|---|---|
+|`git checkout main`|`git` → 2|`git checkout *`|
+|`npm run dev`|`npm run` → 3|`npm run dev*`|
+|`npm install lodash`|`npm` → 2|`npm install *`|
+|`docker compose up`|`docker compose` → 3|`docker compose up *`|
+|`rm -rf node_modules`|`rm` → 1|`rm *`|
+|`mytool --verbose`|(unknown) → 1|`mytool *`|
+
+The arity table covers common CLI tools including git, npm/pnpm/yarn/bun, docker, cargo, go, kubectl, gh, and others.
+To add an entry, open `src/bash-arity.ts` and add a key/arity pair to the `ARITY` object.
+Put the most specific multi-word prefix first (e.g. `"npm run": 3`) before the shorter fallback (`"npm": 2`).
 
 Session approvals are ephemeral — they are never persisted to disk and are cleared on `session_shutdown`.
 The review log records these decisions: `resolution: "approved_for_session"` when the user approves, and `resolution: "session_approved"` when a later request is matched by an existing session rule.
@@ -505,6 +524,7 @@ index.ts                    → Root Pi entrypoint shim
 src/
 ├── index.ts                → Extension bootstrap, permission checks, readable prompts, review logging, reload handling, and subagent forwarding
 ├── pattern-suggest.ts        → Per-surface session approval pattern suggestions
+├── bash-arity.ts             → Curated arity dictionary for smarter bash session-approval patterns
 ├── session-rules.ts          → Ephemeral session-scoped approval rules (Ruleset-based, wildcard patterns across all surfaces)
 ├── config-loader.ts        → Unified config loader, merger, and legacy-path detection
 ├── config-paths.ts         → Path derivation for global, project, and legacy config locations
