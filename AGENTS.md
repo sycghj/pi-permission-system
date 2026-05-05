@@ -86,6 +86,9 @@ Rules:
   Changing one without the others is a bug, not a refactor.
 - When removing a previously accepted config field, keep the loader tolerant: detect the legacy key, emit a single non-fatal config issue pointing to the migration guide, and discard the value.
   Drop the field from the TypeScript types, the JSON schema, and the docs in the same change.
+- When adding an optional field to `PermissionSystemExtensionConfig`, do not include it in `DEFAULT_EXTENSION_CONFIG` with an explicit `undefined` value.
+  Tests use `assert.deepEqual` / `expect().toEqual` against the config object; an explicit `undefined` key fails deep equality against objects that omit the key.
+  Set the field conditionally in `normalizePermissionSystemConfig` only when the raw input contains a valid value.
 
 ## Documentation frontmatter
 
