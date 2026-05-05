@@ -143,6 +143,10 @@ issue_title: "Per-agent permission frontmatter overrides" # required
 - Prefer a concrete test asserting current (even imperfect) behavior over `test.todo`.
   A real assertion documents the limitation and lets a future fix flip the expectation; a `test.todo` is invisible friction that never triggers CI.
 - Vitest uses esbuild and does not typecheck. Run `pnpm run build` (`tsc -p tsconfig.json`) for type-only changes.
+- When a TDD step changes a shared interface (e.g. `HandlerDeps`, event bus types), run `npm run build` immediately after that step's commit — not just at the end of the full cycle.
+  Early type-checking catches cascading breakage in integration test harnesses that Vitest's esbuild pipeline silently ignores.
+- When adding a field to a shared interface or widening the contract of an injected object (e.g. adding `on` to the event bus), grep for ALL test files that construct a compatible mock — not just `makeDeps` factories.
+  Integration harnesses in `permission-system.test.ts` and `session-start.test.ts` construct raw `ExtensionAPI` stubs that bypass `makeDeps`.
 - Do not insert no-op statements (`void 0;`, unused locals) in tests just to make an `Edit` tool's `oldText` unique — widen `oldText` with surrounding context instead.
 
 ## Commits
