@@ -34,15 +34,11 @@ export function evaluate(
   rules: Ruleset,
   defaultAction?: PermissionState,
 ): Rule {
-  for (let i = rules.length - 1; i >= 0; i -= 1) {
-    const rule = rules[i];
-    if (
-      wildcardMatch(rule.surface, surface) &&
-      wildcardMatch(rule.pattern, pattern)
-    ) {
-      return rule;
-    }
-  }
+  const rule = rules.findLast(
+    (r) =>
+      wildcardMatch(r.surface, surface) && wildcardMatch(r.pattern, pattern),
+  );
+  if (rule !== undefined) return rule;
   return { surface, pattern, action: defaultAction ?? "ask" };
 }
 

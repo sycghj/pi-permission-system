@@ -48,18 +48,13 @@ export function findCompiledWildcardMatch<TState>(
   patterns: readonly CompiledWildcardPattern<TState>[],
   name: string,
 ): WildcardPatternMatch<TState> | null {
-  for (let index = patterns.length - 1; index >= 0; index -= 1) {
-    const pattern = patterns[index];
-    if (pattern.regex.test(name)) {
-      return {
-        state: pattern.state,
-        matchedPattern: pattern.pattern,
-        matchedName: name,
-      };
-    }
-  }
-
-  return null;
+  const match = patterns.findLast((p) => p.regex.test(name));
+  if (match === undefined) return null;
+  return {
+    state: match.state,
+    matchedPattern: match.pattern,
+    matchedName: name,
+  };
 }
 
 /**
