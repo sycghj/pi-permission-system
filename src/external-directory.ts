@@ -52,6 +52,60 @@ export function isSafeSystemPath(normalizedPath: string): boolean {
   return SAFE_SYSTEM_PATHS.has(normalizedPath);
 }
 
+/**
+ * Returns true if the given tool + normalized path combination qualifies for
+ * automatic allow as a Pi infrastructure read.
+ *
+ * A path qualifies when:
+ * 1. The tool is read-only (in READ_ONLY_PATH_BEARING_TOOLS).
+ * 2. The normalized path is within one of the provided `infrastructureDirs`
+ *    OR within the project-local Pi package directories
+ *    (`<cwd>/.pi/npm/` or `<cwd>/.pi/git/`).
+ *
+ * `infrastructureDirs` should contain pre-expanded absolute paths (no `~`).
+ * Project-local paths are computed fresh from `cwd` on each call so they
+ * follow working-directory changes without a runtime rebuild.
+ */
+export function isPiInfrastructureRead(
+  toolName: string,
+  normalizedPath: string,
+  infrastructureDirs: readonly string[],
+  cwd: string,
+): boolean {
+  if (!READ_ONLY_PATH_BEARING_TOOLS.has(toolName)) {
+    return false;
+  }
+
+  for (const dir of infrastructureDirs) {
+    if (isPathWithinDirectory(normalizedPath, dir)) {
+      return true;
+    }
+  }
+
+  // Project-local Pi packages — checked fresh every call so CWD changes work.
+  const projectNpmDir = join(cwd, ".pi", "npm");
+  const projectGitDir = join(cwd, ".pi", "git");
+  if (isPathWithinDirectory(normalizedPath, projectNpmDir)) {
+    return true;
+  }
+  if (isPathWithinDirectory(normalizedPath, projectGitDir)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * File tools that only read — never write — the filesystem.
+ * Only these tools are eligible for the Pi infrastructure auto-allow.
+ */
+export const READ_ONLY_PATH_BEARING_TOOLS: ReadonlySet<string> = new Set([
+  "read",
+  "find",
+  "grep",
+  "ls",
+]);
+
 export const PATH_BEARING_TOOLS = new Set([
   "read",
   "write",

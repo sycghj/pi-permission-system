@@ -1,7 +1,10 @@
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 
-import { discoverGlobalNodeModulesRoot } from "../src/external-directory";
+import {
+  discoverGlobalNodeModulesRoot,
+  isPiInfrastructureRead,
+} from "../src/external-directory";
 
 // ── discoverGlobalNodeModulesRoot ──────────────────────────────────────────
 
@@ -73,5 +76,170 @@ describe("discoverGlobalNodeModulesRoot", () => {
     expect(join(root!, "pi-permission-system")).toBe(
       "/opt/homebrew/lib/node_modules/pi-permission-system",
     );
+  });
+});
+
+// ── isPiInfrastructureRead ─────────────────────────────────────────────────
+
+const INFRA_DIRS = [
+  "/home/user/.pi/agent",
+  "/home/user/.pi/agent/git",
+  "/opt/homebrew/lib/node_modules",
+];
+const CWD = "/home/user/project";
+
+describe("isPiInfrastructureRead", () => {
+  // ── read tools allowed for infra paths ──────────────────────────────────
+
+  test("allows 'read' tool for a file inside agentDir", () => {
+    expect(
+      isPiInfrastructureRead(
+        "read",
+        "/home/user/.pi/agent/extensions/pi-permission-system/config.json",
+        INFRA_DIRS,
+        CWD,
+      ),
+    ).toBe(true);
+  });
+
+  test("allows 'find' tool for a path inside node_modules infra dir", () => {
+    expect(
+      isPiInfrastructureRead(
+        "find",
+        "/opt/homebrew/lib/node_modules/pi-ask-user/skills",
+        INFRA_DIRS,
+        CWD,
+      ),
+    ).toBe(true);
+  });
+
+  test("allows 'grep' tool for a path inside agentDir/git", () => {
+    expect(
+      isPiInfrastructureRead(
+        "grep",
+        "/home/user/.pi/agent/git/some-package/README.md",
+        INFRA_DIRS,
+        CWD,
+      ),
+    ).toBe(true);
+  });
+
+  test("allows 'ls' tool for a path inside node_modules infra dir", () => {
+    expect(
+      isPiInfrastructureRead(
+        "ls",
+        "/opt/homebrew/lib/node_modules/pi-permission-system",
+        INFRA_DIRS,
+        CWD,
+      ),
+    ).toBe(true);
+  });
+
+  // ── write tools never allowed even for infra paths ───────────────────────
+
+  test("blocks 'write' tool for a file inside agentDir", () => {
+    expect(
+      isPiInfrastructureRead(
+        "write",
+        "/home/user/.pi/agent/extensions/pi-permission-system/config.json",
+        INFRA_DIRS,
+        CWD,
+      ),
+    ).toBe(false);
+  });
+
+  test("blocks 'edit' tool for a file inside node_modules", () => {
+    expect(
+      isPiInfrastructureRead(
+        "edit",
+        "/opt/homebrew/lib/node_modules/pi-ask-user/skills/ask-user/SKILL.md",
+        INFRA_DIRS,
+        CWD,
+      ),
+    ).toBe(false);
+  });
+
+  test("blocks 'bash' tool regardless of path", () => {
+    expect(
+      isPiInfrastructureRead(
+        "bash",
+        "/opt/homebrew/lib/node_modules/pi-ask-user/SKILL.md",
+        INFRA_DIRS,
+        CWD,
+      ),
+    ).toBe(false);
+  });
+
+  // ── non-infra paths not allowed ──────────────────────────────────────────
+
+  test("does not allow 'read' for a path outside all infra dirs", () => {
+    expect(isPiInfrastructureRead("read", "/etc/passwd", INFRA_DIRS, CWD)).toBe(
+      false,
+    );
+  });
+
+  test("does not allow 'read' for a path only partially matching an infra dir prefix", () => {
+    // /home/user/.pi/agent-other should not match /home/user/.pi/agent
+    expect(
+      isPiInfrastructureRead(
+        "read",
+        "/home/user/.pi/agent-other/config.json",
+        INFRA_DIRS,
+        CWD,
+      ),
+    ).toBe(false);
+  });
+
+  // ── project-local Pi packages (.pi/npm, .pi/git) ─────────────────────────
+
+  test("allows 'read' for a path inside project-local .pi/npm/", () => {
+    expect(
+      isPiInfrastructureRead(
+        "read",
+        `${CWD}/.pi/npm/node_modules/some-skill/SKILL.md`,
+        INFRA_DIRS,
+        CWD,
+      ),
+    ).toBe(true);
+  });
+
+  test("allows 'read' for a path inside project-local .pi/git/", () => {
+    expect(
+      isPiInfrastructureRead(
+        "read",
+        `${CWD}/.pi/git/github.com/org/skill-repo/SKILL.md`,
+        INFRA_DIRS,
+        CWD,
+      ),
+    ).toBe(true);
+  });
+
+  test("blocks 'write' for a path inside project-local .pi/npm/", () => {
+    expect(
+      isPiInfrastructureRead(
+        "write",
+        `${CWD}/.pi/npm/node_modules/some-skill/SKILL.md`,
+        INFRA_DIRS,
+        CWD,
+      ),
+    ).toBe(false);
+  });
+
+  // ── empty / edge cases ───────────────────────────────────────────────────
+
+  test("returns false when infrastructureDirs is empty and path is not project-local", () => {
+    expect(isPiInfrastructureRead("read", "/etc/passwd", [], CWD)).toBe(false);
+  });
+
+  test("returns false when infrastructureDirs is empty but path IS project-local .pi/npm", () => {
+    // Project-local paths are checked separately from the dirs array.
+    expect(
+      isPiInfrastructureRead(
+        "read",
+        `${CWD}/.pi/npm/node_modules/x/SKILL.md`,
+        [],
+        CWD,
+      ),
+    ).toBe(true);
   });
 });
