@@ -67,6 +67,8 @@ export interface HandlerDeps {
   // ── Forwarding ─────────────────────────────────────────────────────────
   startForwardedPermissionPolling(ctx: ExtensionContext): void;
   stopForwardedPermissionPolling(): void;
+  /** Unsubscribe the permissions:rpc:check and permissions:rpc:prompt handlers. */
+  stopPermissionRpcHandlers(): void;
 
   // ── Pi API subset ──────────────────────────────────────────────────────
   getAllTools(): unknown[];

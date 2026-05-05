@@ -78,4 +78,5 @@ export async function handleSessionShutdown(deps: HandlerDeps): Promise<void> {
   deps.runtime.lastPromptStateCacheKey = null;
   deps.runtime.sessionRules.clear();
   deps.stopForwardedPermissionPolling();
+  deps.stopPermissionRpcHandlers();
 }

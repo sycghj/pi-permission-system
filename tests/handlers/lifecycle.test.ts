@@ -111,6 +111,7 @@ function makeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
     createPermissionRequestId: vi.fn().mockReturnValue("test-id"),
     startForwardedPermissionPolling: vi.fn(),
     stopForwardedPermissionPolling: vi.fn(),
+    stopPermissionRpcHandlers: vi.fn(),
     getAllTools: vi.fn().mockReturnValue([]),
     setActiveTools: vi.fn(),
     ...overrides,
@@ -339,6 +340,12 @@ describe("handleSessionShutdown", () => {
     const deps = makeDeps();
     await handleSessionShutdown(deps);
     expect(deps.stopForwardedPermissionPolling).toHaveBeenCalledOnce();
+  });
+
+  it("calls stopPermissionRpcHandlers on shutdown", async () => {
+    const deps = makeDeps();
+    await handleSessionShutdown(deps);
+    expect(deps.stopPermissionRpcHandlers).toHaveBeenCalledOnce();
   });
 
   it("does not reset lastKnownActiveAgentName", async () => {

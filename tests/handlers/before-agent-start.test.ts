@@ -103,6 +103,7 @@ function makeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
     createPermissionRequestId: vi.fn().mockReturnValue("test-id"),
     startForwardedPermissionPolling: vi.fn(),
     stopForwardedPermissionPolling: vi.fn(),
+    stopPermissionRpcHandlers: vi.fn(),
     getAllTools: vi.fn().mockReturnValue([]),
     setActiveTools: vi.fn(),
     ...overrides,

@@ -69,6 +69,14 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
   const createPermissionRequestId = (prefix: string): string =>
     `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${process.pid}`;
 
+  const rpcHandles = registerPermissionRpcHandlers(pi.events, {
+    getPermissionManager: () => runtime.permissionManager,
+    getSessionRules: () => runtime.sessionRules.getRuleset(),
+    getRuntimeContext: () => runtime.runtimeContext,
+    requestPermissionDecisionFromUi,
+    writeReviewLog: runtime.writeReviewLog.bind(runtime),
+  });
+
   const deps: HandlerDeps = {
     runtime,
     createPermissionManagerForCwd: (cwd) =>
@@ -94,17 +102,13 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
       startForwardedPermissionPolling(runtime, forwardingDeps, ctx),
     stopForwardedPermissionPolling: () =>
       stopForwardedPermissionPolling(runtime),
+    stopPermissionRpcHandlers: () => {
+      rpcHandles.unsubCheck();
+      rpcHandles.unsubPrompt();
+    },
     getAllTools: () => pi.getAllTools(),
     setActiveTools: (names) => pi.setActiveTools(names),
   };
-
-  registerPermissionRpcHandlers(pi.events, {
-    getPermissionManager: () => runtime.permissionManager,
-    getSessionRules: () => runtime.sessionRules.getRuleset(),
-    getRuntimeContext: () => runtime.runtimeContext,
-    requestPermissionDecisionFromUi,
-    writeReviewLog: runtime.writeReviewLog.bind(runtime),
-  });
 
   emitReadyEvent(pi.events);
 
