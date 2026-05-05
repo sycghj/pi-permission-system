@@ -18,6 +18,7 @@ import {
   PERMISSION_FORWARDING_POLL_INTERVAL_MS,
   PERMISSION_FORWARDING_TIMEOUT_MS,
   resolvePermissionForwardingTargetSessionId,
+  SUBAGENT_PARENT_SESSION_ENV_CANDIDATES,
 } from "../permission-forwarding";
 import { isSubagentExecutionContext } from "../subagent-context";
 
@@ -110,7 +111,10 @@ export async function waitForForwardedPermissionApproval(
   if (!targetSessionId) {
     logPermissionForwardingError(
       deps.logger,
-      "Permission forwarding target session could not be resolved from subagent runtime metadata (expected PI_AGENT_ROUTER_PARENT_SESSION_ID)",
+      `Permission forwarding target session could not be resolved. ` +
+        `Checked env vars: ${SUBAGENT_PARENT_SESSION_ENV_CANDIDATES.join(", ")}. ` +
+        `If you are using nicobailon/pi-subagents or HazAT/pi-interactive-subagents, ` +
+        `parent-session forwarding is not yet supported for those extensions (see issue #98).`,
     );
     return { approved: false, state: "denied" };
   }

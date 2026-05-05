@@ -20,8 +20,15 @@ export const SUBAGENT_ENV_HINT_KEYS = [
   "PI_SUBAGENT_SESSION",
   "PI_SUBAGENT_ACTIVITY_FILE",
 ] as const;
+/** Ordered list of env var names to check for the parent session ID. First match wins. */
+export const SUBAGENT_PARENT_SESSION_ENV_CANDIDATES: readonly string[] = [
+  // pi-agent-router (original)
+  "PI_AGENT_ROUTER_PARENT_SESSION_ID",
+] as const;
+
+/** @deprecated Use SUBAGENT_PARENT_SESSION_ENV_CANDIDATES */
 export const SUBAGENT_PARENT_SESSION_ENV_KEY =
-  "PI_AGENT_ROUTER_PARENT_SESSION_ID";
+  SUBAGENT_PARENT_SESSION_ENV_CANDIDATES[0];
 
 const SESSION_FORWARDING_ROOT_DIRECTORY_NAME = "sessions";
 const SESSION_FORWARDING_REQUESTS_DIRECTORY_NAME = "requests";
@@ -117,9 +124,12 @@ export function resolvePermissionForwardingTargetSessionId(options: {
     return null;
   }
 
-  return normalizePermissionForwardingSessionId(
-    options.env?.[SUBAGENT_PARENT_SESSION_ENV_KEY],
-  );
+  const env = options.env ?? process.env;
+  for (const key of SUBAGENT_PARENT_SESSION_ENV_CANDIDATES) {
+    const resolved = normalizePermissionForwardingSessionId(env[key]);
+    if (resolved) return resolved;
+  }
+  return null;
 }
 
 export function isForwardedPermissionRequestForSession(
