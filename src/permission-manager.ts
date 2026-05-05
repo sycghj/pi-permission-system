@@ -14,10 +14,10 @@ import {
   stripJsonComments,
 } from "./config-loader";
 import { getGlobalConfigPath } from "./config-paths";
-import { createMcpPermissionTargets } from "./mcp-targets";
+import { normalizeInput } from "./input-normalizer";
 import { normalizeFlatConfig } from "./normalize";
 import type { Rule, Ruleset } from "./rule";
-import { evaluate } from "./rule";
+import { evaluate, evaluateFirst } from "./rule";
 import {
   composeRuleset,
   synthesizeBaseline,
@@ -453,180 +453,73 @@ export class PermissionManager {
     const { composedRules } = this.resolvePermissions(agentName);
     const normalizedToolName = toolName.trim();
 
-    // --- Special surfaces (external_directory) ---
-    if (SPECIAL_PERMISSION_KEYS.has(normalizedToolName)) {
-      const record = toRecord(input);
-      const pathValue = typeof record.path === "string" ? record.path : null;
+    // Append session rules at the end (highest priority) so evaluate() handles
+    // them via last-match-wins — no separate per-branch pre-check needed.
+    const fullRules: Ruleset = sessionRules?.length
+      ? [...composedRules, ...sessionRules]
+      : composedRules;
 
-      // Session check: match by specific normalized path.
-      if (pathValue && sessionRules && sessionRules.length > 0) {
-        const sessionRule = evaluate(
-          "external_directory",
-          pathValue,
-          sessionRules,
-        );
-        if (sessionRules.includes(sessionRule)) {
-          return {
-            toolName,
-            state: "allow",
-            matchedPattern: sessionRule.pattern,
-            source: "session",
-          };
-        }
-      }
+    const { surface, values, resultExtras } = normalizeInput(
+      normalizedToolName,
+      input,
+      this.getConfiguredMcpServerNames(),
+    );
 
-      // Config/default check.
-      const rule = evaluate(
-        normalizedToolName,
-        pathValue ?? "*",
-        composedRules,
-      );
-      return {
-        toolName,
-        state: rule.action,
-        matchedPattern: rule.layer === "config" ? rule.pattern : undefined,
-        source: "special",
-      };
-    }
+    const { rule, value } = evaluateFirst(surface, values, fullRules);
 
-    // --- Skills ---
-    if (normalizedToolName === "skill") {
-      const skillName = toRecord(input).name;
-      const lookupValue = typeof skillName === "string" ? skillName : "*";
-
-      // Session check.
-      if (sessionRules && sessionRules.length > 0) {
-        const sessionRule = evaluate("skill", lookupValue, sessionRules);
-        if (sessionRules.includes(sessionRule)) {
-          return {
-            toolName,
-            state: "allow",
-            matchedPattern: sessionRule.pattern,
-            source: "session",
-          };
-        }
-      }
-
-      const rule = evaluate("skill", lookupValue, composedRules);
-      return {
-        toolName,
-        state: rule.action,
-        matchedPattern: rule.layer === "config" ? rule.pattern : undefined,
-        source: "skill",
-      };
-    }
-
-    // --- Bash ---
-    if (normalizedToolName === "bash") {
-      const record = toRecord(input);
-      const command = typeof record.command === "string" ? record.command : "";
-
-      // Session check.
-      if (sessionRules && sessionRules.length > 0) {
-        const sessionRule = evaluate("bash", command, sessionRules);
-        if (sessionRules.includes(sessionRule)) {
-          return {
-            toolName,
-            state: "allow",
-            command,
-            matchedPattern: sessionRule.pattern,
-            source: "session",
-          };
-        }
-      }
-
-      const rule = evaluate("bash", command, composedRules);
-      return {
-        toolName,
-        state: rule.action,
-        command,
-        matchedPattern: rule.layer === "config" ? rule.pattern : undefined,
-        source: "bash",
-      };
-    }
-
-    // --- MCP ---
-    if (normalizedToolName === "mcp") {
-      const mcpTargets = [
-        ...createMcpPermissionTargets(
-          input,
-          this.getConfiguredMcpServerNames(),
-        ),
-        "mcp",
-      ];
-      const fallbackTarget = mcpTargets[0] || "mcp";
-
-      // Session check: try each candidate target against session rules.
-      if (sessionRules && sessionRules.length > 0) {
-        for (const target of mcpTargets) {
-          const sessionRule = evaluate("mcp", target, sessionRules);
-          if (sessionRules.includes(sessionRule)) {
-            return {
-              toolName,
-              state: "allow",
-              matchedPattern: sessionRule.pattern,
-              target,
-              source: "session",
-            };
-          }
-        }
-      }
-
-      // Try each candidate target. Stop on the first non-default match.
-      for (const target of mcpTargets) {
-        const rule = evaluate("mcp", target, composedRules);
-        if (rule.layer !== "default") {
-          return {
-            toolName,
-            state: rule.action,
-            matchedPattern: rule.layer === "config" ? rule.pattern : undefined,
-            target,
-            source: rule.layer === "override" ? "tool" : "mcp",
-          };
-        }
-      }
-
-      // All targets matched only the synthesized default.
-      const defaultRule = evaluate("mcp", fallbackTarget, composedRules);
-      return {
-        toolName,
-        state: defaultRule.action,
-        target: fallbackTarget,
-        source: "default",
-      };
-    }
-
-    // --- Tools (read, write, edit, grep, find, ls, extension tools) ---
-
-    // Session check.
-    if (sessionRules && sessionRules.length > 0) {
-      const sessionRule = evaluate(normalizedToolName, "*", sessionRules);
-      if (sessionRules.includes(sessionRule)) {
-        return {
-          toolName,
-          state: "allow",
-          matchedPattern: sessionRule.pattern,
-          source: "session",
-        };
-      }
-    }
-
-    const rule = evaluate(normalizedToolName, "*", composedRules);
-
-    if (BUILT_IN_TOOL_PERMISSION_NAMES.has(normalizedToolName)) {
-      return {
-        toolName,
-        state: rule.action,
-        source: "tool",
-      };
-    }
+    // For MCP, replace the normalizer's fallback target with the actual
+    // matched candidate value so PermissionCheckResult.target is accurate.
+    const extras =
+      surface === "mcp" ? { ...resultExtras, target: value } : resultExtras;
 
     return {
       toolName,
       state: rule.action,
-      source: rule.layer === "default" ? "default" : "tool",
+      matchedPattern:
+        rule.layer === "config" || rule.layer === "session"
+          ? rule.pattern
+          : undefined,
+      source: deriveSource(rule, normalizedToolName),
+      ...extras,
     };
   }
+}
+
+/**
+ * Map a matched rule + tool name to the correct PermissionCheckResult.source.
+ *
+ * Mirrors the source-derivation logic from the former per-branch
+ * checkPermission() implementation:
+ *
+ * - session          → "session" (always, all surfaces)
+ * - mcp + default    → "default"
+ * - mcp + override   → "tool"
+ * - mcp + other      → "mcp"
+ * - special          → "special" (always)
+ * - skill            → "skill" (always)
+ * - bash             → "bash" (always)
+ * - built-in tool    → "tool" (always)
+ * - extension tool   → "default" when default layer, "tool" otherwise
+ */
+function deriveSource(
+  rule: Rule,
+  toolName: string,
+): PermissionCheckResult["source"] {
+  if (rule.layer === "session") return "session";
+
+  if (toolName === "mcp") {
+    if (rule.layer === "default") return "default";
+    if (rule.layer === "override") return "tool";
+    return "mcp";
+  }
+
+  if (SPECIAL_PERMISSION_KEYS.has(toolName)) return "special";
+  if (toolName === "skill") return "skill";
+  if (toolName === "bash") return "bash";
+
+  // Built-in tools always report "tool"; extension tools distinguish default.
+  if (BUILT_IN_TOOL_PERMISSION_NAMES.has(toolName)) return "tool";
+  return rule.layer === "default" ? "default" : "tool";
 }
 
 // Keep isPermissionState and toRecord available for convenience — they are
