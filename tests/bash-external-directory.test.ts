@@ -750,6 +750,26 @@ describe("extractExternalPathsFromBashCommand", () => {
         expect(result).toContain("/etc/file-list");
       });
     });
+
+    describe("known limitations", () => {
+      test("sed -i without extension (GNU sed): /etc/hosts is missed (false negative)", async () => {
+        // GNU sed treats -i as a flag with no argument, so 's/foo/bar/' is
+        // the inline script and /etc/hosts is the input file.  Our logic
+        // treats -i as arg-consuming (correct for BSD sed -i ''), so it
+        // consumes the script as the -i extension and /etc/hosts becomes
+        // the first positional — which is skipped as the inline script.
+        // This is a known false negative.  The bash permission gate still
+        // applies, so external access is not silently allowed.
+        const result = await extractExternalPathsFromBashCommand(
+          "sed -i 's/foo/bar/' /etc/hosts",
+          cwd,
+        );
+        // Ideally this would detect /etc/hosts, but position tracking
+        // treats it as the inline script.  Assert current behavior so
+        // a future fix can flip this expectation.
+        expect(result).toHaveLength(0);
+      });
+    });
   });
 
   describe("regex patterns are not mistaken for paths", () => {
