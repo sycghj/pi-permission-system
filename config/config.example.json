@@ -5,6 +5,8 @@
   "permissionReviewLog": true,
   "yoloMode": false,
 
+  "piInfrastructureReadPaths": [],
+
   "permission": {
     "*": "ask",
     "read": "allow",

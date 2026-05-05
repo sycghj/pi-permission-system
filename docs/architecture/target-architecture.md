@@ -176,7 +176,7 @@ flowchart TD
         MCP["MCP target derivation<br/>→ candidate values[]"]
         Bash["Bash command extraction<br/>→ command string"]
         Skill["Skill name extraction<br/>→ skill name"]
-        ExtDir["External directory detection<br/>(tree-sitter-bash AST for bash; direct path for tools)<br/>→ normalized path"]
+        ExtDir["External directory detection<br/>(tree-sitter-bash AST for bash; direct path for tools)<br/>→ normalized path<br/>(Pi infrastructure reads auto-allowed before gate)"]
     end
 
     PreProcess --> E
@@ -410,7 +410,7 @@ src/
 ├── config-modal.ts           ✅ /permission-system slash command UI
 ├── extension-config.ts       ✅ Runtime knobs (debugLog, yoloMode, etc.)
 │
-├── external-directory.ts     ✅ Path-outside-cwd detection (tree-sitter-bash AST)
+├── external-directory.ts     ✅ Path-outside-cwd detection (tree-sitter-bash AST); Pi infrastructure read bypass
 ├── system-prompt-sanitizer.ts ✅ Remove denied tools from system prompt
 ├── skill-prompt-sanitizer.ts  ✅ Skill prompt filtering by policy
 ├── permission-prompts.ts      ✅ User-facing message formatting per surface

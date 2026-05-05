@@ -29,6 +29,16 @@
       "type": "boolean",
       "default": false
     },
+    "piInfrastructureReadPaths": {
+      "description": "Additional directories to auto-allow for reads as Pi infrastructure, bypassing the external_directory gate. Supports ~ expansion. Directory prefixes only (no globs).",
+      "markdownDescription": "Additional directories to auto-allow for reads as Pi infrastructure, bypassing the `external_directory` gate.\n\nThe extension auto-discovers the global node_modules root, `agentDir`, `agentDir/git`, and project-local `.pi/npm/` and `.pi/git/`. Add entries here for edge cases where auto-discovery is insufficient.\n\nSupports `~` expansion. Directory prefixes only — no glob patterns.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": []
+    },
     "permission": {
       "description": "Flat permission policy. Each key is a surface name; values are a PermissionState string (catch-all) or a pattern→action map.",
       "markdownDescription": "Flat permission policy.\n\nEach top-level key is a surface name:\n- `\"*\"` — universal fallback (replaces `defaultPolicy.tools` from the legacy format)\n- Tool names (`read`, `write`, `bash`, `mcp`, `skill`, `external_directory`, etc.)\n\nA **string** value is shorthand for `{ \"*\": action }` (surface-level catch-all).\nAn **object** value maps wildcard patterns to actions — last matching pattern wins.\n\n**Merge order (lowest → highest precedence):** global → project → per-agent frontmatter.",

@@ -118,6 +118,7 @@ The config file combines runtime knobs and permission policy in one object:
   "debugLog": false,
   "permissionReviewLog": true,
   "yoloMode": false,
+  "piInfrastructureReadPaths": [],  // extra dirs to auto-allow for reads
 
   // Flat permission policy
   "permission": {
@@ -134,11 +135,12 @@ The config file combines runtime knobs and permission policy in one object:
 
 #### Runtime knobs
 
-| Key                   | Default | Description                                                                                             |
-| --------------------- | ------- | ------------------------------------------------------------------------------------------------------- |
-| `debugLog`            | `false` | Enables verbose diagnostic logging to `logs/pi-permission-system-debug.jsonl`                           |
-| `permissionReviewLog` | `true`  | Enables the permission request/denial review log at `logs/pi-permission-system-permission-review.jsonl` |
-| `yoloMode`            | `false` | Auto-approves `ask` results instead of prompting when yolo mode is enabled                              |
+| Key                          | Default | Description                                                                                             |
+| ---------------------------- | ------- | ------------------------------------------------------------------------------------------------------- |
+| `debugLog`                   | `false` | Enables verbose diagnostic logging to `logs/pi-permission-system-debug.jsonl`                           |
+| `permissionReviewLog`        | `true`  | Enables the permission request/denial review log at `logs/pi-permission-system-permission-review.jsonl` |
+| `yoloMode`                   | `false` | Auto-approves `ask` results instead of prompting when yolo mode is enabled                              |
+| `piInfrastructureReadPaths`  | `[]`    | Extra directories to auto-allow for reads, bypassing the `external_directory` gate (supports `~`)       |
 
 Both logs write to `~/.pi/agent/extensions/pi-permission-system/logs/`.
 No debug output is printed to the terminal.
@@ -371,6 +373,17 @@ Bash commands are also covered: the extension extracts path-like tokens from the
 Quoted strings are stripped first to reduce false positives.
 This is a best-effort heuristic — variable expansion, subshells, and escaped quotes are not parsed.
 OS device paths (`/dev/null`, `/dev/stdin`, `/dev/stdout`, `/dev/stderr`) are always excluded.
+
+**Pi infrastructure read auto-allow** — Read-only tools (`read`, `find`, `grep`, `ls`) targeting Pi infrastructure directories are automatically allowed without triggering the gate, even when `external_directory` is `ask` or `deny`.
+Infrastructure directories include:
+
+1. The agent config directory (`~/.pi/agent/` or `$PI_CODING_AGENT_DIR`)
+2. Git-cloned global packages (`<agentDir>/git/`)
+3. The global `node_modules` root (auto-discovered from the extension's own install path — works for npm, pnpm, bun, Homebrew)
+4. Project-local Pi packages (`<cwd>/.pi/npm/` and `<cwd>/.pi/git/`)
+5. Any paths listed in `piInfrastructureReadPaths`
+
+Write tools (`write`, `edit`) to infrastructure paths are **not** auto-allowed and still go through the gate.
 
 ---
 
