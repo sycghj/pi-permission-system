@@ -22,7 +22,7 @@ This causes `piInfrastructureDirs` to omit the global `node_modules` root, and s
 
 - Upstream API request for `getGlobalNpmRoot()` — useful but orthogonal (tracked in #48 discussion).
 - Changing `piInfrastructureReadPaths` config semantics — the manual workaround stays as-is.
-- Supporting exotic package manager layouts beyond npm/pnpm/bun/Homebrew — cover the common cases, degrade gracefully for the rest.
+- Multi-package-manager detection — Pi defaults to `npm` for package installation; users with custom `npmCommand` in `settings.json` can use `piInfrastructureReadPaths` for non-npm global roots.
 
 ## Background
 
@@ -40,68 +40,114 @@ This causes `piInfrastructureDirs` to omit the global `node_modules` root, and s
 
 Users can add the global `node_modules` path to `piInfrastructureReadPaths` in their config, but this is non-obvious and machine-specific.
 
+### Why the original `createRequire` fallback plan was wrong
+
+The initial plan proposed using `createRequire(import.meta.url)` to resolve `@mariozechner/pi-coding-agent` and walk up from that path.
+This fails because from a dev checkout, `createRequire` resolves to the **local** `node_modules/.pnpm/...` (the devDependency copy), not the global root.
+Walking up from that path finds pnpm's internal `node_modules`, not `/opt/homebrew/lib/node_modules`.
+
+Verified empirically:
+
+```text
+import.meta.resolve('@mariozechner/pi-coding-agent')
+→ file:///.../pi-permission-system/node_modules/.pnpm/@mariozechner+pi-coding-agent@0.72.1_.../node_modules/@mariozechner/pi-coding-agent/dist/index.js
+
+Walk-up finds: .../node_modules/.pnpm/.../node_modules  (WRONG — pnpm internal)
+Need:          /opt/homebrew/lib/node_modules            (RIGHT — global root)
+```
+
 ## Design Overview
 
-### Strategy: `createRequire` fallback
+### Strategy: `npm root -g` subprocess fallback
 
-When the walk-up-from-self strategy returns `null` (no `node_modules` ancestor), use `createRequire(import.meta.url)` to resolve a known globally-installed package (`@mariozechner/pi-coding-agent`) and walk up from *that* resolved path.
-
-`createRequire` follows the standard Node.js module resolution algorithm, so it will find the package in the global `node_modules` regardless of where the extension code lives.
-`@mariozechner/pi-coding-agent` is always available at runtime — it's the host SDK.
+When the walk-up-from-self strategy returns `null` (no `node_modules` ancestor), fall back to `npm root -g` to discover the global `node_modules` root.
 
 ```typescript
-function discoverGlobalNodeModulesRoot(fromUrl = import.meta.url): string | null {
+export function discoverGlobalNodeModulesRoot(
+  fromUrl = import.meta.url,
+): string | null {
   // Strategy 1: walk up from own location (covers global installs).
   const fromSelf = walkUpToNodeModules(fromUrl);
   if (fromSelf) return fromSelf;
 
-  // Strategy 2: resolve a known global package via createRequire.
-  try {
-    const require = createRequire(fromUrl);
-    const sdkEntry = require.resolve("@mariozechner/pi-coding-agent");
-    return walkUpToNodeModules(pathToFileURL(sdkEntry).href);
-  } catch {
-    return null;
-  }
-  // Both strategies failed — caller degrades gracefully.
+  // Strategy 2: ask npm for the global root (covers dev checkouts).
+  return discoverGlobalNodeModulesViaSubprocess();
 }
 ```
 
-The inner `walkUpToNodeModules` is the existing walk-up loop, extracted to a helper so both strategies reuse the same logic.
+The walk-up loop is extracted to a private `walkUpToNodeModules(fromUrl)` helper.
+The subprocess fallback is a separate private function with its own error handling.
 
-### Why not `npm root -g`?
+### Why `npm root -g`?
 
-Subprocess calls at startup add latency and can fail silently in restricted environments.
-The `createRequire` approach is synchronous, zero-subprocess, and uses the same resolution Node.js itself uses.
+- Pi defaults to `npm` for package installation (`getNpmCommand()` returns `{ command: "npm", args: [] }` unless overridden in `settings.json`).
+  Skills and extensions installed by Pi live under `npm root -g`.
+- `npm` is always available when Node.js is available — it ships with Node.
+- The subprocess only runs when the walk-up fails (dev checkout only), so production installs pay zero cost.
+- The result is cached in the existing `discoverGlobalNodeModulesRoot()` call (called once at `createExtensionRuntime()` construction).
 
-### Why `@mariozechner/pi-coding-agent`?
+### Why not multi-PM detection?
 
-It is always present (it's the host), already imported, and its resolved path is inside the global `node_modules` tree.
-If it somehow fails to resolve (shouldn't happen), the `catch` returns `null` and the caller degrades gracefully — same as today.
+Pi's `config.ts` has a `detectInstallMethod()` function with `getGlobalPackageRoots()` that handles npm/pnpm/yarn/bun, but those are not exported and the detection logic relies on `__dirname` being inside `node_modules`.
+Replicating that detection is fragile and unnecessary:
+
+- `npm root -g` covers the default Pi installation method.
+- Users who override `npmCommand` in `settings.json` to use pnpm/bun already have a non-default setup and can use the existing `piInfrastructureReadPaths` config field.
+- The Bun binary case has no global `node_modules` tree — extensions are bundled.
+
+### Subprocess implementation
+
+```typescript
+function discoverGlobalNodeModulesViaSubprocess(): string | null {
+  try {
+    const result = spawnSync("npm", ["root", "-g"], {
+      encoding: "utf-8",
+      timeout: 5000,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const root = result.stdout?.trim();
+    if (result.status === 0 && root && existsSync(root)) {
+      return root;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+```
+
+Key details:
+
+- `timeout: 5000` — 5 second timeout prevents hanging if npm is broken.
+- `stdio: ["ignore", "pipe", "ignore"]` — only capture stdout; discard stdin and stderr.
+- `existsSync(root)` — sanity-check the returned path actually exists.
+- All failures return `null` — same graceful degradation as today.
 
 ### Edge cases
 
-- **pnpm virtual store**: `createRequire` may resolve to a `.pnpm` store path.
-  Walking up from that path will still find a `node_modules` ancestor (the `.pnpm` directory is under `node_modules`).
-- **Bundled/vendored extension**: if the extension is bundled into a single file outside `node_modules`, the walk-up fails.
-  The `createRequire` fallback still works because the SDK package is globally installed.
-- **`createRequire` resolves to a symlink target**: `require.resolve` returns the real path, which is inside the actual `node_modules` tree.
-  This is correct — symlink targets are what we want.
+- **npm not installed**: `spawnSync` throws `ENOENT` → caught → returns `null`.
+- **npm root -g returns a non-existent path**: `existsSync` check → returns `null`.
+- **Bun binary runtime**: walk-up fails (virtual filesystem), npm may not be available → subprocess fails → returns `null`. Acceptable — Bun binary bundles extensions.
+- **Windows**: `npm root -g` works on Windows. `spawnSync` handles cross-platform.
+- **NVM / fnm**: `npm root -g` returns the correct root for the active Node version.
+- **Custom npm prefix**: `npm root -g` respects the configured prefix.
 
 ## Module-Level Changes
 
 ### `src/external-directory.ts`
 
-- Extract the walk-up loop into a private `walkUpToNodeModules(fromUrl: string): string | null` helper.
-- Add the `createRequire` fallback to `discoverGlobalNodeModulesRoot()` when the walk-up returns `null`.
-- Import `pathToFileURL` from `node:url` (already importing `fileURLToPath`).
+- Extract the walk-up loop body into a private `walkUpToNodeModules(fromUrl: string): string | null` helper.
+- Add private `discoverGlobalNodeModulesViaSubprocess(): string | null` function.
+- Update `discoverGlobalNodeModulesRoot()` to try walk-up first, then subprocess fallback.
+- Add imports: `spawnSync` from `node:child_process`, `existsSync` from `node:fs`.
 
 ### `tests/external-directory.test.ts`
 
-- Add tests for the `createRequire` fallback path:
-  - Returns the global `node_modules` root when the walk-up-from-self fails but `createRequire` resolves the SDK.
-  - Returns `null` when both strategies fail.
-  - Does not invoke the fallback when the walk-up-from-self succeeds (primary path is preferred).
+- Add tests for the subprocess fallback path:
+  - Walk-up-from-self succeeds → returns result without invoking subprocess.
+  - Walk-up-from-self fails, `npm root -g` returns a valid path → returns that path.
+  - Walk-up-from-self fails, `npm root -g` fails → returns `null`.
+  - Walk-up-from-self fails, `npm root -g` returns a non-existent path → returns `null`.
 
 ### `tests/runtime.test.ts`
 
@@ -118,33 +164,35 @@ If it somehow fails to resolve (shouldn't happen), the `catch` returns `null` an
 
 ## TDD Order
 
-1. **test: cover `createRequire` fallback in `discoverGlobalNodeModulesRoot`**
+1. **test: cover `npm root -g` fallback in `discoverGlobalNodeModulesRoot`**
    Add tests in `tests/external-directory.test.ts`:
-   - Walk-up-from-self succeeds → returns result without invoking fallback.
-   - Walk-up-from-self fails, `createRequire` resolves SDK to a path inside `node_modules` → returns that `node_modules` root.
-   - Walk-up-from-self fails, `createRequire` throws → returns `null`.
-   Commit: `test: cover createRequire fallback for global node_modules discovery`
+   - Walk-up-from-self succeeds → returns result without invoking subprocess.
+   - Walk-up-from-self fails, subprocess returns valid path → returns that path.
+   - Walk-up-from-self fails, subprocess fails (non-zero exit / throws) → returns `null`.
+   - Walk-up-from-self fails, subprocess returns non-existent path → returns `null`.
+   Mock `spawnSync` to control subprocess behavior without actually spawning.
+   Commit: `test: cover npm root -g fallback for global node_modules discovery`
 
-2. **feat: add `createRequire` fallback to `discoverGlobalNodeModulesRoot`**
-   Extract `walkUpToNodeModules` helper, add fallback logic.
-   Commit: `fix: discover global node_modules root from dev checkout via createRequire fallback`
+2. **feat: add `npm root -g` fallback to `discoverGlobalNodeModulesRoot`**
+   Extract `walkUpToNodeModules` helper, add `discoverGlobalNodeModulesViaSubprocess`, wire into `discoverGlobalNodeModulesRoot`.
+   Commit: `fix: discover global node_modules root from dev checkout via npm root -g fallback`
 
-3. **docs: note the fallback in plan retro / README if needed**
+3. **docs: note the fallback in README**
    The README already documents `piInfrastructureReadPaths` as the manual workaround.
-   Add a brief note that the automatic discovery now works from dev checkouts.
-   Commit: `docs: note createRequire fallback for dev checkout infrastructure reads`
+   Add a brief note that the automatic discovery now works from dev checkouts via `npm root -g` fallback.
+   Commit: `docs: note npm root -g fallback for dev checkout infrastructure reads`
 
 ## Risks and Mitigations
 
 |Risk|Mitigation|
 |----|----------|
-|`createRequire` resolves to an unexpected location, widening the auto-allow set|The walk-up still requires finding a directory literally named `node_modules`. If the resolved path is not inside a `node_modules` tree, the walk-up returns `null` — no widening.|
-|Could this silently weaken a permission?|No. The change only affects which directories are added to `piInfrastructureDirs`, and only for *read-only* tools via `isPiInfrastructureRead`. Writes are never bypassed. The auto-allow is restricted to `READ_ONLY_PATH_BEARING_TOOLS`.|
-|`@mariozechner/pi-coding-agent` is not resolvable in some future environment|The `catch` returns `null`, identical to current behavior. No regression.|
-|Performance regression from `createRequire` + `require.resolve`|These are synchronous, single-call, and only invoked when the primary walk-up fails (i.e., dev checkout only). Zero impact on production installs.|
+|`npm root -g` returns an unexpected path, widening the auto-allow set|`existsSync` check validates the path exists. The auto-allow is restricted to `READ_ONLY_PATH_BEARING_TOOLS` via `isPiInfrastructureRead`. Writes are never bypassed.|
+|Could this silently weaken a permission?|No. The change only affects which directories are added to `piInfrastructureDirs`, and only for read-only tools. The directory added is the npm global root — the same directory that production installs already auto-allow via the walk-up.|
+|Subprocess hangs or is slow|5-second timeout. Only runs when walk-up fails (dev checkout only). Production installs never hit this path.|
+|npm not available (Bun binary, restricted env)|`catch` returns `null`, identical to current behavior. No regression.|
+|#48 rejected `npm root -g`|#48 rejected it as the *primary* strategy because the walk-up-from-self approach was zero-cost for production. Here it's a *fallback* that only fires from dev checkouts where the walk-up fails. The production path is unchanged.|
 
 ## Open Questions
 
-- If pnpm's virtual store layout places the resolved SDK path outside the *logical* global `node_modules`, the walk-up might find a store-internal `node_modules` rather than the top-level one.
-  This is acceptable — the store-internal path still covers the skill file locations.
-  Can revisit if a concrete pnpm layout breaks.
+- Should we log a debug message when the subprocess fallback is used? This would help diagnose issues but adds noise.
+  Leaning yes — it's a dev-only path and the debug log is opt-in.
