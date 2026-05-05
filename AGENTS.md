@@ -29,6 +29,8 @@ Read `docs/plans/` before making architectural changes (created by `/plan-issue`
   Pattern ordering within a surface map matters: last-match-wins, so put broad catch-alls first and specific overrides after.
 - Wildcard matching (bash patterns, skill globs) must be explicit and tested — silent over-matching is a permission bypass.
 - When a config pattern or documented recommendation can solve a problem, prefer that over a new runtime mechanism. Mechanism is forever; docs are reversible.
+- When a plan depends on Node.js module resolution, filesystem layout, or subprocess availability varying by environment (dev checkout vs. global install, npm vs. pnpm, Node.js vs. Bun), verify the strategy empirically with a disposable script before committing the plan.
+  A strategy that works on paper may fail due to package-manager hoisting, virtual stores, or runtime differences.
 - Treat any declared config field not read at runtime as a maintenance trap. Remove it or document its purpose.
 
 ## Code Style
