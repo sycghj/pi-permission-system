@@ -57,7 +57,7 @@ gh issue close $1 --comment "<the summary above>"
   - `gh pr view <num> --json mergeable,mergeStateStatus,title` — confirm `MERGEABLE` and `CLEAN`.
   - Note: release-please PRs typically have **no CI runs** because PRs created by the default `GITHUB_TOKEN` do not trigger workflows. This is expected; do not block on it.
   - `gh pr merge <num> --rebase`.
-  - `git pull --ff-only` to pick up the release commit and any tag. If this pull fails, stop and report — same rules as step 1.
+  - `sleep 5 && git pull --ff-only` to pick up the release commit and any tag. If this pull fails, stop and report — same rules as step 1.
 
 If the release-please PR is in any state other than `CLEAN`/`MERGEABLE`, stop and report — let the user decide.
 
