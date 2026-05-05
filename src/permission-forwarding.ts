@@ -5,9 +5,20 @@ import type { PermissionDecisionState } from "./permission-dialog";
 export const PERMISSION_FORWARDING_POLL_INTERVAL_MS = 250;
 export const PERMISSION_FORWARDING_TIMEOUT_MS = 10 * 60 * 1000;
 export const SUBAGENT_ENV_HINT_KEYS = [
+  // pi-agent-router (original)
   "PI_IS_SUBAGENT",
   "PI_SUBAGENT_SESSION_ID",
   "PI_AGENT_ROUTER_SUBAGENT",
+  // nicobailon/pi-subagents
+  "PI_SUBAGENT_CHILD",
+  "PI_SUBAGENT_RUN_ID",
+  "PI_SUBAGENT_CHILD_AGENT",
+  "PI_SUBAGENT_DEPTH",
+  // HazAT/pi-interactive-subagents
+  "PI_SUBAGENT_NAME",
+  "PI_SUBAGENT_ID",
+  "PI_SUBAGENT_SESSION",
+  "PI_SUBAGENT_ACTIVITY_FILE",
 ] as const;
 export const SUBAGENT_PARENT_SESSION_ENV_KEY =
   "PI_AGENT_ROUTER_PARENT_SESSION_ID";
