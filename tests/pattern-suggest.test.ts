@@ -69,11 +69,12 @@ describe("suggestMcpPattern", () => {
 
 describe("suggestSessionPattern", () => {
   describe("bash surface", () => {
-    it("returns bash surface with <command> * pattern for multi-word command", () => {
+    it("returns arity-aware subcommand pattern for multi-word command", () => {
+      // git arity=2: include the subcommand token in the prefix.
       const result = suggestSessionPattern("bash", "git status --short");
       expect(result).toMatchObject({
         surface: "bash",
-        pattern: "git *",
+        pattern: "git status *",
       });
     });
 
@@ -139,8 +140,9 @@ describe("suggestSessionPattern", () => {
 
   describe("label field", () => {
     it("includes the suggested pattern in the label", () => {
+      // git arity=2, "git status" has 2 tokens → trailing wildcard.
       const result = suggestSessionPattern("bash", "git status");
-      expect(result.label).toContain("git *");
+      expect(result.label).toContain("git status*");
     });
 
     it("wraps the pattern in quotes in the label", () => {

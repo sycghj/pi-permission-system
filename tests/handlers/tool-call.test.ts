@@ -568,7 +568,8 @@ describe("handleToolCall — session recording on approved_for_session", () => {
       input: { command: "git status" },
     });
     await handleToolCall(deps, event, makeCtx());
-    expect(sessionRules.approve).toHaveBeenCalledWith("bash", "git *");
+    // git arity=2: "git status" prefix covers all 2 tokens → trailing wildcard.
+    expect(sessionRules.approve).toHaveBeenCalledWith("bash", "git status*");
   });
 
   it("records mcp session approval with suggestMcpPattern result", async () => {
