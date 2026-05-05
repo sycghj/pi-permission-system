@@ -1,5 +1,9 @@
 export type PermissionState = "allow" | "deny" | "ask";
 
+import type { RuleOrigin } from "./rule";
+
+export type { RuleOrigin };
+
 /**
  * The on-disk permission shape inside the `"permission"` key.
  * Each key is a surface name; values are either a PermissionState string
@@ -36,4 +40,6 @@ export interface PermissionCheckResult {
   command?: string;
   target?: string;
   source: "tool" | "bash" | "mcp" | "skill" | "special" | "default" | "session";
+  /** Which config scope contributed the winning rule. Only set for config-layer rules. */
+  origin?: RuleOrigin;
 }

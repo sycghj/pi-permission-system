@@ -16,7 +16,7 @@ import {
 import { getGlobalConfigPath } from "./config-paths";
 import { normalizeInput } from "./input-normalizer";
 import { normalizeFlatConfig } from "./normalize";
-import type { Rule, Ruleset } from "./rule";
+import type { Rule, RuleOrigin, Ruleset } from "./rule";
 import { evaluate, evaluateFirst } from "./rule";
 import {
   composeRuleset,
@@ -354,19 +354,55 @@ export class PermissionManager {
     const projectAgentConfig = this.loadProjectScopeConfig(agentName);
 
     // Merge permission objects across scopes (lowest → highest precedence).
+    // Build a parallel origin map that tracks which scope contributed each
+    // (surface, pattern) entry, mirroring mergeFlatPermissions() semantics.
+    type OriginMap = Map<string, Map<string, RuleOrigin>>;
+    const origins: OriginMap = new Map();
     let mergedPermission: FlatPermissionConfig = {};
-    for (const scope of [
-      globalConfig,
-      projectConfig,
-      agentConfig,
-      projectAgentConfig,
-    ]) {
-      if (scope.permission) {
-        mergedPermission = mergeFlatPermissions(
-          mergedPermission,
-          scope.permission,
-        );
+
+    for (const [scopeName, scope] of [
+      ["global", globalConfig],
+      ["project", projectConfig],
+      ["agent", agentConfig],
+      ["project-agent", projectAgentConfig],
+    ] as const) {
+      if (!scope.permission) continue;
+
+      for (const [surface, value] of Object.entries(scope.permission)) {
+        const baseVal = mergedPermission[surface];
+        const bothObjects =
+          typeof baseVal === "object" &&
+          baseVal !== null &&
+          typeof value === "object" &&
+          value !== null;
+
+        if (bothObjects) {
+          // Shallow-merge: each incoming pattern is attributed to this scope;
+          // existing patterns from lower scopes keep their earlier origin.
+          if (!origins.has(surface)) origins.set(surface, new Map());
+          for (const pattern of Object.keys(value as Record<string, unknown>)) {
+            origins.get(surface)!.set(pattern, scopeName);
+          }
+        } else {
+          // Full replacement: this scope takes over the entire surface entry.
+          const surfaceOrigins = new Map<string, RuleOrigin>();
+          if (typeof value === "string") {
+            surfaceOrigins.set("*", scopeName);
+          } else if (typeof value === "object" && value !== null) {
+            for (const pattern of Object.keys(
+              value as Record<string, unknown>,
+            )) {
+              surfaceOrigins.set(pattern, scopeName);
+            }
+          }
+          origins.set(surface, surfaceOrigins);
+        }
       }
+
+      mergedPermission = mergeFlatPermissions(
+        mergedPermission,
+        scope.permission,
+      );
     }
 
     // Extract the universal fallback from permission["*"].
@@ -381,10 +417,16 @@ export class PermissionManager {
       Object.entries(mergedPermission).filter(([k]) => k !== "*"),
     );
 
-    // Normalize to config rules, tagged with "config" layer.
+    // Normalize to config rules, tagged with "config" layer and their origin.
     const configRules: Ruleset = normalizeFlatConfig(
       permissionWithoutUniversal,
-    ).map((r): Rule => ({ ...r, layer: "config" }));
+    ).map(
+      (r): Rule => ({
+        ...r,
+        layer: "config",
+        origin: origins.get(r.surface)?.get(r.pattern),
+      }),
+    );
 
     const composedRules = composeRuleset(
       synthesizeDefaults(universalFallback),
@@ -480,6 +522,7 @@ export class PermissionManager {
           ? rule.pattern
           : undefined,
       source: deriveSource(rule, normalizedToolName),
+      origin: rule.origin,
       ...extras,
     };
   }

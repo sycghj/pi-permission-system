@@ -446,3 +446,177 @@ describe("checkPermission — home path expansion in external_directory rules", 
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Rule origin provenance
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a manager with a global config and an optional project config.
+ * Returns the manager and a cleanup function.
+ */
+function makeManagerWithScopes(
+  globalPermission: Record<string, unknown>,
+  projectPermission?: Record<string, unknown>,
+): { manager: PermissionManager; cleanup: () => void } {
+  const baseDir = mkdtempSync(join(tmpdir(), "pm-provenance-test-"));
+  const agentsDir = join(baseDir, "agents");
+  mkdirSync(agentsDir, { recursive: true });
+  const globalConfigPath = join(baseDir, "global-config.json");
+  writeFileSync(
+    globalConfigPath,
+    JSON.stringify({ permission: globalPermission }, null, 2),
+  );
+
+  let projectGlobalConfigPath: string | undefined;
+  if (projectPermission !== undefined) {
+    projectGlobalConfigPath = join(baseDir, "project-config.json");
+    writeFileSync(
+      projectGlobalConfigPath,
+      JSON.stringify({ permission: projectPermission }, null, 2),
+    );
+  }
+
+  const manager = new PermissionManager({
+    globalConfigPath,
+    agentsDir,
+    projectGlobalConfigPath,
+  });
+  return {
+    manager,
+    cleanup: () => rmSync(baseDir, { recursive: true, force: true }),
+  };
+}
+
+describe("checkPermission — rule origin provenance", () => {
+  it("single-scope global: config rule has origin 'global'", () => {
+    const { manager, cleanup } = makeManagerWithScopes({ read: "allow" });
+    try {
+      const result = manager.checkPermission("read", {});
+      expect(result.state).toBe("allow");
+      expect(result.origin).toBe("global");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("single-scope global with pattern map: origin is 'global'", () => {
+    const { manager, cleanup } = makeManagerWithScopes({
+      bash: { "git *": "allow" },
+    });
+    try {
+      const result = manager.checkPermission("bash", { command: "git status" });
+      expect(result.state).toBe("allow");
+      expect(result.origin).toBe("global");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("project overrides global: winning rule has origin 'project'", () => {
+    const { manager, cleanup } = makeManagerWithScopes(
+      { read: "ask" },
+      { read: "allow" },
+    );
+    try {
+      const result = manager.checkPermission("read", {});
+      expect(result.state).toBe("allow");
+      expect(result.origin).toBe("project");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("both-object merge: patterns retain their own origins", () => {
+    // global defines bash["git *"] = allow; project adds bash["rm *"] = deny.
+    // Both patterns should survive with their own origins.
+    const { manager, cleanup } = makeManagerWithScopes(
+      { bash: { "git *": "allow" } },
+      { bash: { "rm *": "deny" } },
+    );
+    try {
+      const gitResult = manager.checkPermission("bash", {
+        command: "git status",
+      });
+      expect(gitResult.state).toBe("allow");
+      expect(gitResult.origin).toBe("global");
+
+      const rmResult = manager.checkPermission("bash", {
+        command: "rm -rf /",
+      });
+      expect(rmResult.state).toBe("deny");
+      expect(rmResult.origin).toBe("project");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("both-object merge: project pattern overrides global pattern for same key", () => {
+    // Both scopes define bash["git *"]; project wins for that pattern.
+    const { manager, cleanup } = makeManagerWithScopes(
+      { bash: { "git *": "ask" } },
+      { bash: { "git *": "allow" } },
+    );
+    try {
+      const result = manager.checkPermission("bash", {
+        command: "git status",
+      });
+      expect(result.state).toBe("allow");
+      expect(result.origin).toBe("project");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("string replaces object: all patterns from replacing scope get origin 'project'", () => {
+    // global defines bash as an object; project replaces with string "allow".
+    const { manager, cleanup } = makeManagerWithScopes(
+      { bash: { "git *": "ask", "npm *": "ask" } },
+      { bash: "allow" },
+    );
+    try {
+      // The catch-all "*" now comes from the project scope.
+      const result = manager.checkPermission("bash", {
+        command: "anything",
+      });
+      expect(result.state).toBe("allow");
+      expect(result.origin).toBe("project");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("object replaces string: all patterns from replacing scope get origin 'project'", () => {
+    // global defines read as a string "ask"; project replaces with object.
+    const { manager, cleanup } = makeManagerWithScopes(
+      { read: "ask" },
+      { read: { "*": "allow" } },
+    );
+    try {
+      const result = manager.checkPermission("read", {});
+      expect(result.state).toBe("allow");
+      expect(result.origin).toBe("project");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("no config match: origin is undefined (default layer)", () => {
+    // No config — falls back to synthesized default.
+    const manager = makeManager();
+    const result = manager.checkPermission("read", {});
+    expect(result.state).toBe("ask");
+    expect(result.origin).toBeUndefined();
+  });
+
+  it("session rule: origin is undefined", () => {
+    const manager = makeManager();
+    const sessionRules: Ruleset = [
+      { surface: "read", pattern: "*", action: "allow", layer: "session" },
+    ];
+    const result = manager.checkPermission("read", {}, undefined, sessionRules);
+    expect(result.state).toBe("allow");
+    expect(result.source).toBe("session");
+    expect(result.origin).toBeUndefined();
+  });
+});
