@@ -471,7 +471,15 @@ src/
 │   ├── lifecycle.ts          ✅ session_start, session_shutdown, resources_discover
 │   ├── before-agent-start.ts ✅ Tool filtering + prompt sanitization
 │   ├── input.ts              ✅ Skill input gate
-│   └── tool-call.ts          ✅ Invocation gating
+│   ├── tool-call.ts          ✅ Invocation gating orchestrator
+│   └── gates/               ✅ Per-gate functions extracted from tool-call (#107)
+│       ├── types.ts          ✅ GateOutcome, ToolCallContext
+│       ├── helpers.ts        ✅ deriveDecisionValue, deriveResolution
+│       ├── skill-read.ts     ✅ Skill-read permission gate
+│       ├── external-directory.ts ✅ External-directory permission gate
+│       ├── bash-external-directory.ts ✅ Bash external-directory permission gate
+│       ├── tool.ts           ✅ Normal tool permission gate
+│       └── index.ts          ✅ Barrel re-exports
 │
 ├── index.ts                  ✅ Extension factory - event wiring
 ├── permission-events.ts      ✅ Event channel constants, payload types, emit helpers (#29)
