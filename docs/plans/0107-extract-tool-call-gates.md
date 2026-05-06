@@ -289,7 +289,66 @@ Commit: `refactor: extract evaluateToolGate (#107)`
 
 Commit: `refactor: wire handleToolCall to per-gate functions (#107)`
 
-### Step 8: Update architecture docs
+### Step 8: Remove redundant integration tests
+
+After steps 3–6 provide comprehensive per-gate unit tests, 18 integration tests in `tests/handlers/tool-call.test.ts` become redundant — they exercise gate-internal logic through the full pipeline with no additional fidelity over the direct gate tests.
+The orchestrator is now a ~30-line linear chain; one wiring-smoke-test per gate (kept below) is sufficient.
+
+Tests to **remove** (gate-internal logic fully covered by per-gate tests):
+
+From `describe("handleToolCall")`:
+
+- "blocks when tool ask has no UI available" → `tool.test.ts`
+- "allows when user approves the ask prompt" → `tool.test.ts`
+- "blocks when user denies the ask prompt" → `tool.test.ts`
+
+From `describe("handleToolCall — external-directory gate")`:
+
+- "allows when session has an existing approval for the external path" → `external-directory.test.ts`
+- "approves session when user selects approved_for_session" → `external-directory.test.ts`
+
+From `describe("handleToolCall — Pi infrastructure read bypass")` (entire block):
+
+- "skips external-directory gate for read tool targeting an infra dir" → `external-directory.test.ts`
+- "does NOT skip gate for write tool targeting an infra dir" → `external-directory.test.ts`
+- "does NOT skip gate for read tool targeting a non-infra external path" → `external-directory.test.ts`
+- "writes a review log entry when bypassing the gate" → `external-directory.test.ts`
+- "respects config piInfrastructureReadPaths for bypass" → `external-directory.test.ts`
+
+From `describe("handleToolCall — bash external-directory gate")`:
+
+- "skips bash external gate when all referenced paths are session-approved" → `bash-external-directory.test.ts`
+
+From `describe("handleToolCall — session-hit detection (normal gate)")` (entire block):
+
+- "skips gate and logs session_approved when bash check returns source=session" → `tool.test.ts`
+- "skips gate and logs session_approved when mcp check returns source=session" → `tool.test.ts`
+- "does NOT call sessionRules.approve when source is session" → `tool.test.ts`
+
+From `describe("handleToolCall — session recording on approved_for_session")` (entire block):
+
+- "records bash session approval with suggestBashPattern result" → `tool.test.ts`
+- "records mcp session approval with suggestMcpPattern result" → `tool.test.ts`
+- "records tool session approval with * pattern for read surface" → `tool.test.ts`
+- "does NOT call sessionRules.approve when user approves once" → `tool.test.ts`
+
+Tests to **keep** (orchestrator wiring, setup, pre-gate validation):
+
+- `getEventInput` (4 tests) — utility function stays in `tool-call.ts`
+- "sets runtime context" — orchestrator setup
+- "starts forwarded permission polling" — orchestrator setup
+- "blocks when tool name cannot be resolved" — pre-gate validation
+- "blocks when tool is not registered" — pre-gate validation
+- "returns empty object when tool is allowed" — end-to-end happy-path smoke
+- "blocks when tool is denied by policy" — wiring: tool gate block propagates
+- "blocks a read of a denied skill path" — wiring: skill-read gate block propagates
+- "allows a read of a non-skill path…" — wiring: skill-read null → falls through
+- "blocks a read of a path outside cwd when policy is deny" — wiring: ext-dir gate block propagates
+- "blocks a bash command referencing an external path…" — wiring: bash-ext-dir gate block propagates
+
+Commit: `test: remove redundant integration tests covered by per-gate units (#107)`
+
+### Step 9: Update architecture docs
 
 1. Update `docs/architecture/target-architecture.md` if it references `tool-call.ts`.
 
