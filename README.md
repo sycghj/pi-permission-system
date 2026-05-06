@@ -26,18 +26,20 @@ pi install npm:@gotgenes/pi-permission-system
 
 1. Create the global config file at `~/.pi/agent/extensions/pi-permission-system/config.json`:
 
-```jsonc
-{
-  "permission": {
-    "*": "ask",
-    "read": "allow",
-    "write": "deny",
-    "bash": { "git status": "allow", "git *": "ask" }
-  }
-}
-```
+    ```jsonc
+    {
+      "permission": {
+        "*": "allow",
+        "bash": {
+          "rm -rf *": "deny",
+          "sudo *": "ask"
+        },
+        "external_directory": "ask"
+      }
+    }
+    ```
 
-1. Start Pi — the extension automatically loads and enforces your policy.
+2. Start Pi — the extension automatically loads and enforces your policy.
 
 All permissions use one of three states:
 
