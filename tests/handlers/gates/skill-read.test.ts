@@ -4,7 +4,6 @@ import { evaluateSkillReadGate } from "../../../src/handlers/gates/skill-read";
 import type { ToolCallContext } from "../../../src/handlers/gates/types";
 import type { HandlerDeps } from "../../../src/handlers/types";
 import type { PermissionEventBus } from "../../../src/permission-events";
-import type { ExtensionRuntime } from "../../../src/runtime";
 import type { SkillPromptEntry } from "../../../src/skill-prompt-sanitizer";
 
 // ── SDK stubs ──────────────────────────────────────────────────────────────
@@ -46,21 +45,17 @@ function makeEvents(): PermissionEventBus {
 }
 
 function makeRuntime(
-  overrides: Partial<ExtensionRuntime> = {},
-): ExtensionRuntime {
+  overrides: Record<string, unknown> = {},
+): HandlerDeps["runtime"] {
   return {
     activeSkillEntries: [],
     writeReviewLog: vi.fn(),
     ...overrides,
-  } as unknown as ExtensionRuntime;
+  } as unknown as HandlerDeps["runtime"];
 }
 
-function makeDeps(
-  overrides: Partial<HandlerDeps> & {
-    runtime?: Partial<ExtensionRuntime>;
-    events?: PermissionEventBus;
-  } = {},
-): HandlerDeps {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- test mock factory
+function makeDeps(overrides: Record<string, any> = {}): HandlerDeps {
   const { runtime: runtimeOverrides, events, ...rest } = overrides;
   return {
     runtime: makeRuntime(runtimeOverrides),

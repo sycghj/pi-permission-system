@@ -4,7 +4,6 @@ import { evaluateBashExternalDirectoryGate } from "../../../src/handlers/gates/b
 import type { ToolCallContext } from "../../../src/handlers/gates/types";
 import type { HandlerDeps } from "../../../src/handlers/types";
 import type { PermissionEventBus } from "../../../src/permission-events";
-import type { ExtensionRuntime } from "../../../src/runtime";
 import type { PermissionCheckResult } from "../../../src/types";
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -38,11 +37,11 @@ function makeEvents(): PermissionEventBus {
 }
 
 function makeRuntime(
-  overrides: Partial<ExtensionRuntime> = {},
-): ExtensionRuntime {
+  overrides: Record<string, unknown> = {},
+): HandlerDeps["runtime"] {
   return {
     config: { debugLog: false, permissionReviewLog: true, yoloMode: false },
-    runtimeContext: {} as ExtensionRuntime["runtimeContext"],
+    runtimeContext: {} as HandlerDeps["runtime"]["runtimeContext"],
     permissionManager: {
       checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
     },
@@ -53,15 +52,11 @@ function makeRuntime(
     },
     writeReviewLog: vi.fn(),
     ...overrides,
-  } as unknown as ExtensionRuntime;
+  } as unknown as HandlerDeps["runtime"];
 }
 
-function makeDeps(
-  overrides: Partial<HandlerDeps> & {
-    runtime?: Partial<ExtensionRuntime>;
-    events?: PermissionEventBus;
-  } = {},
-): HandlerDeps {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- test mock factory
+function makeDeps(overrides: Record<string, any> = {}): HandlerDeps {
   const { runtime: runtimeOverrides, events, ...rest } = overrides;
   return {
     runtime: makeRuntime(runtimeOverrides),
