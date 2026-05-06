@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/logo.png" alt="pi-permission-system logo" width="200">
+  <img src="docs/assets/logo.png" alt="pi-permission-system logo">
 </p>
 
 # @gotgenes/pi-permission-system
