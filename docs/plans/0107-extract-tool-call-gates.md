@@ -1,0 +1,272 @@
+---
+issue: 107
+issue_title: "refactor: break handleToolCall into per-gate functions"
+---
+
+# Extract per-gate functions from handleToolCall
+
+## Problem Statement
+
+`src/handlers/tool-call.ts` is a ~600-line file whose `handleToolCall` function orchestrates four sequential permission gates inline:
+
+1. **Skill-read gate** — checks whether a `read` targets a skill file.
+2. **External-directory gate** — checks whether a file tool targets a path outside CWD (including a Pi infrastructure read bypass).
+3. **Bash external-directory gate** — extracts paths from bash commands and checks them against external-directory policy.
+4. **Normal tool permission gate** — the standard tool/bash/mcp/skill check.
+
+Each gate follows the same structural pattern (check permission → build message → call `applyPermissionGate()` → emit decision event → handle session approval), but the wiring is inlined and repeated, making the function hard to read and test in isolation.
+
+## Goals
+
+- Extract each gate into its own pure-ish function with a narrow input type.
+- Reduce `handleToolCall` to a ~30-line orchestrator that chains gates and short-circuits on block.
+- Factor repeated emit-decision / record-session-rule patterns into shared helpers.
+- Preserve all existing behavior — this is a strict refactor, not a behavior change.
+- Keep all existing tests green throughout.
+
+## Non-Goals
+
+- Adding new gates (e.g., network-access) — that is a follow-up.
+- Changing `HandlerDeps` or `ExtensionRuntime` interfaces.
+- Changing `PermissionGateParams` or `applyPermissionGate`.
+- Modifying permission prompts, decision events, or session-rule logic.
+
+## Background
+
+### Permission surfaces involved
+
+All surfaces are touched indirectly: the tool gate handles `tools / bash / mcp / skill`, the external-directory gate handles `external_directory`, and the skill-read gate handles `skill` (specifically skill-file reads).
+
+### Key modules
+
+|File|Role|
+|----|-----|
+|`src/handlers/tool-call.ts`|The monolith being decomposed|
+|`src/handlers/types.ts`|`HandlerDeps` and `PromptPermissionDetails` types|
+|`src/permission-gate.ts`|`applyPermissionGate()` — the generic deny/ask/allow gate|
+|`src/permission-events.ts`|`emitDecisionEvent()` — the broadcast event emitter|
+|`src/session-rules.ts`|`deriveApprovalPattern()` — session-rule recording|
+|`src/external-directory.ts`|Path-bearing-tool helpers, Pi infrastructure read detection|
+|`src/skill-prompt-sanitizer.ts`|`findSkillPathMatch()` — skill-file matching|
+|`tests/handlers/tool-call.test.ts`|812-line test file exercising the full handler|
+
+### Current structure
+
+`handleToolCall` runs gates sequentially.
+Each gate can short-circuit with `{ block: true, reason }`.
+If no gate blocks, the function returns `{}` (allow).
+The helper functions `deriveDecisionValue`, `deriveResolution`, and `getEventInput` are already at module scope.
+
+## Design Overview
+
+### Gate result type
+
+All gates return a common result type:
+
+```typescript
+/** Outcome of a single permission gate evaluation. */
+export type GateOutcome =
+  | { action: "allow" }
+  | { action: "block"; reason: string };
+```
+
+This is simpler than `PermissionGateResult` because session-approval recording is handled internally by each gate before returning.
+
+### Gate context
+
+Each gate receives a narrow context object assembled by the orchestrator, rather than the full `HandlerDeps` bag.
+However, since these are internal helpers (not public API) and they all need overlapping subsets of `HandlerDeps`, the pragmatic approach is to pass `HandlerDeps`, the event, and the `ExtensionContext` — the same signature as `handleToolCall` — plus any gate-specific pre-computed values (e.g., `toolName`, `agentName`, `input`).
+
+A shared context struct avoids repeating the pre-validation logic:
+
+```typescript
+/** Pre-validated context shared across all gates. */
+interface ToolCallContext {
+  toolName: string;
+  agentName: string | null;
+  input: unknown;
+  toolCallId: string;
+  cwd: string | undefined;
+}
+```
+
+### File layout
+
+New files under `src/handlers/gates/`:
+
+|File|Exports|
+|----|-------|
+|`types.ts`|`GateOutcome`, `ToolCallContext`|
+|`skill-read.ts`|`evaluateSkillReadGate(ctx, tcc, deps) → Promise<GateOutcome \| null>`|
+|`external-directory.ts`|`evaluateExternalDirectoryGate(ctx, tcc, deps) → Promise<GateOutcome \| null>`|
+|`bash-external-directory.ts`|`evaluateBashExternalDirectoryGate(ctx, tcc, deps) → Promise<GateOutcome \| null>`|
+|`tool.ts`|`evaluateToolGate(ctx, tcc, deps) → Promise<GateOutcome>`|
+|`index.ts`|Re-exports|
+
+Gates that may not apply (skill-read, external-directory, bash-external-directory) return `null` when they are not relevant (e.g., tool is not `read`, path is not outside CWD), signaling "no opinion — continue to next gate."
+
+### Orchestrator
+
+`handleToolCall` becomes:
+
+```typescript
+export async function handleToolCall(deps, event, ctx) {
+  deps.runtime.runtimeContext = ctx;
+  deps.startForwardedPermissionPolling(ctx);
+
+  const agentName = deps.resolveAgentName(ctx);
+  const toolName = getToolNameFromValue(event);
+  // ... early validation (missing tool, unregistered) ...
+
+  const tcc: ToolCallContext = { toolName, agentName, input, toolCallId, cwd: ctx.cwd };
+
+  const skillResult = await evaluateSkillReadGate(ctx, tcc, deps);
+  if (skillResult?.action === "block") return { block: true, reason: skillResult.reason };
+
+  const extDirResult = await evaluateExternalDirectoryGate(ctx, tcc, deps);
+  if (extDirResult?.action === "block") return { block: true, reason: extDirResult.reason };
+
+  const bashExtResult = await evaluateBashExternalDirectoryGate(ctx, tcc, deps);
+  if (bashExtResult?.action === "block") return { block: true, reason: bashExtResult.reason };
+
+  const toolResult = await evaluateToolGate(ctx, tcc, deps);
+  if (toolResult.action === "block") return { block: true, reason: toolResult.reason };
+
+  return {};
+}
+```
+
+### Shared helpers
+
+`deriveDecisionValue` and `deriveResolution` stay in `tool-call.ts` (or move to `gates/helpers.ts`) since multiple gates use them.
+
+## Module-Level Changes
+
+### New files
+
+- `src/handlers/gates/types.ts` — `GateOutcome`, `ToolCallContext` types.
+- `src/handlers/gates/skill-read.ts` — skill-read gate logic extracted from lines ~130–185 of `tool-call.ts`.
+- `src/handlers/gates/external-directory.ts` — external-directory gate logic extracted from lines ~190–310, including Pi infrastructure read bypass and session-rule check.
+- `src/handlers/gates/bash-external-directory.ts` — bash external-directory gate extracted from lines ~315–405.
+- `src/handlers/gates/tool.ts` — normal tool gate extracted from lines ~410–530.
+- `src/handlers/gates/index.ts` — barrel re-exports.
+
+### Changed files
+
+- `src/handlers/tool-call.ts` — replace inline gate logic with calls to extracted functions; move `deriveDecisionValue`, `deriveResolution` to `gates/helpers.ts` or keep in place and export.
+- `tests/handlers/tool-call.test.ts` — no changes expected (the public API `handleToolCall` is unchanged; existing tests exercise the full pipeline through the same entry point).
+
+### New test files
+
+- `tests/handlers/gates/skill-read.test.ts` — unit tests for the skill-read gate in isolation.
+- `tests/handlers/gates/external-directory.test.ts` — unit tests for external-directory gate.
+- `tests/handlers/gates/bash-external-directory.test.ts` — unit tests for bash external-directory gate.
+- `tests/handlers/gates/tool.test.ts` — unit tests for the normal tool gate.
+
+### Documentation
+
+- `docs/architecture/target-architecture.md` — update if it references `tool-call.ts` structure.
+
+## TDD Order
+
+### Step 1: Introduce gate types
+
+1. Create `src/handlers/gates/types.ts` with `GateOutcome` and `ToolCallContext`.
+2. Create `src/handlers/gates/index.ts` barrel.
+3. Verify build passes.
+
+Commit: `refactor: add gate types for tool-call decomposition (#107)`
+
+### Step 2: Extract skill-read gate (red → green)
+
+1. Write `tests/handlers/gates/skill-read.test.ts` testing:
+   - Returns `null` when tool is not `read`.
+   - Returns `null` when no active skill entries.
+   - Returns `null` when read path doesn't match any skill.
+   - Returns `{ action: "allow" }` when skill state is `allow`.
+   - Returns `{ action: "block", reason }` when skill state is `deny`.
+   - Returns `{ action: "allow" }` when state is `ask` and user approves.
+   - Returns `{ action: "block", reason }` when state is `ask` and user denies.
+   - Emits decision event with correct surface/resolution.
+2. Implement `src/handlers/gates/skill-read.ts`.
+3. Tests go green.
+
+Commit: `refactor: extract evaluateSkillReadGate (#107)`
+
+### Step 3: Extract external-directory gate (red → green)
+
+1. Write `tests/handlers/gates/external-directory.test.ts` testing:
+   - Returns `null` when no CWD.
+   - Returns `null` when tool is not path-bearing.
+   - Returns `null` when path is inside CWD.
+   - Pi infrastructure read bypass — returns `{ action: "allow" }` and emits `infrastructure_auto_allowed`.
+   - Session-rule hit — returns `{ action: "allow" }` and emits `session_approved`.
+   - Policy deny — returns `{ action: "block" }`.
+   - Policy ask, user approves for session — records session rule and returns `{ action: "allow" }`.
+   - Policy ask, user denies — returns `{ action: "block" }`.
+2. Implement `src/handlers/gates/external-directory.ts`.
+3. Tests go green.
+
+Commit: `refactor: extract evaluateExternalDirectoryGate (#107)`
+
+### Step 4: Extract bash external-directory gate (red → green)
+
+1. Write `tests/handlers/gates/bash-external-directory.test.ts` testing:
+   - Returns `null` when tool is not `bash`.
+   - Returns `null` when no CWD.
+   - Returns `null` when command has no external paths.
+   - Session-covered paths — returns `null` (fall through to normal gate).
+   - Uncovered paths, policy deny — returns `{ action: "block" }`.
+   - Uncovered paths, user approves for session — records session rules and returns `{ action: "allow" }`.
+2. Implement `src/handlers/gates/bash-external-directory.ts`.
+3. Tests go green.
+
+Commit: `refactor: extract evaluateBashExternalDirectoryGate (#107)`
+
+### Step 5: Extract normal tool gate (red → green)
+
+1. Write `tests/handlers/gates/tool.test.ts` testing:
+   - Session-rule hit — returns `{ action: "allow" }` and emits `session_approved`.
+   - Policy allow — returns `{ action: "allow" }` and emits `policy_allow`.
+   - Policy deny — returns `{ action: "block" }` and emits `policy_deny`.
+   - Policy ask, user approves — returns `{ action: "allow" }`.
+   - Policy ask, user approves for session — records session rule.
+   - Policy ask, user denies — returns `{ action: "block" }`.
+   - Auto-approved resolution is emitted correctly.
+   - Bash tool unavailable message differs from generic tool message.
+2. Implement `src/handlers/gates/tool.ts`.
+3. Tests go green.
+
+Commit: `refactor: extract evaluateToolGate (#107)`
+
+### Step 6: Wire orchestrator and verify existing tests
+
+1. Replace inline gate logic in `handleToolCall` with calls to the four extracted gate functions.
+2. Move `deriveDecisionValue` and `deriveResolution` to `src/handlers/gates/helpers.ts` (exported for gate use).
+3. Run full test suite — all 812 lines of `tests/handlers/tool-call.test.ts` must pass unchanged.
+4. Run `pnpm run build` to confirm types.
+
+Commit: `refactor: wire handleToolCall to per-gate functions (#107)`
+
+### Step 7: Update architecture docs
+
+1. Update `docs/architecture/target-architecture.md` if it references `tool-call.ts`.
+
+Commit: `docs: update architecture for gate extraction (#107)`
+
+## Risks and Mitigations
+
+|Risk|Mitigation|
+|----|----------|
+|Behavioral regression during extraction|All existing integration tests in `tool-call.test.ts` run after each step; the orchestrator's public contract is unchanged.|
+|Could this silently weaken a permission?|No — the refactor moves code without changing logic. Gate ordering is preserved. Short-circuit semantics are preserved. No new `"allow"` paths are introduced.|
+|Gate functions may need `HandlerDeps` fields that change|Gates use the same `HandlerDeps` interface; no interface changes are planned.|
+|Over-decomposition makes the call chain harder to follow|Each gate file is self-contained; the orchestrator is a linear chain. The overall structure is easier to follow than the monolith.|
+|Test mocking complexity increases|Gate unit tests construct narrow mocks for their specific gate; existing integration tests continue exercising the full pipeline.|
+
+## Open Questions
+
+- Whether `deriveDecisionValue` and `deriveResolution` should live in `gates/helpers.ts` or stay in `tool-call.ts` and be imported by gates.
+  Defer until implementation — the answer depends on which feels cleaner once the code is written.
+- Whether gate functions should take a narrower subset of `HandlerDeps` or the full bag.
+  The plan uses the full `HandlerDeps` for pragmatism; narrowing can be a follow-up if it improves testability.
