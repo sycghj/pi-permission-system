@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="docs/assets/logo.svg" alt="pi-permission-system logo" width="200" height="200">
-</p>
+![pi-permission-system logo](docs/assets/logo.png)
 
 # @gotgenes/pi-permission-system
 
