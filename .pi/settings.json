@@ -1,0 +1,11 @@
+{
+  "packages": [
+    "~/development/pi/pi-coding-agent-catppuccin",
+    "npm:@gotgenes/pi-anthropic-auth",
+    "npm:@gotgenes/pi-autoformat",
+    "../",
+    "npm:pi-prompt-template-model",
+    "npm:pi-web-access",
+    "npm:pi-ask-user"
+  ]
+}

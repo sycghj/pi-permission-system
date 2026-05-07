@@ -1,21 +1,12 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
-import { getAgentDir } from "@mariozechner/pi-coding-agent";
-
-import {
-  extractFrontmatter,
-  isPermissionState,
-  parseSimpleYamlMap,
-  toRecord,
-} from "./common";
-import {
-  loadUnifiedConfig,
-  normalizeUnifiedConfig,
-  stripJsonComments,
-} from "./config-loader";
-import { getGlobalConfigPath } from "./config-paths";
+import { isPermissionState } from "./common";
 import { normalizeInput } from "./input-normalizer";
 import { normalizeFlatConfig } from "./normalize";
+import {
+  FilePolicyLoader,
+  type PolicyLoader,
+  type PolicyLoaderOptions,
+  type ResolvedPolicyPaths,
+} from "./policy-loader";
 import type { Rule, RuleOrigin, Ruleset } from "./rule";
 import { evaluate, evaluateFirst } from "./rule";
 import {
@@ -29,16 +20,6 @@ import type {
   PermissionState,
   ScopeConfig,
 } from "./types";
-
-function defaultGlobalConfigPath(): string {
-  return getGlobalConfigPath(getAgentDir());
-}
-function defaultAgentsDir(): string {
-  return join(getAgentDir(), "agents");
-}
-function defaultGlobalMcpConfigPath(): string {
-  return join(getAgentDir(), "mcp.json");
-}
 
 const BUILT_IN_TOOL_PERMISSION_NAMES = new Set([
   "bash",
@@ -83,49 +64,10 @@ function mergeFlatPermissions(
   return merged;
 }
 
-function readConfiguredMcpServerNamesFromConfigPath(
-  configPath: string,
-): string[] {
-  try {
-    const raw = readFileSync(configPath, "utf-8");
-    const parsed = JSON.parse(stripJsonComments(raw)) as unknown;
-    const root = toRecord(parsed);
-    const serverRecord = toRecord(root.mcpServers ?? root["mcp-servers"]);
-
-    return Object.keys(serverRecord)
-      .map((name) => name.trim())
-      .filter((name) => name.length > 0);
-  } catch {
-    return [];
-  }
-}
-
-function getConfiguredMcpServerNamesFromPaths(
-  paths: readonly string[],
-): string[] {
-  const seen = new Set<string>();
-
-  for (const path of paths) {
-    for (const name of readConfiguredMcpServerNamesFromConfigPath(path)) {
-      seen.add(name);
-    }
-  }
-
-  return [...seen].sort(
-    (left, right) => right.length - left.length || left.localeCompare(right),
-  );
-}
-
-export interface ResolvedPolicyPaths {
-  globalConfigPath: string;
-  globalConfigExists: boolean;
-  projectConfigPath: string | null;
-  projectConfigExists: boolean;
-  agentsDir: string;
-  agentsDirExists: boolean;
-  projectAgentsDir: string | null;
-  projectAgentsDirExists: boolean;
-}
+type FileCacheEntry<TValue> = {
+  stamp: string;
+  value: TValue;
+};
 
 type ResolvedPermissions = {
   /**
@@ -135,223 +77,47 @@ type ResolvedPermissions = {
   composedRules: Ruleset;
 };
 
-type FileCacheEntry<TValue> = {
-  stamp: string;
-  value: TValue;
-};
-
-function getFileStamp(path: string): string {
-  try {
-    return String(statSync(path).mtimeMs);
-  } catch {
-    return "missing";
-  }
+export interface PermissionManagerOptions extends PolicyLoaderOptions {
+  policyLoader?: PolicyLoader;
 }
 
 export class PermissionManager {
-  private readonly globalConfigPath: string;
-  private readonly agentsDir: string;
-  private readonly projectGlobalConfigPath: string | null;
-  private readonly projectAgentsDir: string | null;
-  private readonly globalMcpConfigPath: string;
-  private readonly configuredMcpServerNamesOverride: readonly string[] | null;
-  private globalConfigCache: FileCacheEntry<ScopeConfig> | null = null;
-  private projectGlobalConfigCache: FileCacheEntry<ScopeConfig> | null = null;
-  private readonly agentConfigCache = new Map<
-    string,
-    FileCacheEntry<ScopeConfig>
-  >();
-  private readonly projectAgentConfigCache = new Map<
-    string,
-    FileCacheEntry<ScopeConfig>
-  >();
+  private readonly loader: PolicyLoader;
   private readonly resolvedPermissionsCache = new Map<
     string,
     FileCacheEntry<ResolvedPermissions>
   >();
-  private configuredMcpServerNamesCache: FileCacheEntry<
-    readonly string[]
-  > | null = null;
-  private accumulatedConfigIssues: string[] = [];
 
-  constructor(
-    options: {
-      globalConfigPath?: string;
-      agentsDir?: string;
-      projectGlobalConfigPath?: string;
-      projectAgentsDir?: string;
-      globalMcpConfigPath?: string;
-      mcpServerNames?: readonly string[];
-    } = {},
-  ) {
-    this.globalConfigPath =
-      options.globalConfigPath || defaultGlobalConfigPath();
-    this.agentsDir = options.agentsDir || defaultAgentsDir();
-    this.projectGlobalConfigPath = options.projectGlobalConfigPath || null;
-    this.projectAgentsDir = options.projectAgentsDir || null;
-    this.globalMcpConfigPath =
-      options.globalMcpConfigPath || defaultGlobalMcpConfigPath();
-    this.configuredMcpServerNamesOverride = options.mcpServerNames
-      ? [
-          ...new Set(
-            options.mcpServerNames
-              .map((name) => name.trim())
-              .filter((name) => name.length > 0),
-          ),
-        ]
-      : null;
-  }
-
-  private accumulateConfigIssues(issues: string[]): void {
-    for (const issue of issues) {
-      if (!this.accumulatedConfigIssues.includes(issue)) {
-        this.accumulatedConfigIssues.push(issue);
-      }
-    }
+  constructor(options: PermissionManagerOptions = {}) {
+    this.loader = options.policyLoader ?? new FilePolicyLoader(options);
   }
 
   getConfigIssues(agentName?: string): string[] {
     // Trigger a load/resolve to ensure issues are collected.
     this.resolvePermissions(agentName);
-    return [...this.accumulatedConfigIssues];
-  }
-
-  private loadGlobalConfig(): ScopeConfig {
-    const stamp = getFileStamp(this.globalConfigPath);
-    if (this.globalConfigCache?.stamp === stamp) {
-      return this.globalConfigCache.value;
-    }
-
-    const { config, issues } = loadUnifiedConfig(this.globalConfigPath);
-    this.accumulateConfigIssues(issues);
-
-    const value: ScopeConfig = {
-      permission: config.permission,
-    };
-
-    this.globalConfigCache = { stamp, value };
-    return value;
-  }
-
-  private loadProjectGlobalConfig(): ScopeConfig {
-    if (!this.projectGlobalConfigPath) {
-      return {};
-    }
-
-    const stamp = getFileStamp(this.projectGlobalConfigPath);
-    if (this.projectGlobalConfigCache?.stamp === stamp) {
-      return this.projectGlobalConfigCache.value;
-    }
-
-    const { config, issues } = loadUnifiedConfig(this.projectGlobalConfigPath);
-    this.accumulateConfigIssues(issues);
-
-    const value: ScopeConfig = {
-      permission: config.permission,
-    };
-
-    this.projectGlobalConfigCache = { stamp, value };
-    return value;
-  }
-
-  private loadScopeConfigFrom(
-    dir: string | null,
-    cache: Map<string, FileCacheEntry<ScopeConfig>>,
-    agentName?: string,
-  ): ScopeConfig {
-    if (!dir || !agentName) {
-      return {};
-    }
-
-    const filePath = join(dir, `${agentName}.md`);
-    const stamp = getFileStamp(filePath);
-    const cached = cache.get(agentName);
-    if (cached?.stamp === stamp) {
-      return cached.value;
-    }
-
-    let value: ScopeConfig;
-    try {
-      const markdown = readFileSync(filePath, "utf-8");
-      const frontmatter = extractFrontmatter(markdown);
-      if (!frontmatter) {
-        value = {};
-      } else {
-        const parsed = parseSimpleYamlMap(frontmatter);
-        // Re-use the config-loader normalizer so the flat permission shape
-        // is validated the same way as on-disk config files.
-        const { config, issues } = normalizeUnifiedConfig(parsed);
-        this.accumulateConfigIssues(issues);
-        value = { permission: config.permission };
-      }
-    } catch {
-      value = {};
-    }
-
-    cache.set(agentName, { stamp, value });
-    return value;
-  }
-
-  private loadScopeConfig(agentName?: string): ScopeConfig {
-    return this.loadScopeConfigFrom(
-      this.agentsDir,
-      this.agentConfigCache,
-      agentName,
-    );
-  }
-
-  private loadProjectScopeConfig(agentName?: string): ScopeConfig {
-    return this.loadScopeConfigFrom(
-      this.projectAgentsDir,
-      this.projectAgentConfigCache,
-      agentName,
-    );
+    return [...this.loader.getConfigIssues()];
   }
 
   getResolvedPolicyPaths(): ResolvedPolicyPaths {
-    return {
-      globalConfigPath: this.globalConfigPath,
-      globalConfigExists: existsSync(this.globalConfigPath),
-      projectConfigPath: this.projectGlobalConfigPath,
-      projectConfigExists: this.projectGlobalConfigPath
-        ? existsSync(this.projectGlobalConfigPath)
-        : false,
-      agentsDir: this.agentsDir,
-      agentsDirExists: existsSync(this.agentsDir),
-      projectAgentsDir: this.projectAgentsDir,
-      projectAgentsDirExists: this.projectAgentsDir
-        ? existsSync(this.projectAgentsDir)
-        : false,
-    };
+    return this.loader.getResolvedPolicyPaths();
   }
 
   getPolicyCacheStamp(agentName?: string): string {
-    const agentStamp = agentName
-      ? getFileStamp(join(this.agentsDir, `${agentName}.md`))
-      : "missing";
-    const projectStamp = this.projectGlobalConfigPath
-      ? getFileStamp(this.projectGlobalConfigPath)
-      : "none";
-    const projectAgentStamp =
-      this.projectAgentsDir && agentName
-        ? getFileStamp(join(this.projectAgentsDir, `${agentName}.md`))
-        : "none";
-
-    return `${getFileStamp(this.globalConfigPath)}|${projectStamp}|${agentStamp}|${projectAgentStamp}`;
+    return this.loader.getCacheStamp(agentName);
   }
 
   private resolvePermissions(agentName?: string): ResolvedPermissions {
     const cacheKey = agentName || "__global__";
-    const stamp = this.getPolicyCacheStamp(agentName);
+    const stamp = this.loader.getCacheStamp(agentName);
     const cached = this.resolvedPermissionsCache.get(cacheKey);
     if (cached?.stamp === stamp) {
       return cached.value;
     }
 
-    const globalConfig = this.loadGlobalConfig();
-    const projectConfig = this.loadProjectGlobalConfig();
-    const agentConfig = this.loadScopeConfig(agentName);
-    const projectAgentConfig = this.loadProjectScopeConfig(agentName);
+    const globalConfig = this.loader.loadGlobalConfig();
+    const projectConfig = this.loader.loadProjectConfig();
+    const agentConfig = this.loader.loadAgentConfig(agentName);
+    const projectAgentConfig = this.loader.loadProjectAgentConfig(agentName);
 
     // Merge permission objects across scopes (lowest → highest precedence).
     // Build a parallel origin map that tracks which scope contributed each
@@ -442,24 +208,6 @@ export class PermissionManager {
     return value;
   }
 
-  private getConfiguredMcpServerNames(): readonly string[] {
-    if (this.configuredMcpServerNamesOverride) {
-      return this.configuredMcpServerNamesOverride;
-    }
-
-    const paths = [this.globalMcpConfigPath];
-    const stamp = paths
-      .map((path) => `${path}:${getFileStamp(path)}`)
-      .join("|");
-    if (this.configuredMcpServerNamesCache?.stamp === stamp) {
-      return this.configuredMcpServerNamesCache.value;
-    }
-
-    const value = getConfiguredMcpServerNamesFromPaths(paths);
-    this.configuredMcpServerNamesCache = { stamp, value };
-    return value;
-  }
-
   /**
    * Return the composed config-layer rules for the given agent scope.
    * Used by the `/permission-system show` command to display effective rules
@@ -518,7 +266,7 @@ export class PermissionManager {
     const { surface, values, resultExtras } = normalizeInput(
       normalizedToolName,
       input,
-      this.getConfiguredMcpServerNames(),
+      this.loader.getConfiguredMcpServerNames(),
     );
 
     const { rule, value } = evaluateFirst(surface, values, fullRules);
@@ -579,4 +327,6 @@ function deriveSource(
 
 // Keep isPermissionState and toRecord available for convenience — they are
 // used directly in some handler files that import from permission-manager.
-export { isPermissionState, toRecord };
+export { isPermissionState, toRecord } from "./common";
+// Re-export types that external modules import from this file.
+export type { PolicyLoader, ResolvedPolicyPaths } from "./policy-loader";
