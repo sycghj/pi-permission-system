@@ -27,6 +27,8 @@ The following concepts are shared between OpenCode and this extension:
 |Session-scoped approvals|`once` / `always` / `reject` from the ask dialog; `always` adds a session rule|
 |Per-agent overrides|Override global permissions for specific agents|
 |Tool hiding|Denied tools are removed before the agent starts (no wasted turns probing)|
+|Bash path extraction|Tree-sitter AST parsing to detect external paths in shell commands|
+|Bash arity table|Generates smart approval pattern suggestions (e.g., `git checkout *` not `git *`)|
 
 If your OpenCode config uses these features, the equivalent works in this extension with minimal translation (see [Porting Guide](#porting-an-opencode-config) below).
 
@@ -46,7 +48,6 @@ If your OpenCode config uses these features, the equivalent works in this extens
 
 |`mcp` surface|Not a documented permission surface|First-class with server/tool-level granularity|
 |Top-level string shorthand|`"permission": "allow"` sets all surfaces|Not supported; must use an object|
-|Bash arity table|Extracts "human-understandable command" before rule matching|Has arity table, but uses it only for session approval pattern suggestions — rule matching is against the full command string|
 |Per-agent config location|`agent` key in config JSON or YAML frontmatter|YAML frontmatter in agent `.md` files only|
 |Config file paths|`~/.config/opencode/opencode.json`|`~/.pi/agent/extensions/pi-permission-system/config.json`|
 |Subagent prompt forwarding|Not documented|`ask` policies work in non-UI subagent contexts|
