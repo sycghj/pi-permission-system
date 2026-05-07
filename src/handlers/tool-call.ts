@@ -17,6 +17,7 @@ import { evaluateToolGate } from "./gates/tool";
 import type {
   BashExternalDirectoryGateDeps,
   ExternalDirectoryGateDeps,
+  SkillReadGateDeps,
   ToolCallContext,
   ToolGateDeps,
 } from "./gates/types";
@@ -88,7 +89,16 @@ export async function handleToolCall(
   };
 
   // ── Skill-read gate ──────────────────────────────────────────────────────
-  const skillResult = await evaluateSkillReadGate(tcc, deps);
+  const skillReadGateDeps: SkillReadGateDeps = {
+    getActiveSkillEntries: () => deps.runtime.activeSkillEntries,
+    writeReviewLog: deps.runtime.writeReviewLog,
+    emitDecision: (event) => emitDecisionEvent(deps.events, event),
+    canConfirm: () =>
+      deps.canRequestPermissionConfirmation(deps.runtime.runtimeContext!),
+    promptPermission: (details) =>
+      deps.promptPermission(deps.runtime.runtimeContext!, details),
+  };
+  const skillResult = await evaluateSkillReadGate(tcc, skillReadGateDeps);
   if (skillResult?.action === "block") {
     return { block: true, reason: skillResult.reason };
   }

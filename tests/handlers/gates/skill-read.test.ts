@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { evaluateSkillReadGate } from "../../../src/handlers/gates/skill-read";
-import type { ToolCallContext } from "../../../src/handlers/gates/types";
-import type { HandlerDeps } from "../../../src/handlers/types";
-import type { PermissionEventBus } from "../../../src/permission-events";
+import type {
+  SkillReadGateDeps,
+  ToolCallContext,
+} from "../../../src/handlers/gates/types";
 import type { SkillPromptEntry } from "../../../src/skill-prompt-sanitizer";
 
 // ── SDK stubs ──────────────────────────────────────────────────────────────
@@ -40,31 +41,19 @@ function makeTcc(overrides: Partial<ToolCallContext> = {}): ToolCallContext {
   };
 }
 
-function makeEvents(): PermissionEventBus {
-  return { emit: vi.fn(), on: vi.fn().mockReturnValue(() => undefined) };
-}
-
-function makeRuntime(
-  overrides: Record<string, unknown> = {},
-): HandlerDeps["runtime"] {
+function makeSkillReadGateDeps(
+  overrides: Partial<SkillReadGateDeps> = {},
+): SkillReadGateDeps {
   return {
-    activeSkillEntries: [],
+    getActiveSkillEntries: vi.fn().mockReturnValue([]),
     writeReviewLog: vi.fn(),
-    ...overrides,
-  } as unknown as HandlerDeps["runtime"];
-}
-
-function makeDeps(overrides: Record<string, unknown> = {}): HandlerDeps {
-  const { runtime: runtimeOverrides, events, ...rest } = overrides;
-  return {
-    runtime: makeRuntime(runtimeOverrides as Record<string, unknown>),
-    events: events ?? makeEvents(),
-    canRequestPermissionConfirmation: vi.fn().mockReturnValue(true),
+    emitDecision: vi.fn(),
+    canConfirm: vi.fn().mockReturnValue(true),
     promptPermission: vi
       .fn()
       .mockResolvedValue({ approved: true, state: "approved" }),
-    ...rest,
-  } as unknown as HandlerDeps;
+    ...overrides,
+  };
 }
 
 // ── tests ──────────────────────────────────────────────────────────────────
@@ -72,8 +61,8 @@ function makeDeps(overrides: Record<string, unknown> = {}): HandlerDeps {
 describe("evaluateSkillReadGate", () => {
   it("returns null when tool is not read", async () => {
     const tcc = makeTcc({ toolName: "write" });
-    const deps = makeDeps({
-      runtime: { activeSkillEntries: [makeSkillEntry()] },
+    const deps = makeSkillReadGateDeps({
+      getActiveSkillEntries: vi.fn().mockReturnValue([makeSkillEntry()]),
     });
     const result = await evaluateSkillReadGate(tcc, deps);
     expect(result).toBeNull();
@@ -81,15 +70,17 @@ describe("evaluateSkillReadGate", () => {
 
   it("returns null when no active skill entries", async () => {
     const tcc = makeTcc();
-    const deps = makeDeps({ runtime: { activeSkillEntries: [] } });
+    const deps = makeSkillReadGateDeps({
+      getActiveSkillEntries: vi.fn().mockReturnValue([]),
+    });
     const result = await evaluateSkillReadGate(tcc, deps);
     expect(result).toBeNull();
   });
 
   it("returns null when read path does not match any skill", async () => {
     const tcc = makeTcc({ input: { path: "/test/project/src/index.ts" } });
-    const deps = makeDeps({
-      runtime: { activeSkillEntries: [makeSkillEntry()] },
+    const deps = makeSkillReadGateDeps({
+      getActiveSkillEntries: vi.fn().mockReturnValue([makeSkillEntry()]),
     });
     const result = await evaluateSkillReadGate(tcc, deps);
     expect(result).toBeNull();
@@ -97,10 +88,10 @@ describe("evaluateSkillReadGate", () => {
 
   it("returns allow when skill state is allow", async () => {
     const tcc = makeTcc();
-    const deps = makeDeps({
-      runtime: {
-        activeSkillEntries: [makeSkillEntry({ state: "allow" })],
-      },
+    const deps = makeSkillReadGateDeps({
+      getActiveSkillEntries: vi
+        .fn()
+        .mockReturnValue([makeSkillEntry({ state: "allow" })]),
     });
     const result = await evaluateSkillReadGate(tcc, deps);
     expect(result).toEqual({ action: "allow" });
@@ -108,10 +99,10 @@ describe("evaluateSkillReadGate", () => {
 
   it("returns block when skill state is deny", async () => {
     const tcc = makeTcc();
-    const deps = makeDeps({
-      runtime: {
-        activeSkillEntries: [makeSkillEntry({ state: "deny" })],
-      },
+    const deps = makeSkillReadGateDeps({
+      getActiveSkillEntries: vi
+        .fn()
+        .mockReturnValue([makeSkillEntry({ state: "deny" })]),
     });
     const result = await evaluateSkillReadGate(tcc, deps);
     expect(result).toMatchObject({ action: "block" });
@@ -119,10 +110,10 @@ describe("evaluateSkillReadGate", () => {
 
   it("returns allow when state is ask and user approves", async () => {
     const tcc = makeTcc();
-    const deps = makeDeps({
-      runtime: {
-        activeSkillEntries: [makeSkillEntry({ state: "ask" })],
-      },
+    const deps = makeSkillReadGateDeps({
+      getActiveSkillEntries: vi
+        .fn()
+        .mockReturnValue([makeSkillEntry({ state: "ask" })]),
       promptPermission: vi
         .fn()
         .mockResolvedValue({ approved: true, state: "approved" }),
@@ -133,10 +124,10 @@ describe("evaluateSkillReadGate", () => {
 
   it("returns block when state is ask and user denies", async () => {
     const tcc = makeTcc();
-    const deps = makeDeps({
-      runtime: {
-        activeSkillEntries: [makeSkillEntry({ state: "ask" })],
-      },
+    const deps = makeSkillReadGateDeps({
+      getActiveSkillEntries: vi
+        .fn()
+        .mockReturnValue([makeSkillEntry({ state: "ask" })]),
       promptPermission: vi
         .fn()
         .mockResolvedValue({ approved: false, state: "denied" }),
@@ -147,28 +138,25 @@ describe("evaluateSkillReadGate", () => {
 
   it("returns block when state is ask and no UI available", async () => {
     const tcc = makeTcc();
-    const deps = makeDeps({
-      runtime: {
-        activeSkillEntries: [makeSkillEntry({ state: "ask" })],
-      },
-      canRequestPermissionConfirmation: vi.fn().mockReturnValue(false),
+    const deps = makeSkillReadGateDeps({
+      getActiveSkillEntries: vi
+        .fn()
+        .mockReturnValue([makeSkillEntry({ state: "ask" })]),
+      canConfirm: vi.fn().mockReturnValue(false),
     });
     const result = await evaluateSkillReadGate(tcc, deps);
     expect(result).toMatchObject({ action: "block" });
   });
 
   it("emits decision event with correct fields on deny", async () => {
-    const events = makeEvents();
     const tcc = makeTcc({ agentName: "test-agent" });
-    const deps = makeDeps({
-      runtime: {
-        activeSkillEntries: [makeSkillEntry({ state: "deny" })],
-      },
-      events,
+    const deps = makeSkillReadGateDeps({
+      getActiveSkillEntries: vi
+        .fn()
+        .mockReturnValue([makeSkillEntry({ state: "deny" })]),
     });
     await evaluateSkillReadGate(tcc, deps);
-    expect(events.emit).toHaveBeenCalledWith(
-      "permissions:decision",
+    expect(deps.emitDecision).toHaveBeenCalledWith(
       expect.objectContaining({
         surface: "skill",
         value: "librarian",
@@ -182,17 +170,14 @@ describe("evaluateSkillReadGate", () => {
   });
 
   it("emits decision event with correct fields on allow", async () => {
-    const events = makeEvents();
     const tcc = makeTcc();
-    const deps = makeDeps({
-      runtime: {
-        activeSkillEntries: [makeSkillEntry({ state: "allow" })],
-      },
-      events,
+    const deps = makeSkillReadGateDeps({
+      getActiveSkillEntries: vi
+        .fn()
+        .mockReturnValue([makeSkillEntry({ state: "allow" })]),
     });
     await evaluateSkillReadGate(tcc, deps);
-    expect(events.emit).toHaveBeenCalledWith(
-      "permissions:decision",
+    expect(deps.emitDecision).toHaveBeenCalledWith(
       expect.objectContaining({
         surface: "skill",
         value: "librarian",

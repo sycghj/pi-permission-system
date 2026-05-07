@@ -1,15 +1,13 @@
 import { toRecord } from "../../common";
 import { normalizePathForComparison } from "../../external-directory";
-import { emitDecisionEvent } from "../../permission-events";
 import { applyPermissionGate } from "../../permission-gate";
 import {
   formatSkillPathAskPrompt,
   formatSkillPathDenyReason,
 } from "../../permission-prompts";
 import { findSkillPathMatch } from "../../skill-prompt-sanitizer";
-import type { HandlerDeps } from "../types";
 import { deriveResolution } from "./helpers";
-import type { GateOutcome, ToolCallContext } from "./types";
+import type { GateOutcome, SkillReadGateDeps, ToolCallContext } from "./types";
 
 /**
  * Evaluate the skill-read permission gate.
@@ -19,10 +17,12 @@ import type { GateOutcome, ToolCallContext } from "./types";
  */
 export async function evaluateSkillReadGate(
   tcc: ToolCallContext,
-  deps: HandlerDeps,
+  deps: SkillReadGateDeps,
 ): Promise<GateOutcome | null> {
+  const activeSkillEntries = deps.getActiveSkillEntries();
+
   // Only applies to read tool calls with active skill entries
-  if (tcc.toolName !== "read" || deps.runtime.activeSkillEntries.length === 0) {
+  if (tcc.toolName !== "read" || activeSkillEntries.length === 0) {
     return null;
   }
 
@@ -35,7 +35,7 @@ export async function evaluateSkillReadGate(
   const normalizedReadPath = normalizePathForComparison(path, tcc.cwd);
   const matchedSkill = findSkillPathMatch(
     normalizedReadPath,
-    deps.runtime.activeSkillEntries,
+    activeSkillEntries,
   );
 
   if (!matchedSkill) {
@@ -47,14 +47,12 @@ export async function evaluateSkillReadGate(
     path,
     tcc.agentName ?? undefined,
   );
-  const skillReadCanConfirm = deps.canRequestPermissionConfirmation(
-    deps.runtime.runtimeContext!,
-  );
+  const skillReadCanConfirm = deps.canConfirm();
   const skillReadGate = await applyPermissionGate({
     state: matchedSkill.state,
     canConfirm: skillReadCanConfirm,
     promptForApproval: () =>
-      deps.promptPermission(deps.runtime.runtimeContext!, {
+      deps.promptPermission({
         requestId: tcc.toolCallId,
         source: "skill_read",
         agentName: tcc.agentName,
@@ -64,7 +62,7 @@ export async function evaluateSkillReadGate(
         skillName: matchedSkill.name,
         path,
       }),
-    writeLog: deps.runtime.writeReviewLog,
+    writeLog: deps.writeReviewLog,
     logContext: {
       source: "skill_read",
       skillName: matchedSkill.name,
@@ -88,7 +86,7 @@ export async function evaluateSkillReadGate(
     },
   });
 
-  emitDecisionEvent(deps.events, {
+  deps.emitDecision({
     surface: "skill",
     value: matchedSkill.name,
     result: skillReadGate.action === "allow" ? "allow" : "deny",

@@ -87,5 +87,4 @@ export interface SkillReadGateDeps {
   promptPermission(
     details: PromptPermissionDetails,
   ): Promise<PermissionPromptDecision>;
-  createRequestId(prefix: string): string;
 }
