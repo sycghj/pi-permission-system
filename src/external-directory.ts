@@ -1,127 +1,24 @@
 import { createRequire } from "node:module";
-import { basename, join } from "node:path";
-
-import { getNonEmptyString, toRecord } from "./common";
+import { basename } from "node:path";
 
 export { discoverGlobalNodeModulesRoot } from "./node-modules-discovery";
 
 export {
+  getPathBearingToolPath,
+  isPathOutsideWorkingDirectory,
   isPathWithinDirectory,
+  isPiInfrastructureRead,
+  isSafeSystemPath,
   normalizePathForComparison,
+  PATH_BEARING_TOOLS,
+  READ_ONLY_PATH_BEARING_TOOLS,
+  SAFE_SYSTEM_PATHS,
 } from "./path-utils";
 
 import {
-  isPathWithinDirectory,
+  isPathOutsideWorkingDirectory,
   normalizePathForComparison,
 } from "./path-utils";
-
-/**
- * Paths that are universally safe and should never trigger external-directory checks.
- * These are OS device files: read returns EOF or process streams, write discards or goes to process streams.
- */
-export const SAFE_SYSTEM_PATHS: ReadonlySet<string> = new Set([
-  "/dev/null",
-  "/dev/stdin",
-  "/dev/stdout",
-  "/dev/stderr",
-]);
-
-/**
- * Returns true if the given normalized path is a safe OS device file
- * that should never trigger external-directory checks.
- */
-export function isSafeSystemPath(normalizedPath: string): boolean {
-  return SAFE_SYSTEM_PATHS.has(normalizedPath);
-}
-
-/**
- * Returns true if the given tool + normalized path combination qualifies for
- * automatic allow as a Pi infrastructure read.
- *
- * A path qualifies when:
- * 1. The tool is read-only (in READ_ONLY_PATH_BEARING_TOOLS).
- * 2. The normalized path is within one of the provided `infrastructureDirs`
- *    OR within the project-local Pi package directories
- *    (`<cwd>/.pi/npm/` or `<cwd>/.pi/git/`).
- *
- * `infrastructureDirs` should contain pre-expanded absolute paths (no `~`).
- * Project-local paths are computed fresh from `cwd` on each call so they
- * follow working-directory changes without a runtime rebuild.
- */
-export function isPiInfrastructureRead(
-  toolName: string,
-  normalizedPath: string,
-  infrastructureDirs: readonly string[],
-  cwd: string,
-): boolean {
-  if (!READ_ONLY_PATH_BEARING_TOOLS.has(toolName)) {
-    return false;
-  }
-
-  for (const dir of infrastructureDirs) {
-    if (isPathWithinDirectory(normalizedPath, dir)) {
-      return true;
-    }
-  }
-
-  // Project-local Pi packages — checked fresh every call so CWD changes work.
-  const projectNpmDir = join(cwd, ".pi", "npm");
-  const projectGitDir = join(cwd, ".pi", "git");
-  if (isPathWithinDirectory(normalizedPath, projectNpmDir)) {
-    return true;
-  }
-  if (isPathWithinDirectory(normalizedPath, projectGitDir)) {
-    return true;
-  }
-
-  return false;
-}
-
-/**
- * File tools that only read — never write — the filesystem.
- * Only these tools are eligible for the Pi infrastructure auto-allow.
- */
-export const READ_ONLY_PATH_BEARING_TOOLS: ReadonlySet<string> = new Set([
-  "read",
-  "find",
-  "grep",
-  "ls",
-]);
-
-export const PATH_BEARING_TOOLS = new Set([
-  "read",
-  "write",
-  "edit",
-  "find",
-  "grep",
-  "ls",
-]);
-
-export function getPathBearingToolPath(
-  toolName: string,
-  input: unknown,
-): string | null {
-  if (!PATH_BEARING_TOOLS.has(toolName)) {
-    return null;
-  }
-
-  return getNonEmptyString(toRecord(input).path);
-}
-
-export function isPathOutsideWorkingDirectory(
-  pathValue: string,
-  cwd: string,
-): boolean {
-  const normalizedCwd = normalizePathForComparison(cwd, cwd);
-  const normalizedPath = normalizePathForComparison(pathValue, cwd);
-  if (!normalizedCwd || !normalizedPath) {
-    return false;
-  }
-  if (isSafeSystemPath(normalizedPath)) {
-    return false;
-  }
-  return !isPathWithinDirectory(normalizedPath, normalizedCwd);
-}
 
 export function formatExternalDirectoryHardStopHint(): string {
   return "Hard stop: this external directory permission denial is policy-enforced. Do not retry this path, do not attempt a filesystem bypass, and report the block to the user.";
