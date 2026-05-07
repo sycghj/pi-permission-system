@@ -117,7 +117,7 @@ issue_title: "Per-agent permission frontmatter overrides" # required
 ## Architecture docs
 
 - `docs/architecture/v3-architecture.md` is a historical snapshot — do not update it to reflect new work.
-- `docs/architecture/target-architecture.md` is the living target — update it when work is completed or new gaps are identified.
+- `docs/architecture/architecture.md` is the living architecture doc — update it when implementation changes or new gaps are identified.
 - Per-module architecture notes (`docs/architecture/<module>.md`) describe the current implementation of that module.
 
 ## Testing

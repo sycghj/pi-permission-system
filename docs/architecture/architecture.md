@@ -1,6 +1,6 @@
-# Target Architecture
+# Architecture
 
-This document describes the target internal design for the permission system, informed by [OpenCode's permission model](https://opencode.ai/docs/permissions/) and the structural debt identified in [v3-architecture.md](./v3-architecture.md).
+This document describes the internal design of the permission system, informed by [OpenCode's permission model](https://opencode.ai/docs/permissions/).
 
 ## Design principles
 
@@ -16,8 +16,6 @@ This document describes the target internal design for the permission system, in
 ## Core data model
 
 ### Rule
-
-✅ Implemented in `src/rule.ts` (#55, #56).
 
 ```typescript
 /**
@@ -67,8 +65,6 @@ The synthesized universal default goes first (lowest priority), then MCP baselin
 Last-match-wins: `evaluate()` scans from the end.
 
 ### Evaluate
-
-✅ Implemented in `src/rule.ts` (#55).
 
 ```typescript
 function evaluate(surface: string, value: string, rules: Ruleset): Rule {
@@ -128,19 +124,13 @@ Index position determines priority (higher index wins):
   └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Current state
-
-✅ **Synthesis and composition are implemented** in `src/synthesize.ts` (#65, #66).
-
 `synthesizeDefaults()` produces a single universal catch-all from `permission["*"]`.
 Per-surface catch-alls (e.g. `bash: { "*": "allow" }`) are expressed as regular config rules via `normalizeFlatConfig()` — no separate override layer is needed.
 
 `synthesizeBaseline()` conditionally emits MCP metadata auto-allow rules.
 
 `composeRuleset()` concatenates: defaults + baseline + config rules.
-
-✅ **Session rules are concatenated into the composed ruleset** (#81).
-`checkPermission()` appends session rules after the config rules so `evaluate()` handles them via last-match-wins — no separate per-branch pre-check.
+Session rules are concatenated after config rules so `evaluate()` handles them via last-match-wins — no separate per-branch pre-check.
 
 ### Default synthesis
 
@@ -210,8 +200,6 @@ flowchart TD
 
 ## Config format
 
-✅ Implemented in #66. The legacy multi-namespace format has been removed.
-
 ```jsonc
 {
   "permission": {
@@ -231,8 +219,6 @@ An object value maps patterns to actions.
 `permission["*"]` is the universal fallback.
 
 ### Normalization to Rule[]
-
-✅ Implemented in `src/normalize.ts` (#56, #66).
 
 ```typescript
 function normalizeFlatConfig(permission: FlatPermissionConfig): Ruleset {
@@ -274,14 +260,12 @@ flowchart LR
 
 The priority ordering of candidates is preserved.
 The evaluation function is unchanged - MCP just calls it multiple times with different values.
-
-✅ **MCP target derivation helpers extracted to `src/mcp-targets.ts`** (#81).
+MCP target derivation helpers live in `src/mcp-targets.ts`.
 Input normalization for all surfaces lives in `src/input-normalizer.ts`.
 
 ## Session approvals: the cache-miss model
 
-✅ Session rules stored as `Ruleset` (#57).
-✅ Session approvals generalized to all surfaces (#51).
+Session rules are stored as `Ruleset` and are generalized to all surfaces.
 
 `evaluate()` is a **lookup** against cached decisions.
 When no rule matches (or the matching rule says "ask"), the system has a cache miss - it needs the human oracle to produce a decision.
@@ -313,15 +297,13 @@ The dialog determines **persistence** - where the rule lives:
 
 ### Pattern suggestions
 
-✅ Implemented in `src/pattern-suggest.ts` (#51).
-
 When prompting, each surface suggests a **pattern** for the "for session" option.
 The pattern determines what class of future requests auto-approve:
 
 |Surface|Input value|Suggested session pattern|Mechanism|
 |---|---|---|---|
-|bash|`git checkout main`|`git checkout *`|Arity table (#52)|
-|bash|`npm run dev`|`npm run dev`|Arity table (#52)|
+|bash|`git checkout main`|`git checkout *`|Arity table|
+|bash|`npm run dev`|`npm run dev`|Arity table|
 |tool (read/write/etc.)|tool surface itself|`*` (all uses of that tool)|Tool-level|
 |mcp|`exa:search`|`exa:*`|Server-level wildcard|
 |skill|`librarian`|`librarian`|Exact name|
@@ -334,9 +316,6 @@ The suggestion is shown in the dialog text so the user sees what they're approvi
   ● Allow "git checkout *" for this session
   ● Deny
 ```
-
-⚠️ Bash pattern suggestions currently use a simple first-token heuristic.
-Smart arity-based suggestions are tracked in #52.
 
 ### Implementation
 
@@ -394,8 +373,7 @@ return decision.action === "allow" ? proceed : block;
 Same `evaluate()`, same ruleset.
 The only surface-specific logic is input normalization (what `surface` and `value` to look up) and pattern suggestion (what glob to offer for "session" approval).
 
-✅ **`checkPermission()` uses a single evaluate path** (#81).
-The ~200-line if/else if chain is replaced by: `normalizeInput()` → `evaluateFirst()` → `deriveSource()` → single result object.
+`checkPermission()` uses a single evaluate path: `normalizeInput()` → `evaluateFirst()` → `deriveSource()` → single result object.
 
 ## Subagent detection and permission forwarding
 
@@ -416,14 +394,10 @@ This requires two detections:
 
 ### Detection (`SUBAGENT_ENV_HINT_KEYS`)
 
-✅ Broadened in #96 to cover nicobailon and HazAT env vars.
-
 `isSubagentExecutionContext()` returns `true` when any key in `SUBAGENT_ENV_HINT_KEYS` is set to a non-empty, non-whitespace value.
 A session-directory path-based fallback (child session dir is nested under `subagentSessionsDir`) acts as a secondary guard.
 
 ### Parent-session resolution (`SUBAGENT_PARENT_SESSION_ENV_CANDIDATES`)
-
-✅ Introduced in #96 as an ordered array.
 
 `resolvePermissionForwardingTargetSessionId()` iterates `SUBAGENT_PARENT_SESSION_ENV_CANDIDATES` and returns the first non-empty, non-`"unknown"` value.
 Currently only `PI_AGENT_ROUTER_PARENT_SESSION_ID` is in the list.
@@ -443,152 +417,72 @@ A [permission frontmatter convention guide](../guides/permission-frontmatter-for
 This is a documentation-only proposal — no code dependency is required.
 The guide covers the two-layer model, flat format reference, composition examples, and the optional event bus runtime integration.
 
-## Module structure (target)
-
-Modules marked ✅ exist today.
-Modules marked ⚠️ are future work.
-Modules marked 🔀 exist under a different name.
+## Module structure
 
 ```text
 src/
-├── rule.ts                   ✅ Rule type, Ruleset type, evaluate()
-├── normalize.ts              ✅ Config → Ruleset normalization (flat format)
-├── synthesize.ts             ✅ Universal default + MCP baseline → Ruleset (🔀 target name was synthesize-defaults.ts)
-├── wildcard-matcher.ts       ✅ Compiled glob matching
-├── mcp-targets.ts            ✅ MCP multi-name target derivation (#81)
-├── input-normalizer.ts       ✅ Surface-specific input normalization → NormalizedInput (#81)
-├── pattern-suggest.ts        ✅ Per-surface approval pattern suggestions
-├── bash-arity.ts             ⚠️ Command arity table for bash pattern suggestions (#52)
-├── home-expand.ts            ⚠️ ~/$HOME expansion for patterns (#53)
-├── session-rules.ts          ✅ Session approval store (Ruleset wrapper)
-├── policy-loader.ts          ✅ PolicyLoader interface + FilePolicyLoader (file I/O, mtime caching) (#108)
-├── permission-manager.ts     ✅ Policy merge + checkPermission(); delegates I/O to PolicyLoader (#108)
-├── permission-gate.ts        ✅ Pure deny/ask/allow gate (injected IO)
-├── permission-prompter.ts    ✅ Yolo-mode, review logging, UI/forwarding branch (#80)
-├── permission-dialog.ts      ✅ Dialog options (once / session / deny)
+├── rule.ts                   Rule type, Ruleset type, evaluate()
+├── normalize.ts              Config → Ruleset normalization (flat format)
+├── synthesize.ts             Universal default + MCP baseline → Ruleset
+├── wildcard-matcher.ts       Compiled glob matching
+├── mcp-targets.ts            MCP multi-name target derivation
+├── input-normalizer.ts       Surface-specific input normalization → NormalizedInput
+├── pattern-suggest.ts        Per-surface approval pattern suggestions
+├── bash-arity.ts             Command arity table for bash pattern suggestions
+├── expand-home.ts            ~/$HOME expansion for patterns
+├── session-rules.ts          Session approval store (Ruleset wrapper)
+├── policy-loader.ts          PolicyLoader interface + FilePolicyLoader (file I/O, mtime caching)
+├── permission-manager.ts     Policy merge + checkPermission(); delegates I/O to PolicyLoader
+├── permission-gate.ts        Pure deny/ask/allow gate (injected IO)
+├── permission-prompter.ts    Yolo-mode, review logging, UI/forwarding branch
+├── permission-dialog.ts      Dialog options (once / session / deny)
 │
-├── handlers/                 ✅ Extracted event handlers
-│   ├── index.ts              ✅ Re-exports
-│   ├── types.ts              ✅ HandlerDeps (session + promoted logging/paths), PromptPermissionDetails
-│   ├── lifecycle.ts          ✅ session_start, session_shutdown, resources_discover
-│   ├── before-agent-start.ts ✅ Tool filtering + prompt sanitization
-│   ├── input.ts              ✅ Skill input gate
-│   ├── tool-call.ts          ✅ Invocation gating orchestrator
-│   └── gates/               ✅ Pure descriptor factories + runner (#107, #111, #118)
-│       ├── types.ts          ✅ GateOutcome, ToolCallContext
-│       ├── descriptor.ts     ✅ GateDescriptor, GateBypass, GateResult, GateRunnerDeps types
-│       ├── runner.ts         ✅ runGateCheck() — single site for check→log→emit→approve
-│       ├── helpers.ts        ✅ deriveDecisionValue, deriveResolution
-│       ├── skill-read.ts     ✅ describeSkillReadGate — pure descriptor factory
-│       ├── external-directory.ts ✅ describeExternalDirectoryGate — pure descriptor/bypass factory
-│       ├── external-directory-messages.ts ✅ External-directory prompt/deny/hint message formatting (#110)
-│       ├── bash-external-directory.ts ✅ describeBashExternalDirectoryGate — pure descriptor/bypass factory
-│       ├── bash-path-extractor.ts ✅ Tree-sitter-bash AST parser + external path extraction (#110)
-│       ├── tool.ts           ✅ describeToolGate — pure descriptor factory
-│       └── index.ts          ✅ Barrel re-exports
+├── handlers/                 Extracted event handlers
+│   ├── index.ts              Re-exports
+│   ├── types.ts              HandlerDeps (session + promoted logging/paths), PromptPermissionDetails
+│   ├── lifecycle.ts          session_start, session_shutdown, resources_discover
+│   ├── before-agent-start.ts Tool filtering + prompt sanitization
+│   ├── input.ts              Skill input gate
+│   ├── tool-call.ts          Invocation gating orchestrator
+│   └── gates/               Pure descriptor factories + runner
+│       ├── types.ts          GateOutcome, ToolCallContext
+│       ├── descriptor.ts     GateDescriptor, GateBypass, GateResult, GateRunnerDeps types
+│       ├── runner.ts         runGateCheck() — single site for check→log→emit→approve
+│       ├── helpers.ts        deriveDecisionValue, deriveResolution
+│       ├── skill-read.ts     describeSkillReadGate — pure descriptor factory
+│       ├── external-directory.ts describeExternalDirectoryGate — pure descriptor/bypass factory
+│       ├── external-directory-messages.ts External-directory prompt/deny/hint message formatting
+│       ├── bash-external-directory.ts describeBashExternalDirectoryGate — pure descriptor/bypass factory
+│       ├── bash-path-extractor.ts Tree-sitter-bash AST parser + external path extraction
+│       ├── tool.ts           describeToolGate — pure descriptor factory
+│       └── index.ts          Barrel re-exports
 │
-├── index.ts                  ✅ Extension factory - event wiring
-├── permission-events.ts      ✅ Event channel constants, payload types, emit helpers (#29)
-├── permission-event-rpc.ts   ✅ permissions:rpc:check and permissions:rpc:prompt handlers (#29)
-├── runtime.ts                ✅ SessionState, ExtensionRuntime context object
-├── config-loader.ts          ✅ File I/O, format detection
-├── config-paths.ts           ✅ Path derivation
-├── config-reporter.ts        ✅ Structured log entries for resolved config
-├── config-modal.ts           ✅ /permission-system slash command UI
-├── extension-config.ts       ✅ Runtime knobs (debugLog, yoloMode, etc.)
+├── index.ts                  Extension factory - event wiring
+├── permission-events.ts      Event channel constants, payload types, emit helpers
+├── permission-event-rpc.ts   permissions:rpc:check and permissions:rpc:prompt handlers
+├── runtime.ts                SessionState, ExtensionRuntime context object
+├── config-loader.ts          File I/O, format detection
+├── config-paths.ts           Path derivation
+├── config-reporter.ts        Structured log entries for resolved config
+├── config-modal.ts           /permission-system slash command UI
+├── extension-config.ts       Runtime knobs (debugLog, yoloMode, etc.)
 │
-├── permission-merge.ts        ✅ Deep-shallow merge for flat permission configs (#109)
-├── path-utils.ts              ✅ Path normalization, within-directory, outside-CWD, safe-system-path, path-bearing-tool, Pi infrastructure read (#109, #110)
-├── node-modules-discovery.ts  ✅ Global node_modules resolution (walk-up + npm root -g fallback) (#110)
-├── system-prompt-sanitizer.ts ✅ Remove denied tools from system prompt
-├── skill-prompt-sanitizer.ts  ✅ Skill prompt filtering by policy
-├── permission-prompts.ts      ✅ User-facing message formatting per surface
-├── tool-input-preview.ts      ✅ Loggable context from tool inputs
-├── tool-registry.ts           ✅ Tool name validation
-├── active-agent.ts            ✅ Agent name detection from session/system prompt
-├── subagent-context.ts        ✅ Subagent execution context detection
-├── permission-forwarding.ts   ✅ Constants for cross-session forwarding
-├── forwarded-permissions/     ✅ Poll-based approval forwarding for subagents
-├── logging.ts                 ✅ JSONL review/debug log writer
-├── status.ts                  ✅ Footer status bar integration
-├── yolo-mode.ts               ✅ Auto-approve logic
-├── common.ts                  ✅ Shared parsing utilities
-├── types.ts                   ✅ Core type definitions (PermissionState, FlatPermissionConfig, etc.)
-└── before-agent-start-cache.ts ✅ Memoization for prompt sanitization
+├── permission-merge.ts        Deep-shallow merge for flat permission configs
+├── path-utils.ts              Path normalization, within-directory, outside-CWD, safe-system-path, path-bearing-tool, Pi infrastructure read
+├── node-modules-discovery.ts  Global node_modules resolution (walk-up + npm root -g fallback)
+├── system-prompt-sanitizer.ts Remove denied tools from system prompt
+├── skill-prompt-sanitizer.ts  Skill prompt filtering by policy
+├── permission-prompts.ts      User-facing message formatting per surface
+├── tool-input-preview.ts      Loggable context from tool inputs
+├── tool-registry.ts           Tool name validation
+├── active-agent.ts            Agent name detection from session/system prompt
+├── subagent-context.ts        Subagent execution context detection
+├── permission-forwarding.ts   Constants for cross-session forwarding
+├── forwarded-permissions/     Poll-based approval forwarding for subagents
+├── logging.ts                 JSONL review/debug log writer
+├── status.ts                  Footer status bar integration
+├── yolo-mode.ts               Auto-approve logic
+├── common.ts                  Shared parsing utilities
+├── types.ts                   Core type definitions (PermissionState, FlatPermissionConfig, etc.)
+└── before-agent-start-cache.ts Memoization for prompt sanitization
 ```
-
-## Refactoring sequence
-
-```mermaid
-flowchart TD
-    A["✅ #42 Extract event handlers"] --> D["✅ #43 Eliminate module-scope state"]
-    B["✅ #55 Extract pure evaluate()"] --> C["✅ #56 Unify Rule type + normalize config"]
-    C --> E["✅ #57 Replace SessionApprovalCache with session Ruleset"]
-    E --> X["✅ #65 Synthesize defaults + unify evaluate path"]
-    X --> F["✅ #51 Generalize session approvals to all surfaces"]
-    F --> G["#52 Bash arity table"]
-    G --> H["#53 ~/$HOME expansion"]
-    X --> Y["✅ #66 Flat permission config format"]
-    Y --> Z["✅ #81 Unify checkPermission surface branching"]
-    I["✅ #54 Deprecate doom_loop (dead code)"] -.->|"independent"| C
-    J["✅ #80 Extract PermissionPrompter"] -.->|"independent"| D
-
-    style A fill:#c8e6c9
-    style B fill:#c8e6c9
-    style C fill:#c8e6c9
-    style D fill:#c8e6c9
-    style E fill:#c8e6c9
-    style I fill:#c8e6c9
-    style X fill:#c8e6c9
-    style F fill:#c8e6c9
-    style Y fill:#c8e6c9
-    style J fill:#c8e6c9
-    style Z fill:#c8e6c9
-  ```
-
-### Phase 1: Structural cleanup (complete)
-
-|Issue|Summary|
-|---|---|
-|#42|✅ Extract event handlers from index.ts|
-|#43|✅ Eliminate module-scope mutable state|
-|#55|✅ Extract pure `evaluate()` function|
-|#54|✅ Deprecate doom_loop dead config key|
-|#56|✅ Unify Rule type + normalize config into Ruleset|
-|#57|✅ Replace SessionApprovalCache with session Ruleset|
-
-### Phase 2: Unified evaluation (complete)
-
-|Issue|Summary|
-|---|---|
-|#65|✅ Synthesize defaults into ruleset + unify evaluate path|
-
-### Phase 3: Feature delivery (mostly complete)
-
-|Issue|Summary|Status|
-|---|---|---|
-|#51|Generalize session approvals to all surfaces|✅|
-|#66|Flat permission config format|✅|
-|#80|Extract PermissionPrompter class|✅|
-|#52|Bash arity table for approval pattern suggestions|Open|
-|#53|`~`/`$HOME` expansion in permission patterns|Open|
-
-### Phase 4: Final unification
-
-|Issue|Summary|Status|
-|---|---|---|
-|#81|Unify `checkPermission()` surface branching (+ session concatenation + MCP extraction)|✅|
-|#82|Delete deprecated empty `defaults.ts` stub|✅|
-|#108|Extract PolicyLoader from PermissionManager (I/O boundary)|✅|
-
-## Migration and compatibility
-
-- **Config format**: #66 replaced the legacy multi-namespace format with flat `permission: { ... }`. This was a breaking change with no backward compatibility layer.
-- **Behavior**: identical permission decisions for equivalent policy + input.
-- **API**: `checkPermission()` return type is unchanged externally.
-- **Session approvals**: generalized to all surfaces (#51) - stored as `Rule { surface, pattern, action: "allow" }` in session rules.
-- **Review log**: structured entries for all permission decisions (waiting, approved, denied, auto-approved).
-- **Debuggability**: `/permission-system` command provides config inspection.
-
-Each phase is independently shippable.
-The system works correctly at every intermediate state.
