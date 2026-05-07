@@ -1,6 +1,7 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 import { toRecord } from "../common";
+import { emitDecisionEvent } from "../permission-events";
 import {
   formatMissingToolNameReason,
   formatUnknownToolReason,
@@ -13,7 +14,7 @@ import { evaluateBashExternalDirectoryGate } from "./gates/bash-external-directo
 import { evaluateExternalDirectoryGate } from "./gates/external-directory";
 import { evaluateSkillReadGate } from "./gates/skill-read";
 import { evaluateToolGate } from "./gates/tool";
-import type { ToolCallContext } from "./gates/types";
+import type { ToolCallContext, ToolGateDeps } from "./gates/types";
 import type { HandlerDeps } from "./types";
 
 /**
@@ -100,7 +101,25 @@ export async function handleToolCall(
   }
 
   // ── Normal tool permission gate ──────────────────────────────────────────
-  const toolResult = await evaluateToolGate(tcc, deps);
+  const toolGateDeps: ToolGateDeps = {
+    checkPermission: (surface, input, agent, sessionRules) =>
+      deps.runtime.permissionManager.checkPermission(
+        surface,
+        input,
+        agent,
+        sessionRules,
+      ),
+    getSessionRuleset: () => deps.runtime.sessionRules.getRuleset(),
+    approveSessionRule: (surface, pattern) =>
+      deps.runtime.sessionRules.approve(surface, pattern),
+    writeReviewLog: deps.runtime.writeReviewLog,
+    emitDecision: (event) => emitDecisionEvent(deps.events, event),
+    canConfirm: () =>
+      deps.canRequestPermissionConfirmation(deps.runtime.runtimeContext!),
+    promptPermission: (details) =>
+      deps.promptPermission(deps.runtime.runtimeContext!, details),
+  };
+  const toolResult = await evaluateToolGate(tcc, toolGateDeps);
   if (toolResult.action === "block") {
     return { block: true, reason: toolResult.reason };
   }

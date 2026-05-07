@@ -1,6 +1,5 @@
 import { PATH_BEARING_TOOLS } from "../../external-directory";
 import { suggestSessionPattern } from "../../pattern-suggest";
-import { emitDecisionEvent } from "../../permission-events";
 import { applyPermissionGate } from "../../permission-gate";
 import {
   formatAskPrompt,
@@ -8,9 +7,8 @@ import {
   formatUserDeniedReason,
 } from "../../permission-prompts";
 import { getPermissionLogContext } from "../../tool-input-preview";
-import type { HandlerDeps } from "../types";
 import { deriveDecisionValue, deriveResolution } from "./helpers";
-import type { GateOutcome, ToolCallContext } from "./types";
+import type { GateOutcome, ToolCallContext, ToolGateDeps } from "./types";
 
 /**
  * Evaluate the normal tool permission gate.
@@ -19,18 +17,18 @@ import type { GateOutcome, ToolCallContext } from "./types";
  */
 export async function evaluateToolGate(
   tcc: ToolCallContext,
-  deps: HandlerDeps,
+  deps: ToolGateDeps,
 ): Promise<GateOutcome> {
-  const check = deps.runtime.permissionManager.checkPermission(
+  const check = deps.checkPermission(
     tcc.toolName,
     tcc.input,
     tcc.agentName ?? undefined,
-    deps.runtime.sessionRules.getRuleset(),
+    deps.getSessionRuleset(),
   );
 
   // Session-hit: already approved by a session rule — skip the gate entirely.
   if (check.source === "session") {
-    deps.runtime.writeReviewLog("permission_request.session_approved", {
+    deps.writeReviewLog("permission_request.session_approved", {
       source: "tool_call",
       toolCallId: tcc.toolCallId,
       toolName: tcc.toolName,
@@ -38,7 +36,7 @@ export async function evaluateToolGate(
       resolution: "session_approved",
       sessionApprovalPattern: check.matchedPattern,
     });
-    emitDecisionEvent(deps.events, {
+    deps.emitDecision({
       surface: tcc.toolName,
       value: deriveDecisionValue(tcc.toolName, check),
       result: "allow",
@@ -82,9 +80,7 @@ export async function evaluateToolGate(
     tcc.agentName ?? undefined,
     tcc.input,
   );
-  const toolCanConfirm = deps.canRequestPermissionConfirmation(
-    deps.runtime.runtimeContext!,
-  );
+  const toolCanConfirm = deps.canConfirm();
   let toolDecisionAutoApproved = false;
   const toolGate = await applyPermissionGate({
     state: check.state,
@@ -94,23 +90,20 @@ export async function evaluateToolGate(
       pattern: suggestion.pattern,
     },
     promptForApproval: async () => {
-      const decision = await deps.promptPermission(
-        deps.runtime.runtimeContext!,
-        {
-          requestId: tcc.toolCallId,
-          source: "tool_call",
-          agentName: tcc.agentName,
-          message: toolAskMessage,
-          toolCallId: tcc.toolCallId,
-          toolName: tcc.toolName,
-          sessionLabel: suggestion.label,
-          ...permissionLogContext,
-        },
-      );
+      const decision = await deps.promptPermission({
+        requestId: tcc.toolCallId,
+        source: "tool_call",
+        agentName: tcc.agentName,
+        message: toolAskMessage,
+        toolCallId: tcc.toolCallId,
+        toolName: tcc.toolName,
+        sessionLabel: suggestion.label,
+        ...permissionLogContext,
+      });
       toolDecisionAutoApproved = decision.autoApproved === true;
       return decision;
     },
-    writeLog: deps.runtime.writeReviewLog,
+    writeLog: deps.writeReviewLog,
     logContext: {
       source: "tool_call",
       toolCallId: tcc.toolCallId,
@@ -129,7 +122,7 @@ export async function evaluateToolGate(
 
   const toolGateHasSession =
     toolGate.action === "allow" && toolGate.sessionApproval !== undefined;
-  emitDecisionEvent(deps.events, {
+  deps.emitDecision({
     surface: tcc.toolName,
     value: deriveDecisionValue(tcc.toolName, check),
     result: toolGate.action === "allow" ? "allow" : "deny",
@@ -150,7 +143,7 @@ export async function evaluateToolGate(
   }
 
   if (toolGate.sessionApproval) {
-    deps.runtime.sessionRules.approve(
+    deps.approveSessionRule(
       toolGate.sessionApproval.surface,
       toolGate.sessionApproval.pattern,
     );
