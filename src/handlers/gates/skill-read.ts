@@ -1,5 +1,5 @@
 import { toRecord } from "../../common";
-import { normalizePathForComparison } from "../../external-directory";
+import { normalizePathForComparison } from "../../path-utils";
 import {
   formatSkillPathAskPrompt,
   formatSkillPathDenyReason,

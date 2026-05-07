@@ -1,11 +1,20 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
-import { homedir } from "node:os";
 import { basename, dirname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { getNonEmptyString, toRecord } from "./common";
+
+export {
+  isPathWithinDirectory,
+  normalizePathForComparison,
+} from "./path-utils";
+
+import {
+  isPathWithinDirectory,
+  normalizePathForComparison,
+} from "./path-utils";
 
 /**
  * Walk up the directory tree from the given file URL until a directory
@@ -160,49 +169,6 @@ export const PATH_BEARING_TOOLS = new Set([
   "grep",
   "ls",
 ]);
-
-export function normalizePathForComparison(
-  pathValue: string,
-  cwd: string,
-): string {
-  const trimmed = pathValue.trim().replace(/^['"]|['"]$/g, "");
-  if (!trimmed) {
-    return "";
-  }
-
-  let normalizedPath = trimmed.startsWith("@") ? trimmed.slice(1) : trimmed;
-
-  if (normalizedPath === "~") {
-    normalizedPath = homedir();
-  } else if (
-    normalizedPath.startsWith("~/") ||
-    normalizedPath.startsWith("~\\")
-  ) {
-    normalizedPath = join(homedir(), normalizedPath.slice(2));
-  }
-
-  const absolutePath = resolve(cwd, normalizedPath);
-  const normalizedAbsolutePath = normalize(absolutePath);
-  return process.platform === "win32"
-    ? normalizedAbsolutePath.toLowerCase()
-    : normalizedAbsolutePath;
-}
-
-export function isPathWithinDirectory(
-  pathValue: string,
-  directory: string,
-): boolean {
-  if (!pathValue || !directory) {
-    return false;
-  }
-
-  if (pathValue === directory) {
-    return true;
-  }
-
-  const prefix = directory.endsWith(sep) ? directory : `${directory}${sep}`;
-  return pathValue.startsWith(prefix);
-}
 
 export function getPathBearingToolPath(
   toolName: string,

@@ -5,8 +5,8 @@ import {
   getPathBearingToolPath,
   isPathOutsideWorkingDirectory,
   isPiInfrastructureRead,
-  normalizePathForComparison,
 } from "../../external-directory";
+import { normalizePathForComparison } from "../../path-utils";
 import { deriveApprovalPattern } from "../../session-rules";
 import type { GateResult } from "./descriptor";
 import type { ToolCallContext } from "./types";
