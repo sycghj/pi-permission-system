@@ -661,3 +661,322 @@ describe("checkPermission — rule origin provenance", () => {
     expect(result.origin).toBe("builtin");
   });
 });
+
+// ---------------------------------------------------------------------------
+// In-memory PolicyLoader stub tests — no filesystem required
+// ---------------------------------------------------------------------------
+
+import type { PolicyLoader } from "../src/permission-manager";
+import type { ResolvedPolicyPaths } from "../src/policy-loader";
+import type { ScopeConfig } from "../src/types";
+
+/**
+ * Minimal in-memory PolicyLoader for testing merge + evaluation logic
+ * without touching the filesystem.
+ */
+function createInMemoryPolicyLoader(
+  scopes: {
+    global?: ScopeConfig;
+    project?: ScopeConfig;
+    agent?: Record<string, ScopeConfig>;
+    projectAgent?: Record<string, ScopeConfig>;
+  } = {},
+  mcpServerNames: readonly string[] = [],
+): PolicyLoader {
+  const issues: string[] = [];
+  return {
+    loadGlobalConfig: () => scopes.global ?? {},
+    loadProjectConfig: () => scopes.project ?? {},
+    loadAgentConfig: (name?: string) => (name && scopes.agent?.[name]) || {},
+    loadProjectAgentConfig: (name?: string) =>
+      (name && scopes.projectAgent?.[name]) || {},
+    getConfiguredMcpServerNames: () => mcpServerNames,
+    getCacheStamp: () => "in-memory",
+    getConfigIssues: () => issues,
+    getResolvedPolicyPaths: (): ResolvedPolicyPaths => ({
+      globalConfigPath: "/in-memory/config.json",
+      globalConfigExists: true,
+      projectConfigPath: null,
+      projectConfigExists: false,
+      agentsDir: "/in-memory/agents",
+      agentsDirExists: false,
+      projectAgentsDir: null,
+      projectAgentsDirExists: false,
+    }),
+  };
+}
+
+/** Create a PermissionManager backed by an in-memory PolicyLoader. */
+function makeInMemoryManager(
+  scopes: Parameters<typeof createInMemoryPolicyLoader>[0] = {},
+  mcpServerNames: readonly string[] = [],
+): PermissionManager {
+  return new PermissionManager({
+    policyLoader: createInMemoryPolicyLoader(scopes, mcpServerNames),
+  });
+}
+
+describe("PermissionManager with in-memory PolicyLoader", () => {
+  describe("universal fallback", () => {
+    it("defaults to ask when no config is provided", () => {
+      const manager = makeInMemoryManager();
+      const result = manager.checkPermission("read", {});
+      expect(result.state).toBe("ask");
+      expect(result.origin).toBe("builtin");
+    });
+
+    it("respects permission['*'] = 'allow' from global config", () => {
+      const manager = makeInMemoryManager({
+        global: { permission: { "*": "allow" } },
+      });
+      const result = manager.checkPermission("read", {});
+      expect(result.state).toBe("allow");
+      expect(result.origin).toBe("global");
+    });
+
+    it("respects permission['*'] = 'deny' from global config", () => {
+      const manager = makeInMemoryManager({
+        global: { permission: { "*": "deny" } },
+      });
+      const result = manager.checkPermission("write", {});
+      expect(result.state).toBe("deny");
+    });
+  });
+
+  describe("surface routing", () => {
+    it("bash surface routes correctly", () => {
+      const manager = makeInMemoryManager({
+        global: {
+          permission: { "*": "ask", bash: { "git *": "allow" } },
+        },
+      });
+      const result = manager.checkPermission("bash", {
+        command: "git status",
+      });
+      expect(result.state).toBe("allow");
+      expect(result.source).toBe("bash");
+      expect(result.matchedPattern).toBe("git *");
+    });
+
+    it("tool surface routes correctly for built-in tools", () => {
+      const manager = makeInMemoryManager({
+        global: { permission: { "*": "deny", read: "allow" } },
+      });
+      const result = manager.checkPermission("read", {});
+      expect(result.state).toBe("allow");
+      expect(result.source).toBe("tool");
+    });
+
+    it("skill surface routes correctly", () => {
+      const manager = makeInMemoryManager({
+        global: {
+          permission: { "*": "ask", skill: { librarian: "allow" } },
+        },
+      });
+      const result = manager.checkPermission("skill", { name: "librarian" });
+      expect(result.state).toBe("allow");
+      expect(result.source).toBe("skill");
+    });
+
+    it("mcp surface routes correctly", () => {
+      const manager = makeInMemoryManager(
+        {
+          global: {
+            permission: { "*": "ask", mcp: { exa_search: "allow" } },
+          },
+        },
+        ["exa"],
+      );
+      const result = manager.checkPermission("mcp", {
+        tool: "exa:search",
+        server: "exa",
+      });
+      expect(result.state).toBe("allow");
+      expect(result.source).toBe("mcp");
+    });
+
+    it("external_directory surface routes correctly", () => {
+      const manager = makeInMemoryManager({
+        global: {
+          permission: {
+            "*": "ask",
+            external_directory: { "/trusted/*": "allow" },
+          },
+        },
+      });
+      const result = manager.checkPermission("external_directory", {
+        path: "/trusted/repo",
+      });
+      expect(result.state).toBe("allow");
+      expect(result.source).toBe("special");
+    });
+
+    it("extension tools use 'default' source when no config rule matches", () => {
+      const manager = makeInMemoryManager({
+        global: { permission: { "*": "ask" } },
+      });
+      const result = manager.checkPermission("my_custom_tool", {});
+      expect(result.state).toBe("ask");
+      expect(result.source).toBe("default");
+    });
+  });
+
+  describe("multi-scope merge", () => {
+    it("project overrides global", () => {
+      const manager = makeInMemoryManager({
+        global: { permission: { read: "ask" } },
+        project: { permission: { read: "allow" } },
+      });
+      const result = manager.checkPermission("read", {});
+      expect(result.state).toBe("allow");
+      expect(result.origin).toBe("project");
+    });
+
+    it("agent overrides project", () => {
+      const manager = makeInMemoryManager({
+        global: { permission: { read: "ask" } },
+        project: { permission: { read: "allow" } },
+        agent: { coder: { permission: { read: "deny" } } },
+      });
+      const result = manager.checkPermission("read", {}, "coder");
+      expect(result.state).toBe("deny");
+      expect(result.origin).toBe("agent");
+    });
+
+    it("project-agent overrides agent", () => {
+      const manager = makeInMemoryManager({
+        global: { permission: { read: "deny" } },
+        agent: { coder: { permission: { read: "deny" } } },
+        projectAgent: { coder: { permission: { read: "allow" } } },
+      });
+      const result = manager.checkPermission("read", {}, "coder");
+      expect(result.state).toBe("allow");
+      expect(result.origin).toBe("project-agent");
+    });
+
+    it("deep-shallow merge preserves patterns from different scopes", () => {
+      const manager = makeInMemoryManager({
+        global: { permission: { bash: { "git *": "allow" } } },
+        project: { permission: { bash: { "rm *": "deny" } } },
+      });
+      const gitResult = manager.checkPermission("bash", {
+        command: "git status",
+      });
+      expect(gitResult.state).toBe("allow");
+      expect(gitResult.origin).toBe("global");
+
+      const rmResult = manager.checkPermission("bash", {
+        command: "rm -rf /",
+      });
+      expect(rmResult.state).toBe("deny");
+      expect(rmResult.origin).toBe("project");
+    });
+
+    it("string replaces object in override scope", () => {
+      const manager = makeInMemoryManager({
+        global: {
+          permission: { bash: { "git *": "ask", "npm *": "ask" } },
+        },
+        project: { permission: { bash: "allow" } },
+      });
+      const result = manager.checkPermission("bash", { command: "anything" });
+      expect(result.state).toBe("allow");
+      expect(result.origin).toBe("project");
+    });
+  });
+
+  describe("session rule composition", () => {
+    it("session rule wins over config", () => {
+      const manager = makeInMemoryManager({
+        global: { permission: { "*": "deny" } },
+      });
+      const sessionRules: Ruleset = [sessionAllow("read", "*")];
+      const result = manager.checkPermission(
+        "read",
+        {},
+        undefined,
+        sessionRules,
+      );
+      expect(result.state).toBe("allow");
+      expect(result.source).toBe("session");
+    });
+
+    it("session rule does not bleed across surfaces", () => {
+      const manager = makeInMemoryManager({
+        global: { permission: { "*": "ask" } },
+      });
+      const sessionRules: Ruleset = [sessionAllow("bash", "git *")];
+      const bashResult = manager.checkPermission(
+        "bash",
+        { command: "git status" },
+        undefined,
+        sessionRules,
+      );
+      expect(bashResult.state).toBe("allow");
+
+      const readResult = manager.checkPermission(
+        "read",
+        {},
+        undefined,
+        sessionRules,
+      );
+      expect(readResult.state).toBe("ask");
+    });
+  });
+
+  describe("origin tracking", () => {
+    it("universal fallback from project carries origin 'project'", () => {
+      const manager = makeInMemoryManager({
+        global: { permission: { "*": "ask" } },
+        project: { permission: { "*": "allow" } },
+      });
+      const result = manager.checkPermission("read", {});
+      expect(result.state).toBe("allow");
+      expect(result.origin).toBe("project");
+    });
+
+    it("session origin is 'session'", () => {
+      const manager = makeInMemoryManager();
+      const sessionRules: Ruleset = [sessionAllow("read", "*")];
+      const result = manager.checkPermission(
+        "read",
+        {},
+        undefined,
+        sessionRules,
+      );
+      expect(result.origin).toBe("session");
+    });
+  });
+
+  describe("getToolPermission", () => {
+    it("returns tool-level state for built-in tools", () => {
+      const manager = makeInMemoryManager({
+        global: { permission: { "*": "deny", read: "allow" } },
+      });
+      expect(manager.getToolPermission("read")).toBe("allow");
+      expect(manager.getToolPermission("write")).toBe("deny");
+    });
+
+    it("returns tool-level state for bash surface", () => {
+      const manager = makeInMemoryManager({
+        global: { permission: { "*": "deny", bash: "allow" } },
+      });
+      expect(manager.getToolPermission("bash")).toBe("allow");
+    });
+  });
+
+  describe("getComposedConfigRules", () => {
+    it("returns only config-layer rules", () => {
+      const manager = makeInMemoryManager({
+        global: {
+          permission: { "*": "ask", bash: { "git *": "allow" } },
+        },
+      });
+      const rules = manager.getComposedConfigRules();
+      expect(rules.every((r) => r.layer === "config")).toBe(true);
+      expect(
+        rules.some((r) => r.surface === "bash" && r.pattern === "git *"),
+      ).toBe(true);
+    });
+  });
+});
