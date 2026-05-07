@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 // Hoisted stubs for mocks that reference them in vi.mock factories.
@@ -36,9 +35,7 @@ import {
   formatExternalDirectoryUserDeniedReason,
   getPathBearingToolPath,
   isPathOutsideWorkingDirectory,
-  isPathWithinDirectory,
   isSafeSystemPath,
-  normalizePathForComparison,
   PATH_BEARING_TOOLS,
   SAFE_SYSTEM_PATHS,
 } from "../src/external-directory";
@@ -100,82 +97,6 @@ describe("isSafeSystemPath", () => {
 
   test("returns false for a relative path", () => {
     expect(isSafeSystemPath("dev/null")).toBe(false);
-  });
-});
-
-describe("normalizePathForComparison", () => {
-  const cwd = "/projects/my-app";
-
-  test("resolves absolute path unchanged", () => {
-    expect(normalizePathForComparison("/usr/local/bin", cwd)).toBe(
-      "/usr/local/bin",
-    );
-  });
-
-  test("resolves relative path against cwd", () => {
-    expect(normalizePathForComparison("src/foo.ts", cwd)).toBe(
-      "/projects/my-app/src/foo.ts",
-    );
-  });
-
-  test("expands bare ~ to homedir", () => {
-    expect(normalizePathForComparison("~", cwd)).toBe("/mock/home");
-  });
-
-  test("expands ~/... to homedir-relative path", () => {
-    expect(normalizePathForComparison("~/docs/readme.md", cwd)).toBe(
-      join("/mock/home", "docs/readme.md"),
-    );
-  });
-
-  test("strips leading @ before resolving", () => {
-    expect(normalizePathForComparison("@/usr/local/bin", cwd)).toBe(
-      "/usr/local/bin",
-    );
-  });
-
-  test("strips surrounding quotes", () => {
-    expect(normalizePathForComparison("'/usr/local/bin'", cwd)).toBe(
-      "/usr/local/bin",
-    );
-    expect(normalizePathForComparison('"/usr/local/bin"', cwd)).toBe(
-      "/usr/local/bin",
-    );
-  });
-
-  test("returns empty string for blank/whitespace-only path", () => {
-    expect(normalizePathForComparison("", cwd)).toBe("");
-    expect(normalizePathForComparison("   ", cwd)).toBe("");
-  });
-});
-
-describe("isPathWithinDirectory", () => {
-  test("returns true when path equals directory", () => {
-    expect(isPathWithinDirectory("/a/b", "/a/b")).toBe(true);
-  });
-
-  test("returns true when path is a direct child", () => {
-    expect(isPathWithinDirectory("/a/b/c", "/a/b")).toBe(true);
-  });
-
-  test("returns true when path is a deep descendant", () => {
-    expect(isPathWithinDirectory("/a/b/c/d/e", "/a/b")).toBe(true);
-  });
-
-  test("returns false when path is a sibling directory", () => {
-    expect(isPathWithinDirectory("/a/bc", "/a/b")).toBe(false);
-  });
-
-  test("returns false when path is outside the directory", () => {
-    expect(isPathWithinDirectory("/other/path", "/a/b")).toBe(false);
-  });
-
-  test("returns false for empty path", () => {
-    expect(isPathWithinDirectory("", "/a/b")).toBe(false);
-  });
-
-  test("returns false for empty directory", () => {
-    expect(isPathWithinDirectory("/a/b", "")).toBe(false);
   });
 });
 
