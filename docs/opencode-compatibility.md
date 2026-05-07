@@ -27,7 +27,7 @@ The following concepts are shared between OpenCode and this extension:
 |Session-scoped approvals|`once` / `always` / `reject` from the ask dialog; `always` adds a session rule|
 |Per-agent overrides|Override global permissions for specific agents|
 |Tool hiding|Denied tools are removed before the agent starts (no wasted turns probing)|
-|Bash path extraction|Tree-sitter AST parsing to detect external paths in shell commands|
+|Bash path extraction|Tree-sitter AST parsing to detect external paths in shell commands (see [details below](#bash-path-extraction))|
 |Bash arity table|Generates smart approval pattern suggestions (e.g., `git checkout *` not `git *`)|
 
 If your OpenCode config uses these features, the equivalent works in this extension with minimal translation (see [Porting Guide](#porting-an-opencode-config) below).
@@ -129,6 +129,22 @@ This extension provides a first-class `mcp` permission surface with granular ser
 ```
 
 OpenCode does not expose MCP as a configurable permission surface.
+
+#### Bash Path Extraction
+
+Both systems use `web-tree-sitter` + `tree-sitter-bash` to parse shell commands into an AST for `external_directory` path detection, but the extraction strategies differ significantly:
+
+**OpenCode** only extracts paths from a hardcoded allowlist of file-manipulating commands (`rm`, `cp`, `mv`, `mkdir`, `touch`, `chmod`, `chown`, `cat`, plus PowerShell equivalents).
+Commands not in the list — including `sed`, `awk`, `grep` — get no path extraction at all.
+For allowlisted commands, all non-flag positional arguments are assumed to be paths.
+
+**This extension** extracts path candidates from all commands generically, then applies additional intelligence:
+
+- A `PATTERN_FIRST_COMMANDS` map understands flag arity for `sed`, `awk`, `grep`, `rg`, and similar tools, distinguishing inline patterns/scripts from file arguments to avoid false positives.
+- Redirect destinations (`> /path/to/file`) are extracted.
+- Heredoc bodies, comments, and variable assignments are skipped.
+
+The result is broader coverage (paths detected in any command, not just a curated list) with fewer false positives on pattern-first commands (no spurious prompts for sed regexes or grep patterns that happen to contain `/`).
 
 ## Porting an OpenCode Config
 
