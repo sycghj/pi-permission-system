@@ -62,6 +62,7 @@ Read `docs/plans/` before making architectural changes (created by `/plan-issue`
 - When embedding markdown content that itself contains fenced code blocks, use a 4-backtick outer fence (` ````markdown `) so inner 3-backtick fences render correctly.
 - Use compact table style with no cell padding — markdownlint's MD060 enforces consistent column style and is not auto-fixable.
   Write `| Risk | Mitigation |` with `| ---- | ---------- |`, not padded `| Risk··· | Mitigation··· |`.
+- Separate adjacent blockquotes with an HTML comment (`<!-- -->`) to satisfy markdownlint's MD028 (no blank line inside blockquote).
 
 ## Configuration
 
@@ -174,6 +175,9 @@ Before implementing, understand:
 5. the need to keep schema, example config, loader, and docs aligned
 
 Do not assume "allow" is a safe default. Do not add a permission surface without also adding a policy field, schema entry, and example.
+
+When writing documentation that claims this extension lacks a feature or diverges from a reference implementation, verify the claim by searching `src/`, `docs/retro/`, and closed issues (`gh issue list --state closed --search "<feature>"`).
+Do not rely on memory or the plan alone — features land between planning and writing.
 
 When planning a refactoring that targets testability, read the test files alongside the production code — not only the production code.
 Tests reveal consumption ergonomics: mock depth, irrelevant fields, cast gymnastics, and override boilerplate define the target interface shape.
