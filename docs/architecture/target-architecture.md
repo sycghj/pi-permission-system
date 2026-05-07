@@ -495,6 +495,8 @@ src/
 ├── config-modal.ts           ✅ /permission-system slash command UI
 ├── extension-config.ts       ✅ Runtime knobs (debugLog, yoloMode, etc.)
 │
+├── permission-merge.ts        ✅ Deep-shallow merge for flat permission configs (#109)
+├── path-utils.ts              ✅ Path normalization + within-directory check (#109)
 ├── external-directory.ts     ✅ Path-outside-cwd detection (tree-sitter-bash AST); Pi infrastructure read bypass
 ├── system-prompt-sanitizer.ts ✅ Remove denied tools from system prompt
 ├── skill-prompt-sanitizer.ts  ✅ Skill prompt filtering by policy
