@@ -13,7 +13,11 @@ This activates automatically for any shell or agent session where mise is active
 
 ### npm shim pass-throughs
 
-`npm root` is passed through to the real npm binary because the extension calls `npm root -g` at startup to discover the global `node_modules` directory where Pi installs skills and extensions.
+|Pattern|Reason|
+|-------|------|
+|`npm root`|The extension calls `npm root -g` at startup to discover the global `node_modules` directory where Pi installs skills and extensions.|
+|`npm ... --prefix */.pi/npm`|Pi itself runs `npm install --prefix <project>/.pi/npm` to manage extensions and skills. These are Pi-internal operations, not developer misuse.|
+
 All other npm subcommands are blocked.
 
 ## Adding a new shim
