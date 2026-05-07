@@ -40,10 +40,10 @@ If your OpenCode config uses these features, the equivalent works in this extens
 |`.env` file protection|Built-in `read` rules deny/ask `.env` files|No built-in rules; user configures manually|
 |`?` wildcard|Matches exactly one character|Not supported; `?` is a literal character|
 |Trailing wildcard optionality|`"ls *"` matches bare `"ls"` (trailing `*` is optional)|`"ls *"` does NOT match bare `"ls"`|
-|`doom_loop` surface|Active, defaults to `ask`|Not applicable — Pi does not fire doom-loop events; the config key was dead code and has been removed|
+|OpenCode-only surfaces|`lsp`, `question`, `webfetch`, `websearch`, `todowrite`, `doom_loop`|Not applicable — Pi does not expose these tools or events|
 |File mutation surfaces|`edit` covers `edit`, `write`, `apply_patch`|Separate `write` and `edit` surfaces|
 |Search/discovery surfaces|`glob`, `grep`, `list`|`find`, `grep`, `ls` (Pi tool names)|
-|OpenCode-only surfaces|`lsp`, `question`, `webfetch`, `websearch`, `todowrite`|Not applicable (Pi lacks these tools)|
+
 |`mcp` surface|Not a documented permission surface|First-class with server/tool-level granularity|
 |Top-level string shorthand|`"permission": "allow"` sets all surfaces|Not supported; must use an object|
 |Bash arity table|Extracts "human-understandable command" before rule matching|Has arity table, but uses it only for session approval pattern suggestions — rule matching is against the full command string|
