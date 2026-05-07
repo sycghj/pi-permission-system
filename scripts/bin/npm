@@ -1,0 +1,76 @@
+#!/bin/sh
+# PATH shim: intercepts `npm` and redirects to `pnpm`
+#
+# This file is injected ahead of the real `npm` binary via [env] _.path in mise.toml.
+# It activates for all sessions (agent and developer) within the project directory.
+#
+# Exception: `npm root` is passed through because the extension calls
+# `npm root -g` at startup to discover the global node_modules directory
+# where Pi installs skills and extensions.
+#
+# To bypass this shim in an emergency: use the full path to npm, e.g.
+#   $(mise where node)/bin/npm ...
+
+# Save original arguments before any positional-parameter manipulation.
+ORIG_ARGS="$*"
+SUBCMD="${1:-}"
+
+# ── Pass-through for read-only queries ──────────────────────────────────────
+case "$SUBCMD" in
+  root)
+    # Find the real npm binary (skip this shim in PATH)
+    SELF="$(cd "$(dirname "$0")" && pwd)/npm"
+    REAL_NPM=""
+    OIFS="$IFS"; IFS=":"; set -- $PATH; IFS="$OIFS"
+    for dir in "$@"; do
+      candidate="$dir/npm"
+      if [ -x "$candidate" ] && [ "$candidate" != "$SELF" ]; then
+        REAL_NPM="$candidate"
+        break
+      fi
+    done
+    if [ -z "$REAL_NPM" ]; then
+      echo "npm shim: could not find real npm binary" >&2
+      exit 1
+    fi
+    # shellcheck disable=SC2086
+    exec "$REAL_NPM" $ORIG_ARGS
+    ;;
+esac
+
+# ── Block everything else ──────────────────────────────────────────────────
+BOLD="\033[1m"
+RED="\033[31m"
+YELLOW="\033[33m"
+RESET="\033[0m"
+
+echo "" >&2
+echo "${RED}${BOLD}✗ npm is not allowed in this project.${RESET}" >&2
+echo "" >&2
+echo "  Use ${BOLD}pnpm${RESET} instead." >&2
+echo "" >&2
+
+case "$SUBCMD" in
+  install|i|add|ci)
+    echo "  You ran:    npm $ORIG_ARGS" >&2
+    echo "  Use this:   ${YELLOW}${BOLD}pnpm install${RESET}" >&2
+    ;;
+  run|exec)
+    SCRIPT="${2:-<script>}"
+    echo "  You ran:    npm $ORIG_ARGS" >&2
+    echo "  Use this:   ${YELLOW}${BOLD}pnpm run ${SCRIPT}${RESET}" >&2
+    ;;
+  test|t)
+    echo "  You ran:    npm $ORIG_ARGS" >&2
+    echo "  Use this:   ${YELLOW}${BOLD}pnpm run test${RESET}" >&2
+    ;;
+  *)
+    if [ -n "$SUBCMD" ]; then
+      echo "  You ran:    npm $ORIG_ARGS" >&2
+    fi
+    echo "  See AGENTS.md for pnpm conventions." >&2
+    ;;
+esac
+
+echo "" >&2
+exit 1
