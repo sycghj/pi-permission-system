@@ -23,9 +23,11 @@ export async function runGateCheck(
   toolCallId: string,
   deps: GateRunnerDeps,
 ): Promise<GateOutcome> {
-  // 1. Resolve permission state — either pre-resolved or via checkPermission
+  // 1. Resolve permission state — pre-check, pre-resolved, or via checkPermission
   let check: PermissionCheckResult;
-  if (descriptor.preResolved) {
+  if (descriptor.preCheck) {
+    check = descriptor.preCheck;
+  } else if (descriptor.preResolved) {
     check = {
       state: descriptor.preResolved.state,
       toolName: descriptor.surface,

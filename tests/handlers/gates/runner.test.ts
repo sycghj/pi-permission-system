@@ -327,6 +327,26 @@ describe("runGateCheck", () => {
     expect(deps.approveSessionRule).not.toHaveBeenCalled();
   });
 
+  it("uses preCheck result directly instead of calling checkPermission", async () => {
+    const deps = makeRunnerDeps();
+    const descriptor = makeDescriptor({
+      preCheck: makeCheckResult("deny", {
+        origin: "global",
+        matchedPattern: "rm *",
+      }),
+    });
+    const result = await runGateCheck(descriptor, null, "tc-1", deps);
+    expect(result).toMatchObject({ action: "block" });
+    expect(deps.checkPermission).not.toHaveBeenCalled();
+    expect(deps.emitDecision).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resolution: "policy_deny",
+        origin: "global",
+        matchedPattern: "rm *",
+      }),
+    );
+  });
+
   it("does not call approveSessionRule when user approves for session but no sessionApproval on descriptor", async () => {
     const deps = makeRunnerDeps({
       checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),

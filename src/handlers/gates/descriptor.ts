@@ -51,6 +51,12 @@ export interface GateDescriptor {
   preResolved?: {
     state: PermissionState;
   };
+  /**
+   * When set, the runner uses this pre-computed check result directly
+   * instead of calling checkPermission. Used when the orchestrator has
+   * already performed the check (e.g. to build messages from the result).
+   */
+  preCheck?: PermissionCheckResult;
 }
 
 /**

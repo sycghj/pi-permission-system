@@ -11,9 +11,11 @@ import {
   getToolNameFromValue,
 } from "../tool-registry";
 import { evaluateBashExternalDirectoryGate } from "./gates/bash-external-directory";
+import type { GateRunnerDeps } from "./gates/descriptor";
 import { evaluateExternalDirectoryGate } from "./gates/external-directory";
+import { runGateCheck } from "./gates/runner";
 import { evaluateSkillReadGate } from "./gates/skill-read";
-import { evaluateToolGate } from "./gates/tool";
+import { describeToolGate } from "./gates/tool";
 import type {
   BashExternalDirectoryGateDeps,
   ExternalDirectoryGateDeps,
@@ -160,8 +162,8 @@ export async function handleToolCall(
     return { block: true, reason: bashExtResult.reason };
   }
 
-  // ── Normal tool permission gate ──────────────────────────────────────────
-  const toolGateDeps: ToolGateDeps = {
+  // ── Normal tool permission gate (descriptor + runner) ───────────────────────────
+  const runnerDeps: GateRunnerDeps = {
     checkPermission,
     getSessionRuleset,
     approveSessionRule,
@@ -170,7 +172,20 @@ export async function handleToolCall(
     canConfirm,
     promptPermission,
   };
-  const toolResult = await evaluateToolGate(tcc, toolGateDeps);
+  const toolCheck = checkPermission(
+    tcc.toolName,
+    tcc.input,
+    tcc.agentName ?? undefined,
+    getSessionRuleset(),
+  );
+  const toolDescriptor = describeToolGate(tcc, toolCheck);
+  toolDescriptor.preCheck = toolCheck;
+  const toolResult = await runGateCheck(
+    toolDescriptor,
+    tcc.agentName,
+    tcc.toolCallId,
+    runnerDeps,
+  );
   if (toolResult.action === "block") {
     return { block: true, reason: toolResult.reason };
   }

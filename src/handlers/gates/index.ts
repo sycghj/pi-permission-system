@@ -8,6 +8,7 @@ export type {
 export { isGateBypass, isGateDescriptor } from "./descriptor";
 export { evaluateExternalDirectoryGate } from "./external-directory";
 export { deriveDecisionValue, deriveResolution } from "./helpers";
+export { runGateCheck } from "./runner";
 export { evaluateSkillReadGate } from "./skill-read";
-export { evaluateToolGate } from "./tool";
+export { describeToolGate, evaluateToolGate } from "./tool";
 export type { GateOutcome, ToolCallContext } from "./types";

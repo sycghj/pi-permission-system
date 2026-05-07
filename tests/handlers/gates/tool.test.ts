@@ -1,10 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { evaluateToolGate } from "../../../src/handlers/gates/tool";
-import type {
-  ToolCallContext,
-  ToolGateDeps,
-} from "../../../src/handlers/gates/types";
+import type { GateDescriptor } from "../../../src/handlers/gates/descriptor";
+import { describeToolGate } from "../../../src/handlers/gates/tool";
+import type { ToolCallContext } from "../../../src/handlers/gates/types";
 import type { PermissionCheckResult } from "../../../src/types";
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -34,140 +32,149 @@ function makeCheckResult(
   };
 }
 
-function makeToolGateDeps(overrides: Partial<ToolGateDeps> = {}): ToolGateDeps {
-  return {
-    checkPermission: vi.fn().mockReturnValue(makeCheckResult("allow")),
-    getSessionRuleset: vi.fn().mockReturnValue([]),
-    approveSessionRule: vi.fn(),
-    writeReviewLog: vi.fn(),
-    emitDecision: vi.fn(),
-    canConfirm: vi.fn().mockReturnValue(true),
-    promptPermission: vi
-      .fn()
-      .mockResolvedValue({ approved: true, state: "approved" }),
-    ...overrides,
-  };
-}
-
 // ── tests ──────────────────────────────────────────────────────────────────
 
-describe("evaluateToolGate", () => {
-  it("allows when policy is allow", async () => {
-    const deps = makeToolGateDeps();
-    const result = await evaluateToolGate(makeTcc(), deps);
-    expect(result).toEqual({ action: "allow" });
+describe("describeToolGate", () => {
+  it("returns descriptor with tool name as surface for standard tools", () => {
+    const desc = describeToolGate(
+      makeTcc({ toolName: "read" }),
+      makeCheckResult("ask"),
+    );
+    expect(desc.surface).toBe("read");
+    expect(desc.decision.surface).toBe("read");
   });
 
-  it("blocks when policy is deny", async () => {
-    const deps = makeToolGateDeps({
-      checkPermission: vi.fn().mockReturnValue(makeCheckResult("deny")),
-    });
-    const result = await evaluateToolGate(makeTcc(), deps);
-    expect(result).toMatchObject({ action: "block" });
+  it("returns descriptor with tool name as decision value for standard tools", () => {
+    const desc = describeToolGate(
+      makeTcc({ toolName: "write" }),
+      makeCheckResult("ask"),
+    );
+    expect(desc.decision.value).toBe("write");
   });
 
-  it("allows on session-approved fast path", async () => {
-    const deps = makeToolGateDeps({
-      checkPermission: vi.fn().mockReturnValue(
-        makeCheckResult("allow", {
-          source: "session",
-          matchedPattern: "git *",
-        }),
-      ),
+  it("returns bash surface with command in decision.value for bash tools", () => {
+    const check = makeCheckResult("ask", {
+      toolName: "bash",
+      command: "git status",
     });
-    const result = await evaluateToolGate(
+    const desc = describeToolGate(
       makeTcc({ toolName: "bash", input: { command: "git status" } }),
-      deps,
+      check,
     );
-    expect(result).toEqual({ action: "allow" });
-    expect(deps.writeReviewLog).toHaveBeenCalledWith(
-      "permission_request.session_approved",
-      expect.objectContaining({ resolution: "session_approved" }),
+    expect(desc.surface).toBe("bash");
+    expect(desc.decision.surface).toBe("bash");
+    expect(desc.decision.value).toBe("git status");
+  });
+
+  it("returns mcp surface with target in decision.value for MCP tools", () => {
+    const check = makeCheckResult("ask", {
+      toolName: "mcp",
+      target: "server:tool",
+    });
+    const desc = describeToolGate(
+      makeTcc({ toolName: "mcp", input: { tool: "server:tool" } }),
+      check,
     );
-    expect(deps.emitDecision).toHaveBeenCalledWith(
-      expect.objectContaining({ resolution: "session_approved" }),
+    expect(desc.surface).toBe("mcp");
+    expect(desc.decision.surface).toBe("mcp");
+    expect(desc.decision.value).toBe("server:tool");
+  });
+
+  it("populates messages.denyReason via formatDenyReason", () => {
+    const check = makeCheckResult("deny", { toolName: "read" });
+    const desc = describeToolGate(makeTcc(), check);
+    expect(desc.messages.denyReason).toContain("read");
+    expect(desc.messages.denyReason).toContain("not permitted");
+  });
+
+  it("populates messages.unavailableReason with bash command when tool is bash", () => {
+    const check = makeCheckResult("ask", {
+      toolName: "bash",
+      command: "rm -rf /",
+    });
+    const desc = describeToolGate(
+      makeTcc({ toolName: "bash", input: { command: "rm -rf /" } }),
+      check,
     );
+    expect(desc.messages.unavailableReason).toContain("rm -rf /");
+    expect(desc.messages.unavailableReason).toContain("no interactive UI");
   });
 
-  it("blocks when state is ask but canConfirm is false", async () => {
-    const deps = makeToolGateDeps({
-      checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
-      canConfirm: vi.fn().mockReturnValue(false),
-    });
-    const result = await evaluateToolGate(makeTcc(), deps);
-    expect(result).toMatchObject({ action: "block" });
-  });
-
-  it("allows when state is ask and user approves", async () => {
-    const deps = makeToolGateDeps({
-      checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
-      promptPermission: vi
-        .fn()
-        .mockResolvedValue({ approved: true, state: "approved" }),
-    });
-    const result = await evaluateToolGate(makeTcc(), deps);
-    expect(result).toEqual({ action: "allow" });
-  });
-
-  it("blocks when state is ask and user denies", async () => {
-    const deps = makeToolGateDeps({
-      checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
-      promptPermission: vi
-        .fn()
-        .mockResolvedValue({ approved: false, state: "denied" }),
-    });
-    const result = await evaluateToolGate(makeTcc(), deps);
-    expect(result).toMatchObject({ action: "block" });
-  });
-
-  it("approves session rule when user approves for session", async () => {
-    const deps = makeToolGateDeps({
-      checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
-      promptPermission: vi
-        .fn()
-        .mockResolvedValue({ approved: true, state: "approved_for_session" }),
-    });
-    await evaluateToolGate(makeTcc(), deps);
-    expect(deps.approveSessionRule).toHaveBeenCalled();
-  });
-
-  it("emits decision event with correct surface and result", async () => {
-    const deps = makeToolGateDeps({
-      checkPermission: vi
-        .fn()
-        .mockReturnValue(
-          makeCheckResult("allow", { origin: "global", matchedPattern: "*" }),
-        ),
-    });
-    await evaluateToolGate(makeTcc({ toolName: "write" }), deps);
-    expect(deps.emitDecision).toHaveBeenCalledWith(
-      expect.objectContaining({
-        surface: "write",
-        result: "allow",
-        resolution: "policy_allow",
-        origin: "global",
-      }),
+  it("populates messages.unavailableReason with tool name for non-bash tools", () => {
+    const desc = describeToolGate(
+      makeTcc({ toolName: "write" }),
+      makeCheckResult("ask"),
     );
+    expect(desc.messages.unavailableReason).toContain("write");
+    expect(desc.messages.unavailableReason).toContain("no interactive UI");
   });
 
-  it("passes session ruleset to checkPermission", async () => {
-    const sessionRules = [
-      {
-        surface: "bash",
-        pattern: "git *",
-        action: "allow" as const,
-        origin: "session" as const,
-      },
-    ];
-    const deps = makeToolGateDeps({
-      getSessionRuleset: vi.fn().mockReturnValue(sessionRules),
+  it("populates messages.unavailableReason with mcp for mcp tool", () => {
+    const check = makeCheckResult("ask", { toolName: "mcp", target: "s:t" });
+    const desc = describeToolGate(makeTcc({ toolName: "mcp" }), check);
+    expect(desc.messages.unavailableReason).toContain("mcp");
+  });
+
+  it("populates messages.userDeniedReason as a function", () => {
+    const check = makeCheckResult("ask", { toolName: "read" });
+    const desc = describeToolGate(makeTcc(), check);
+    const reason = desc.messages.userDeniedReason({
+      approved: false,
+      state: "denied",
+      denialReason: "too risky",
     });
-    await evaluateToolGate(makeTcc({ toolName: "bash" }), deps);
-    expect(deps.checkPermission).toHaveBeenCalledWith(
-      "bash",
-      expect.anything(),
-      undefined,
-      sessionRules,
+    expect(reason).toContain("too risky");
+  });
+
+  it("populates sessionApproval via suggestSessionPattern", () => {
+    const check = makeCheckResult("ask", {
+      toolName: "bash",
+      command: "git status",
+    });
+    const desc = describeToolGate(
+      makeTcc({ toolName: "bash", input: { command: "git status" } }),
+      check,
     );
+    expect(desc.sessionApproval).toBeDefined();
+    expect(desc.sessionApproval!).toHaveProperty("surface", "bash");
+    expect(desc.sessionApproval!).toHaveProperty("pattern");
+  });
+
+  it("populates promptDetails with correct fields", () => {
+    const check = makeCheckResult("ask");
+    const desc = describeToolGate(
+      makeTcc({ toolName: "read", agentName: "my-agent", toolCallId: "tc-42" }),
+      check,
+    );
+    expect(desc.promptDetails).toMatchObject({
+      source: "tool_call",
+      agentName: "my-agent",
+      toolCallId: "tc-42",
+      toolName: "read",
+    });
+    expect(desc.promptDetails.message).toBeDefined();
+    expect(desc.promptDetails.sessionLabel).toBeDefined();
+  });
+
+  it("populates logContext with tool input preview fields", () => {
+    const check = makeCheckResult("ask", { toolName: "bash", command: "ls" });
+    const desc = describeToolGate(
+      makeTcc({ toolName: "bash", input: { command: "ls" } }),
+      check,
+    );
+    expect(desc.logContext).toMatchObject({
+      source: "tool_call",
+      toolName: "bash",
+    });
+    expect(desc.logContext.command).toBe("ls");
+  });
+
+  it("uses toolName as input for checkPermission surface", () => {
+    const desc = describeToolGate(
+      makeTcc({ toolName: "edit", input: { path: "/a.ts" } }),
+      makeCheckResult("ask", { toolName: "edit" }),
+    );
+    expect(desc.surface).toBe("edit");
+    expect(desc.input).toEqual({ path: "/a.ts" });
   });
 });
