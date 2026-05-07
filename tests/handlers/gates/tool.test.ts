@@ -62,11 +62,10 @@ function makeRuntime(
   } as unknown as HandlerDeps["runtime"];
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- test mock factory
-function makeDeps(overrides: Record<string, any> = {}): HandlerDeps {
+function makeDeps(overrides: Record<string, unknown> = {}): HandlerDeps {
   const { runtime: runtimeOverrides, events, ...rest } = overrides;
   return {
-    runtime: makeRuntime(runtimeOverrides),
+    runtime: makeRuntime(runtimeOverrides as Record<string, unknown>),
     events: events ?? makeEvents(),
     canRequestPermissionConfirmation: vi.fn().mockReturnValue(true),
     promptPermission: vi
