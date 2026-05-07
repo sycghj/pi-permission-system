@@ -1,10 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { evaluateSkillReadGate } from "../../../src/handlers/gates/skill-read";
-import type {
-  SkillReadGateDeps,
-  ToolCallContext,
-} from "../../../src/handlers/gates/types";
+import type { GateDescriptor } from "../../../src/handlers/gates/descriptor";
+import { describeSkillReadGate } from "../../../src/handlers/gates/skill-read";
+import type { ToolCallContext } from "../../../src/handlers/gates/types";
 import type { SkillPromptEntry } from "../../../src/skill-prompt-sanitizer";
 
 // ── SDK stubs ──────────────────────────────────────────────────────────────
@@ -41,149 +39,115 @@ function makeTcc(overrides: Partial<ToolCallContext> = {}): ToolCallContext {
   };
 }
 
-function makeSkillReadGateDeps(
-  overrides: Partial<SkillReadGateDeps> = {},
-): SkillReadGateDeps {
-  return {
-    getActiveSkillEntries: vi.fn().mockReturnValue([]),
-    writeReviewLog: vi.fn(),
-    emitDecision: vi.fn(),
-    canConfirm: vi.fn().mockReturnValue(true),
-    promptPermission: vi
-      .fn()
-      .mockResolvedValue({ approved: true, state: "approved" }),
-    ...overrides,
-  };
-}
-
 // ── tests ──────────────────────────────────────────────────────────────────
 
-describe("evaluateSkillReadGate", () => {
-  it("returns null when tool is not read", async () => {
-    const tcc = makeTcc({ toolName: "write" });
-    const deps = makeSkillReadGateDeps({
-      getActiveSkillEntries: vi.fn().mockReturnValue([makeSkillEntry()]),
-    });
-    const result = await evaluateSkillReadGate(tcc, deps);
+describe("describeSkillReadGate", () => {
+  it("returns null when tool is not read", () => {
+    const result = describeSkillReadGate(makeTcc({ toolName: "write" }), () => [
+      makeSkillEntry(),
+    ]);
     expect(result).toBeNull();
   });
 
-  it("returns null when no active skill entries", async () => {
-    const tcc = makeTcc();
-    const deps = makeSkillReadGateDeps({
-      getActiveSkillEntries: vi.fn().mockReturnValue([]),
-    });
-    const result = await evaluateSkillReadGate(tcc, deps);
+  it("returns null when no active skill entries", () => {
+    const result = describeSkillReadGate(makeTcc(), () => []);
     expect(result).toBeNull();
   });
 
-  it("returns null when read path does not match any skill", async () => {
-    const tcc = makeTcc({ input: { path: "/test/project/src/index.ts" } });
-    const deps = makeSkillReadGateDeps({
-      getActiveSkillEntries: vi.fn().mockReturnValue([makeSkillEntry()]),
-    });
-    const result = await evaluateSkillReadGate(tcc, deps);
-    expect(result).toBeNull();
-  });
-
-  it("returns allow when skill state is allow", async () => {
-    const tcc = makeTcc();
-    const deps = makeSkillReadGateDeps({
-      getActiveSkillEntries: vi
-        .fn()
-        .mockReturnValue([makeSkillEntry({ state: "allow" })]),
-    });
-    const result = await evaluateSkillReadGate(tcc, deps);
-    expect(result).toEqual({ action: "allow" });
-  });
-
-  it("returns block when skill state is deny", async () => {
-    const tcc = makeTcc();
-    const deps = makeSkillReadGateDeps({
-      getActiveSkillEntries: vi
-        .fn()
-        .mockReturnValue([makeSkillEntry({ state: "deny" })]),
-    });
-    const result = await evaluateSkillReadGate(tcc, deps);
-    expect(result).toMatchObject({ action: "block" });
-  });
-
-  it("returns allow when state is ask and user approves", async () => {
-    const tcc = makeTcc();
-    const deps = makeSkillReadGateDeps({
-      getActiveSkillEntries: vi
-        .fn()
-        .mockReturnValue([makeSkillEntry({ state: "ask" })]),
-      promptPermission: vi
-        .fn()
-        .mockResolvedValue({ approved: true, state: "approved" }),
-    });
-    const result = await evaluateSkillReadGate(tcc, deps);
-    expect(result).toEqual({ action: "allow" });
-  });
-
-  it("returns block when state is ask and user denies", async () => {
-    const tcc = makeTcc();
-    const deps = makeSkillReadGateDeps({
-      getActiveSkillEntries: vi
-        .fn()
-        .mockReturnValue([makeSkillEntry({ state: "ask" })]),
-      promptPermission: vi
-        .fn()
-        .mockResolvedValue({ approved: false, state: "denied" }),
-    });
-    const result = await evaluateSkillReadGate(tcc, deps);
-    expect(result).toMatchObject({ action: "block" });
-  });
-
-  it("returns block when state is ask and no UI available", async () => {
-    const tcc = makeTcc();
-    const deps = makeSkillReadGateDeps({
-      getActiveSkillEntries: vi
-        .fn()
-        .mockReturnValue([makeSkillEntry({ state: "ask" })]),
-      canConfirm: vi.fn().mockReturnValue(false),
-    });
-    const result = await evaluateSkillReadGate(tcc, deps);
-    expect(result).toMatchObject({ action: "block" });
-  });
-
-  it("emits decision event with correct fields on deny", async () => {
-    const tcc = makeTcc({ agentName: "test-agent" });
-    const deps = makeSkillReadGateDeps({
-      getActiveSkillEntries: vi
-        .fn()
-        .mockReturnValue([makeSkillEntry({ state: "deny" })]),
-    });
-    await evaluateSkillReadGate(tcc, deps);
-    expect(deps.emitDecision).toHaveBeenCalledWith(
-      expect.objectContaining({
-        surface: "skill",
-        value: "librarian",
-        result: "deny",
-        resolution: "policy_deny",
-        origin: null,
-        agentName: "test-agent",
-        matchedPattern: null,
-      }),
+  it("returns null when read path does not match any skill", () => {
+    const result = describeSkillReadGate(
+      makeTcc({ input: { path: "/test/project/src/index.ts" } }),
+      () => [makeSkillEntry()],
     );
+    expect(result).toBeNull();
   });
 
-  it("emits decision event with correct fields on allow", async () => {
-    const tcc = makeTcc();
-    const deps = makeSkillReadGateDeps({
-      getActiveSkillEntries: vi
-        .fn()
-        .mockReturnValue([makeSkillEntry({ state: "allow" })]),
+  it("returns null when input has no path", () => {
+    const result = describeSkillReadGate(makeTcc({ input: {} }), () => [
+      makeSkillEntry(),
+    ]);
+    expect(result).toBeNull();
+  });
+
+  it("returns GateDescriptor with preResolved.state matching skill entry state (ask)", () => {
+    const result = describeSkillReadGate(makeTcc(), () => [
+      makeSkillEntry({ state: "ask" }),
+    ]);
+    expect(result).not.toBeNull();
+    const desc = result as GateDescriptor;
+    expect(desc.preResolved).toEqual({ state: "ask" });
+  });
+
+  it("returns GateDescriptor with preResolved.state matching skill entry state (allow)", () => {
+    const result = describeSkillReadGate(makeTcc(), () => [
+      makeSkillEntry({ state: "allow" }),
+    ]);
+    expect(result).not.toBeNull();
+    const desc = result as GateDescriptor;
+    expect(desc.preResolved).toEqual({ state: "allow" });
+  });
+
+  it("returns GateDescriptor with preResolved.state matching skill entry state (deny)", () => {
+    const result = describeSkillReadGate(makeTcc(), () => [
+      makeSkillEntry({ state: "deny" }),
+    ]);
+    expect(result).not.toBeNull();
+    const desc = result as GateDescriptor;
+    expect(desc.preResolved).toEqual({ state: "deny" });
+  });
+
+  it("decision surface is 'skill' and decision value is the skill name", () => {
+    const result = describeSkillReadGate(makeTcc(), () => [
+      makeSkillEntry({ name: "my-skill" }),
+    ]) as GateDescriptor;
+    expect(result.decision.surface).toBe("skill");
+    expect(result.decision.value).toBe("my-skill");
+  });
+
+  it("messages contain the skill name", () => {
+    const result = describeSkillReadGate(makeTcc(), () => [
+      makeSkillEntry({ name: "librarian" }),
+    ]) as GateDescriptor;
+    expect(result.messages.denyReason).toContain("librarian");
+    expect(result.messages.unavailableReason).toContain("librarian");
+    const deniedMsg = result.messages.userDeniedReason({
+      approved: false,
+      state: "denied",
     });
-    await evaluateSkillReadGate(tcc, deps);
-    expect(deps.emitDecision).toHaveBeenCalledWith(
-      expect.objectContaining({
-        surface: "skill",
-        value: "librarian",
-        result: "allow",
-        resolution: "policy_allow",
-      }),
-    );
+    expect(deniedMsg).toContain("librarian");
+  });
+
+  it("promptDetails includes skill_read source and skillName", () => {
+    const result = describeSkillReadGate(
+      makeTcc({ agentName: "test-agent", toolCallId: "tc-42" }),
+      () => [makeSkillEntry({ name: "my-skill" })],
+    ) as GateDescriptor;
+    expect(result.promptDetails).toMatchObject({
+      source: "skill_read",
+      agentName: "test-agent",
+      toolCallId: "tc-42",
+      toolName: "read",
+      skillName: "my-skill",
+    });
+    expect(result.promptDetails.message).toBeDefined();
+  });
+
+  it("logContext includes skill_read source and skillName", () => {
+    const result = describeSkillReadGate(
+      makeTcc({ agentName: "agent-1" }),
+      () => [makeSkillEntry({ name: "librarian" })],
+    ) as GateDescriptor;
+    expect(result.logContext).toMatchObject({
+      source: "skill_read",
+      skillName: "librarian",
+      agentName: "agent-1",
+    });
+  });
+
+  it("surface is 'skill' on the descriptor", () => {
+    const result = describeSkillReadGate(makeTcc(), () => [
+      makeSkillEntry(),
+    ]) as GateDescriptor;
+    expect(result.surface).toBe("skill");
   });
 });

@@ -14,12 +14,11 @@ import { evaluateBashExternalDirectoryGate } from "./gates/bash-external-directo
 import type { GateRunnerDeps } from "./gates/descriptor";
 import { evaluateExternalDirectoryGate } from "./gates/external-directory";
 import { runGateCheck } from "./gates/runner";
-import { evaluateSkillReadGate } from "./gates/skill-read";
+import { describeSkillReadGate } from "./gates/skill-read";
 import { describeToolGate } from "./gates/tool";
 import type {
   BashExternalDirectoryGateDeps,
   ExternalDirectoryGateDeps,
-  SkillReadGateDeps,
   ToolCallContext,
   ToolGateDeps,
 } from "./gates/types";
@@ -113,17 +112,30 @@ export async function handleToolCall(
   const approveSessionRule = (surface: string, pattern: string) =>
     deps.session.sessionRules.approve(surface, pattern);
 
-  // ── Skill-read gate ──────────────────────────────────────────────────────
-  const skillReadGateDeps: SkillReadGateDeps = {
-    getActiveSkillEntries: () => deps.session.activeSkillEntries,
-    writeReviewLog,
-    emitDecision,
-    canConfirm,
-    promptPermission,
-  };
-  const skillResult = await evaluateSkillReadGate(tcc, skillReadGateDeps);
-  if (skillResult?.action === "block") {
-    return { block: true, reason: skillResult.reason };
+  // ── Skill-read gate (descriptor + runner) ────────────────────────────────
+  const skillDescriptor = describeSkillReadGate(
+    tcc,
+    () => deps.session.activeSkillEntries,
+  );
+  if (skillDescriptor) {
+    const runnerDepsForSkill: GateRunnerDeps = {
+      checkPermission,
+      getSessionRuleset,
+      approveSessionRule,
+      writeReviewLog,
+      emitDecision,
+      canConfirm,
+      promptPermission,
+    };
+    const skillResult = await runGateCheck(
+      skillDescriptor,
+      tcc.agentName,
+      tcc.toolCallId,
+      runnerDepsForSkill,
+    );
+    if (skillResult.action === "block") {
+      return { block: true, reason: skillResult.reason };
+    }
   }
 
   // ── External-directory gate (file tools) ─────────────────────────────────
