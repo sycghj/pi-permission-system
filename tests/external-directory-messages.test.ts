@@ -1,11 +1,13 @@
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, test } from "vitest";
 
 import {
+  formatBashExternalDirectoryAskPrompt,
+  formatBashExternalDirectoryDenyReason,
   formatExternalDirectoryAskPrompt,
   formatExternalDirectoryDenyReason,
   formatExternalDirectoryHardStopHint,
   formatExternalDirectoryUserDeniedReason,
-} from "../src/external-directory";
+} from "../src/external-directory-messages";
 
 describe("formatExternalDirectoryHardStopHint", () => {
   test("returns the hard stop instruction string", () => {
@@ -92,5 +94,44 @@ describe("formatExternalDirectoryUserDeniedReason", () => {
       "/etc/hosts",
     );
     expect(result).not.toContain("Reason:");
+  });
+});
+
+describe("formatBashExternalDirectoryAskPrompt", () => {
+  test("includes command, paths, cwd, and agent name", () => {
+    const result = formatBashExternalDirectoryAskPrompt(
+      "cat /etc/passwd",
+      ["/etc/passwd"],
+      "/projects/my-app",
+      "my-agent",
+    );
+    expect(result).toContain("Agent 'my-agent'");
+    expect(result).toContain("cat /etc/passwd");
+    expect(result).toContain("/etc/passwd");
+    expect(result).toContain("/projects/my-app");
+  });
+
+  test("uses 'Current agent' when no agent name provided", () => {
+    const result = formatBashExternalDirectoryAskPrompt(
+      "ls /tmp",
+      ["/tmp"],
+      "/projects/my-app",
+    );
+    expect(result).toContain("Current agent");
+  });
+});
+
+describe("formatBashExternalDirectoryDenyReason", () => {
+  test("includes command, paths, cwd, agent name, and hard stop hint", () => {
+    const result = formatBashExternalDirectoryDenyReason(
+      "rm /etc/hosts",
+      ["/etc/hosts"],
+      "/projects/my-app",
+      "sec-agent",
+    );
+    expect(result).toContain("Agent 'sec-agent'");
+    expect(result).toContain("rm /etc/hosts");
+    expect(result).toContain("/etc/hosts");
+    expect(result).toContain("Hard stop");
   });
 });
