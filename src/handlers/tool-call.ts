@@ -10,18 +10,14 @@ import {
   checkRequestedToolRegistration,
   getToolNameFromValue,
 } from "../tool-registry";
-import { evaluateBashExternalDirectoryGate } from "./gates/bash-external-directory";
+import { describeBashExternalDirectoryGate } from "./gates/bash-external-directory";
 import type { GateRunnerDeps } from "./gates/descriptor";
 import { isGateBypass } from "./gates/descriptor";
 import { describeExternalDirectoryGate } from "./gates/external-directory";
 import { runGateCheck } from "./gates/runner";
 import { describeSkillReadGate } from "./gates/skill-read";
 import { describeToolGate } from "./gates/tool";
-import type {
-  BashExternalDirectoryGateDeps,
-  ToolCallContext,
-  ToolGateDeps,
-} from "./gates/types";
+import type { ToolCallContext, ToolGateDeps } from "./gates/types";
 import type { HandlerDeps, PromptPermissionDetails } from "./types";
 
 /**
@@ -167,21 +163,28 @@ export async function handleToolCall(
     }
   }
 
-  // ── Bash external-directory gate ─────────────────────────────────────────
-  const bashExtGateDeps: BashExternalDirectoryGateDeps = {
+  // ── Bash external-directory gate (descriptor + runner) ─────────────────────
+  const bashExtDesc = await describeBashExternalDirectoryGate(
+    tcc,
     checkPermission,
     getSessionRuleset,
-    approveSessionRule,
-    writeReviewLog,
-    canConfirm,
-    promptPermission,
-  };
-  const bashExtResult = await evaluateBashExternalDirectoryGate(
-    tcc,
-    bashExtGateDeps,
   );
-  if (bashExtResult?.action === "block") {
-    return { block: true, reason: bashExtResult.reason };
+  if (bashExtDesc) {
+    if (isGateBypass(bashExtDesc)) {
+      if (bashExtDesc.log) {
+        writeReviewLog(bashExtDesc.log.event, bashExtDesc.log.details);
+      }
+    } else {
+      const bashExtResult = await runGateCheck(
+        bashExtDesc,
+        tcc.agentName,
+        tcc.toolCallId,
+        runnerDeps,
+      );
+      if (bashExtResult.action === "block") {
+        return { block: true, reason: bashExtResult.reason };
+      }
+    }
   }
 
   // ── Normal tool permission gate (descriptor + runner) ───────────────────────────

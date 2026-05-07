@@ -1,4 +1,7 @@
-export { evaluateBashExternalDirectoryGate } from "./bash-external-directory";
+export {
+  describeBashExternalDirectoryGate,
+  evaluateBashExternalDirectoryGate,
+} from "./bash-external-directory";
 export type {
   GateBypass,
   GateDescriptor,
