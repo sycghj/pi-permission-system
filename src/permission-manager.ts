@@ -1,6 +1,7 @@
 import { isPermissionState } from "./common";
 import { normalizeInput } from "./input-normalizer";
 import { normalizeFlatConfig } from "./normalize";
+import { mergeFlatPermissions } from "./permission-merge";
 import {
   FilePolicyLoader,
   type PolicyLoader,
@@ -33,35 +34,6 @@ const SPECIAL_PERMISSION_KEYS = new Set(["external_directory"]);
 
 /** Universal fallback when permission["*"] is absent from all scopes. */
 const DEFAULT_UNIVERSAL_FALLBACK: PermissionState = "ask";
-
-/**
- * Deep-shallow merge two flat permission configs.
- * Both objects → shallow-merge the pattern maps.
- * Otherwise → override replaces base.
- */
-function mergeFlatPermissions(
-  base: FlatPermissionConfig,
-  override: FlatPermissionConfig,
-): FlatPermissionConfig {
-  const merged: FlatPermissionConfig = { ...base };
-  for (const [key, value] of Object.entries(override)) {
-    const baseVal = merged[key];
-    if (
-      typeof baseVal === "object" &&
-      baseVal !== null &&
-      typeof value === "object" &&
-      value !== null
-    ) {
-      merged[key] = {
-        ...(baseVal as Record<string, PermissionState>),
-        ...(value as Record<string, PermissionState>),
-      };
-    } else {
-      merged[key] = value;
-    }
-  }
-  return merged;
-}
 
 type FileCacheEntry<TValue> = {
   stamp: string;

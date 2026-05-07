@@ -9,6 +9,7 @@ import {
   getLegacyProjectPolicyPath,
   getProjectConfigPath,
 } from "./config-paths";
+import { mergeFlatPermissions } from "./permission-merge";
 import type { FlatPermissionConfig } from "./types";
 
 /**
@@ -149,35 +150,6 @@ function normalizeFlatPermissionValue(
   }
 
   return hasAny ? normalized : undefined;
-}
-
-/**
- * Deep-shallow merge two flat permission configs.
- * - Both objects for same key → shallow-merge the pattern maps.
- * - Otherwise → override replaces base.
- */
-function mergeFlatPermissions(
-  base: FlatPermissionConfig,
-  override: FlatPermissionConfig,
-): FlatPermissionConfig {
-  const merged: FlatPermissionConfig = { ...base };
-  for (const [key, value] of Object.entries(override)) {
-    const baseVal = merged[key];
-    if (
-      typeof baseVal === "object" &&
-      baseVal !== null &&
-      typeof value === "object" &&
-      value !== null
-    ) {
-      merged[key] = {
-        ...(baseVal as Record<string, import("./types").PermissionState>),
-        ...(value as Record<string, import("./types").PermissionState>),
-      };
-    } else {
-      merged[key] = value;
-    }
-  }
-  return merged;
 }
 
 /**
