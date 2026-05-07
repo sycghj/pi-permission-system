@@ -21,7 +21,7 @@ import type {
   ToolCallContext,
   ToolGateDeps,
 } from "./gates/types";
-import type { HandlerDeps } from "./types";
+import type { HandlerDeps, PromptPermissionDetails } from "./types";
 
 /**
  * Extract the tool input from an event, checking both `input` and `arguments`
@@ -88,15 +88,36 @@ export async function handleToolCall(
     cwd: ctx.cwd,
   };
 
+  // ── Shared gate adapter closures ───────────────────────────────────────
+  const canConfirm = () => deps.canRequestPermissionConfirmation(ctx);
+  const promptPermission = (details: PromptPermissionDetails) =>
+    deps.promptPermission(ctx, details);
+  const emitDecision = (e: Parameters<ToolGateDeps["emitDecision"]>[0]) =>
+    emitDecisionEvent(deps.events, e);
+  const { writeReviewLog } = deps.runtime;
+  const checkPermission: ToolGateDeps["checkPermission"] = (
+    surface,
+    input,
+    agent,
+    sessionRules,
+  ) =>
+    deps.runtime.permissionManager.checkPermission(
+      surface,
+      input,
+      agent,
+      sessionRules,
+    );
+  const getSessionRuleset = () => deps.runtime.sessionRules.getRuleset();
+  const approveSessionRule = (surface: string, pattern: string) =>
+    deps.runtime.sessionRules.approve(surface, pattern);
+
   // ── Skill-read gate ──────────────────────────────────────────────────────
   const skillReadGateDeps: SkillReadGateDeps = {
     getActiveSkillEntries: () => deps.runtime.activeSkillEntries,
-    writeReviewLog: deps.runtime.writeReviewLog,
-    emitDecision: (event) => emitDecisionEvent(deps.events, event),
-    canConfirm: () =>
-      deps.canRequestPermissionConfirmation(deps.runtime.runtimeContext!),
-    promptPermission: (details) =>
-      deps.promptPermission(deps.runtime.runtimeContext!, details),
+    writeReviewLog,
+    emitDecision,
+    canConfirm,
+    promptPermission,
   };
   const skillResult = await evaluateSkillReadGate(tcc, skillReadGateDeps);
   if (skillResult?.action === "block") {
@@ -105,22 +126,13 @@ export async function handleToolCall(
 
   // ── External-directory gate (file tools) ─────────────────────────────────
   const extDirGateDeps: ExternalDirectoryGateDeps = {
-    checkPermission: (surface, input, agent, sessionRules) =>
-      deps.runtime.permissionManager.checkPermission(
-        surface,
-        input,
-        agent,
-        sessionRules,
-      ),
-    getSessionRuleset: () => deps.runtime.sessionRules.getRuleset(),
-    approveSessionRule: (surface, pattern) =>
-      deps.runtime.sessionRules.approve(surface, pattern),
-    writeReviewLog: deps.runtime.writeReviewLog,
-    emitDecision: (event) => emitDecisionEvent(deps.events, event),
-    canConfirm: () =>
-      deps.canRequestPermissionConfirmation(deps.runtime.runtimeContext!),
-    promptPermission: (details) =>
-      deps.promptPermission(deps.runtime.runtimeContext!, details),
+    checkPermission,
+    getSessionRuleset,
+    approveSessionRule,
+    writeReviewLog,
+    emitDecision,
+    canConfirm,
+    promptPermission,
     getInfrastructureDirs: () => [
       ...deps.runtime.piInfrastructureDirs,
       ...(deps.runtime.config.piInfrastructureReadPaths ?? []),
@@ -133,21 +145,12 @@ export async function handleToolCall(
 
   // ── Bash external-directory gate ─────────────────────────────────────────
   const bashExtGateDeps: BashExternalDirectoryGateDeps = {
-    checkPermission: (surface, input, agent, sessionRules) =>
-      deps.runtime.permissionManager.checkPermission(
-        surface,
-        input,
-        agent,
-        sessionRules,
-      ),
-    getSessionRuleset: () => deps.runtime.sessionRules.getRuleset(),
-    approveSessionRule: (surface, pattern) =>
-      deps.runtime.sessionRules.approve(surface, pattern),
-    writeReviewLog: deps.runtime.writeReviewLog,
-    canConfirm: () =>
-      deps.canRequestPermissionConfirmation(deps.runtime.runtimeContext!),
-    promptPermission: (details) =>
-      deps.promptPermission(deps.runtime.runtimeContext!, details),
+    checkPermission,
+    getSessionRuleset,
+    approveSessionRule,
+    writeReviewLog,
+    canConfirm,
+    promptPermission,
   };
   const bashExtResult = await evaluateBashExternalDirectoryGate(
     tcc,
@@ -159,22 +162,13 @@ export async function handleToolCall(
 
   // ── Normal tool permission gate ──────────────────────────────────────────
   const toolGateDeps: ToolGateDeps = {
-    checkPermission: (surface, input, agent, sessionRules) =>
-      deps.runtime.permissionManager.checkPermission(
-        surface,
-        input,
-        agent,
-        sessionRules,
-      ),
-    getSessionRuleset: () => deps.runtime.sessionRules.getRuleset(),
-    approveSessionRule: (surface, pattern) =>
-      deps.runtime.sessionRules.approve(surface, pattern),
-    writeReviewLog: deps.runtime.writeReviewLog,
-    emitDecision: (event) => emitDecisionEvent(deps.events, event),
-    canConfirm: () =>
-      deps.canRequestPermissionConfirmation(deps.runtime.runtimeContext!),
-    promptPermission: (details) =>
-      deps.promptPermission(deps.runtime.runtimeContext!, details),
+    checkPermission,
+    getSessionRuleset,
+    approveSessionRule,
+    writeReviewLog,
+    emitDecision,
+    canConfirm,
+    promptPermission,
   };
   const toolResult = await evaluateToolGate(tcc, toolGateDeps);
   if (toolResult.action === "block") {
