@@ -46,7 +46,7 @@ export async function handleToolCall(
   event: unknown,
   ctx: ExtensionContext,
 ): Promise<{ block?: true; reason?: string }> {
-  deps.runtime.runtimeContext = ctx;
+  deps.session.runtimeContext = ctx;
   deps.startForwardedPermissionPolling(ctx);
 
   const agentName = deps.resolveAgentName(ctx);
@@ -94,26 +94,26 @@ export async function handleToolCall(
     deps.promptPermission(ctx, details);
   const emitDecision = (e: Parameters<ToolGateDeps["emitDecision"]>[0]) =>
     emitDecisionEvent(deps.events, e);
-  const { writeReviewLog } = deps.runtime;
+  const { writeReviewLog } = deps;
   const checkPermission: ToolGateDeps["checkPermission"] = (
     surface,
     input,
     agent,
     sessionRules,
   ) =>
-    deps.runtime.permissionManager.checkPermission(
+    deps.session.permissionManager.checkPermission(
       surface,
       input,
       agent,
       sessionRules,
     );
-  const getSessionRuleset = () => deps.runtime.sessionRules.getRuleset();
+  const getSessionRuleset = () => deps.session.sessionRules.getRuleset();
   const approveSessionRule = (surface: string, pattern: string) =>
-    deps.runtime.sessionRules.approve(surface, pattern);
+    deps.session.sessionRules.approve(surface, pattern);
 
   // ── Skill-read gate ──────────────────────────────────────────────────────
   const skillReadGateDeps: SkillReadGateDeps = {
-    getActiveSkillEntries: () => deps.runtime.activeSkillEntries,
+    getActiveSkillEntries: () => deps.session.activeSkillEntries,
     writeReviewLog,
     emitDecision,
     canConfirm,
@@ -134,8 +134,8 @@ export async function handleToolCall(
     canConfirm,
     promptPermission,
     getInfrastructureDirs: () => [
-      ...deps.runtime.piInfrastructureDirs,
-      ...(deps.runtime.config.piInfrastructureReadPaths ?? []),
+      ...deps.piInfrastructureDirs,
+      ...deps.getPiInfrastructureReadPaths(),
     ],
   };
   const extDirResult = await evaluateExternalDirectoryGate(tcc, extDirGateDeps);

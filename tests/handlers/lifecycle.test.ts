@@ -7,7 +7,7 @@ import {
 } from "../../src/handlers/lifecycle";
 import type { HandlerDeps } from "../../src/handlers/types";
 import type { PermissionManager } from "../../src/permission-manager";
-import type { ExtensionRuntime } from "../../src/runtime";
+import type { SessionState } from "../../src/runtime";
 import type { SessionRules } from "../../src/session-rules";
 import type { SkillPromptEntry } from "../../src/skill-prompt-sanitizer";
 
@@ -67,36 +67,26 @@ function makeSessionRules(): SessionRules {
   } as unknown as SessionRules;
 }
 
-function makeRuntime(
-  overrides: Partial<ExtensionRuntime> = {},
-): ExtensionRuntime {
+function makeSession(overrides: Partial<SessionState> = {}): SessionState {
   return {
-    agentDir: "/test/agent",
-    sessionsDir: "/test/agent/sessions",
-    subagentSessionsDir: "/test/agent/subagent-sessions",
-    forwardingDir: "/test/agent/sessions/permission-forwarding",
-    globalLogsDir: "/test/agent/extensions/pi-permission-system/logs",
-    config: { debugLog: false, permissionReviewLog: true, yoloMode: false },
     runtimeContext: null,
     permissionManager: makePermissionManager() as unknown as PermissionManager,
     activeSkillEntries: [] as SkillPromptEntry[],
     lastKnownActiveAgentName: null,
     lastActiveToolsCacheKey: null,
     lastPromptStateCacheKey: null,
-    lastConfigWarning: null,
     sessionRules: makeSessionRules(),
-    permissionForwardingContext: null,
-    permissionForwardingTimer: null,
-    isProcessingForwardedRequests: false,
-    writeDebugLog: vi.fn(),
-    writeReviewLog: vi.fn(),
     ...overrides,
-  } as ExtensionRuntime;
+  };
 }
 
 function makeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
   return {
-    runtime: makeRuntime(),
+    session: makeSession(),
+    writeDebugLog: vi.fn(),
+    writeReviewLog: vi.fn(),
+    piInfrastructureDirs: ["/test/agent", "/test/agent/git"],
+    getPiInfrastructureReadPaths: vi.fn().mockReturnValue([]),
     createPermissionManagerForCwd: vi
       .fn()
       .mockReturnValue(makePermissionManager()),
@@ -131,7 +121,7 @@ describe("handleSessionStart", () => {
     const ctx = makeCtx();
     const deps = makeDeps();
     await handleSessionStart(deps, { reason: "startup" }, ctx);
-    expect(deps.runtime.runtimeContext).toBe(ctx);
+    expect(deps.session.runtimeContext).toBe(ctx);
   });
 
   it("refreshes extension config with ctx", async () => {
@@ -151,16 +141,16 @@ describe("handleSessionStart", () => {
     expect(deps.createPermissionManagerForCwd).toHaveBeenCalledWith(
       "/my/project",
     );
-    expect(deps.runtime.permissionManager).toBe(newPm);
+    expect(deps.session.permissionManager).toBe(newPm);
   });
 
   it("clears the before_agent_start cache", async () => {
     const ctx = makeCtx();
     const deps = makeDeps();
     await handleSessionStart(deps, { reason: "startup" }, ctx);
-    expect(deps.runtime.activeSkillEntries).toEqual([]);
-    expect(deps.runtime.lastActiveToolsCacheKey).toBeNull();
-    expect(deps.runtime.lastPromptStateCacheKey).toBeNull();
+    expect(deps.session.activeSkillEntries).toEqual([]);
+    expect(deps.session.lastActiveToolsCacheKey).toBeNull();
+    expect(deps.session.lastPromptStateCacheKey).toBeNull();
   });
 
   it("sets lastKnownActiveAgentName from getActiveAgentName", async () => {
@@ -168,7 +158,7 @@ describe("handleSessionStart", () => {
     const ctx = makeCtx();
     const deps = makeDeps();
     await handleSessionStart(deps, { reason: "startup" }, ctx);
-    expect(deps.runtime.lastKnownActiveAgentName).toBe("my-agent");
+    expect(deps.session.lastKnownActiveAgentName).toBe("my-agent");
   });
 
   it("sets lastKnownActiveAgentName to null when no agent is active", async () => {
@@ -176,7 +166,7 @@ describe("handleSessionStart", () => {
     const ctx = makeCtx();
     const deps = makeDeps();
     await handleSessionStart(deps, { reason: "startup" }, ctx);
-    expect(deps.runtime.lastKnownActiveAgentName).toBeNull();
+    expect(deps.session.lastKnownActiveAgentName).toBeNull();
   });
 
   it("starts forwarded permission polling", async () => {
@@ -213,20 +203,17 @@ describe("handleSessionStart", () => {
     const ctx = makeCtx({ cwd: "/proj" });
     const deps = makeDeps();
     await handleSessionStart(deps, { reason: "reload" }, ctx);
-    expect(deps.runtime.writeDebugLog).toHaveBeenCalledWith(
-      "lifecycle.reload",
-      {
-        triggeredBy: "session_start",
-        reason: "reload",
-        cwd: "/proj",
-      },
-    );
+    expect(deps.writeDebugLog).toHaveBeenCalledWith("lifecycle.reload", {
+      triggeredBy: "session_start",
+      reason: "reload",
+      cwd: "/proj",
+    });
   });
 
   it("does not write lifecycle.reload debug log for non-reload reasons", async () => {
     const deps = makeDeps();
     await handleSessionStart(deps, { reason: "startup" }, makeCtx());
-    expect(deps.runtime.writeDebugLog).not.toHaveBeenCalled();
+    expect(deps.writeDebugLog).not.toHaveBeenCalled();
   });
 });
 
@@ -237,21 +224,21 @@ describe("handleResourcesDiscover", () => {
     const deps = makeDeps();
     await handleResourcesDiscover(deps, { reason: "startup" });
     expect(deps.createPermissionManagerForCwd).not.toHaveBeenCalled();
-    expect(deps.runtime.writeDebugLog).not.toHaveBeenCalled();
+    expect(deps.writeDebugLog).not.toHaveBeenCalled();
   });
 
   it("creates and stores a new PM using runtimeContext.cwd on reload", async () => {
     const ctx = makeCtx({ cwd: "/runtime/cwd" });
     const newPm = makePermissionManager();
     const deps = makeDeps({
-      runtime: makeRuntime({ runtimeContext: ctx }),
+      session: makeSession({ runtimeContext: ctx }),
       createPermissionManagerForCwd: vi.fn().mockReturnValue(newPm),
     });
     await handleResourcesDiscover(deps, { reason: "reload" });
     expect(deps.createPermissionManagerForCwd).toHaveBeenCalledWith(
       "/runtime/cwd",
     );
-    expect(deps.runtime.permissionManager).toBe(newPm);
+    expect(deps.session.permissionManager).toBe(newPm);
   });
 
   it("uses undefined cwd when runtimeContext is null on reload", async () => {
@@ -263,36 +250,30 @@ describe("handleResourcesDiscover", () => {
   it("clears the before_agent_start cache on reload", async () => {
     const deps = makeDeps();
     await handleResourcesDiscover(deps, { reason: "reload" });
-    expect(deps.runtime.activeSkillEntries).toEqual([]);
-    expect(deps.runtime.lastActiveToolsCacheKey).toBeNull();
-    expect(deps.runtime.lastPromptStateCacheKey).toBeNull();
+    expect(deps.session.activeSkillEntries).toEqual([]);
+    expect(deps.session.lastActiveToolsCacheKey).toBeNull();
+    expect(deps.session.lastPromptStateCacheKey).toBeNull();
   });
 
   it("writes lifecycle.reload debug log on reload", async () => {
     const ctx = makeCtx({ cwd: "/proj" });
-    const deps = makeDeps({ runtime: makeRuntime({ runtimeContext: ctx }) });
+    const deps = makeDeps({ session: makeSession({ runtimeContext: ctx }) });
     await handleResourcesDiscover(deps, { reason: "reload" });
-    expect(deps.runtime.writeDebugLog).toHaveBeenCalledWith(
-      "lifecycle.reload",
-      {
-        triggeredBy: "resources_discover",
-        reason: "reload",
-        cwd: "/proj",
-      },
-    );
+    expect(deps.writeDebugLog).toHaveBeenCalledWith("lifecycle.reload", {
+      triggeredBy: "resources_discover",
+      reason: "reload",
+      cwd: "/proj",
+    });
   });
 
   it("logs cwd as null when runtimeContext is null on reload", async () => {
     const deps = makeDeps();
     await handleResourcesDiscover(deps, { reason: "reload" });
-    expect(deps.runtime.writeDebugLog).toHaveBeenCalledWith(
-      "lifecycle.reload",
-      {
-        triggeredBy: "resources_discover",
-        reason: "reload",
-        cwd: null,
-      },
-    );
+    expect(deps.writeDebugLog).toHaveBeenCalledWith("lifecycle.reload", {
+      triggeredBy: "resources_discover",
+      reason: "reload",
+      cwd: null,
+    });
   });
 });
 
@@ -302,7 +283,7 @@ describe("handleSessionShutdown", () => {
   it("clears the UI status when a runtime context is present", async () => {
     const ctx = makeCtx();
     const deps = makeDeps({
-      runtime: makeRuntime({ runtimeContext: ctx }),
+      session: makeSession({ runtimeContext: ctx }),
     });
     await handleSessionShutdown(deps);
     expect(ctx.ui.setStatus).toHaveBeenCalledWith(
@@ -318,23 +299,23 @@ describe("handleSessionShutdown", () => {
 
   it("sets runtime context to null", async () => {
     const ctx = makeCtx();
-    const deps = makeDeps({ runtime: makeRuntime({ runtimeContext: ctx }) });
+    const deps = makeDeps({ session: makeSession({ runtimeContext: ctx }) });
     await handleSessionShutdown(deps);
-    expect(deps.runtime.runtimeContext).toBeNull();
+    expect(deps.session.runtimeContext).toBeNull();
   });
 
   it("clears the before_agent_start cache", async () => {
     const deps = makeDeps();
     await handleSessionShutdown(deps);
-    expect(deps.runtime.activeSkillEntries).toEqual([]);
-    expect(deps.runtime.lastActiveToolsCacheKey).toBeNull();
-    expect(deps.runtime.lastPromptStateCacheKey).toBeNull();
+    expect(deps.session.activeSkillEntries).toEqual([]);
+    expect(deps.session.lastActiveToolsCacheKey).toBeNull();
+    expect(deps.session.lastPromptStateCacheKey).toBeNull();
   });
 
   it("clears the session rules", async () => {
     const deps = makeDeps();
     await handleSessionShutdown(deps);
-    expect(deps.runtime.sessionRules.clear).toHaveBeenCalledOnce();
+    expect(deps.session.sessionRules.clear).toHaveBeenCalledOnce();
   });
 
   it("stops forwarded permission polling", async () => {
@@ -351,9 +332,9 @@ describe("handleSessionShutdown", () => {
 
   it("does not reset lastKnownActiveAgentName", async () => {
     const deps = makeDeps({
-      runtime: makeRuntime({ lastKnownActiveAgentName: "remembered" }),
+      session: makeSession({ lastKnownActiveAgentName: "remembered" }),
     });
     await handleSessionShutdown(deps);
-    expect(deps.runtime.lastKnownActiveAgentName).toBe("remembered");
+    expect(deps.session.lastKnownActiveAgentName).toBe("remembered");
   });
 });

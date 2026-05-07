@@ -7,7 +7,7 @@ import {
 } from "../../src/handlers/before-agent-start";
 import type { HandlerDeps } from "../../src/handlers/types";
 import type { PermissionManager } from "../../src/permission-manager";
-import type { ExtensionRuntime } from "../../src/runtime";
+import type { SessionState } from "../../src/runtime";
 import type { SkillPromptEntry } from "../../src/skill-prompt-sanitizer";
 
 // ── SDK stubs ──────────────────────────────────────────────────────────────
@@ -57,40 +57,30 @@ function makePm(
   } as unknown as PermissionManager;
 }
 
-function makeRuntime(
-  overrides: Partial<ExtensionRuntime> = {},
-): ExtensionRuntime {
+function makeSession(overrides: Partial<SessionState> = {}): SessionState {
   return {
-    agentDir: "/test/agent",
-    sessionsDir: "/test/agent/sessions",
-    subagentSessionsDir: "/test/agent/subagent-sessions",
-    forwardingDir: "/test/agent/sessions/permission-forwarding",
-    globalLogsDir: "/test/agent/extensions/pi-permission-system/logs",
-    config: { debugLog: false, permissionReviewLog: true, yoloMode: false },
     runtimeContext: null,
     permissionManager: makePm() as unknown as PermissionManager,
     activeSkillEntries: [] as SkillPromptEntry[],
     lastKnownActiveAgentName: null,
     lastActiveToolsCacheKey: null,
     lastPromptStateCacheKey: null,
-    lastConfigWarning: null,
     sessionRules: {
       approve: vi.fn(),
       getRuleset: vi.fn().mockReturnValue([]),
       clear: vi.fn(),
-    } as unknown as ExtensionRuntime["sessionRules"],
-    permissionForwardingContext: null,
-    permissionForwardingTimer: null,
-    isProcessingForwardedRequests: false,
-    writeDebugLog: vi.fn(),
-    writeReviewLog: vi.fn(),
+    } as unknown as SessionState["sessionRules"],
     ...overrides,
-  } as ExtensionRuntime;
+  };
 }
 
 function makeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
   return {
-    runtime: makeRuntime(),
+    session: makeSession(),
+    writeDebugLog: vi.fn(),
+    writeReviewLog: vi.fn(),
+    piInfrastructureDirs: ["/test/agent", "/test/agent/git"],
+    getPiInfrastructureReadPaths: vi.fn().mockReturnValue([]),
     createPermissionManagerForCwd: vi.fn().mockReturnValue(makePm()),
     refreshExtensionConfig: vi.fn(),
     notifyWarning: vi.fn(),
@@ -176,7 +166,7 @@ describe("handleBeforeAgentStart", () => {
   it("filters out denied tools from allowed list", async () => {
     const pm = makePm("deny");
     const deps = makeDeps({
-      runtime: makeRuntime({
+      session: makeSession({
         permissionManager: pm as unknown as PermissionManager,
       }),
       getAllTools: vi
@@ -191,7 +181,7 @@ describe("handleBeforeAgentStart", () => {
   it("includes allowed and ask tools in the active list", async () => {
     const pm = makePm("allow");
     const deps = makeDeps({
-      runtime: makeRuntime({
+      session: makeSession({
         permissionManager: pm as unknown as PermissionManager,
       }),
       getAllTools: vi
@@ -207,7 +197,7 @@ describe("handleBeforeAgentStart", () => {
       getAllTools: vi.fn().mockReturnValue([{ name: "read" }]),
     });
     await handleBeforeAgentStart(deps, makeEvent(), makeCtx());
-    expect(deps.runtime.lastActiveToolsCacheKey).not.toBeNull();
+    expect(deps.session.lastActiveToolsCacheKey).not.toBeNull();
   });
 
   it("skips setActiveTools when cache key is unchanged", async () => {
@@ -217,7 +207,7 @@ describe("handleBeforeAgentStart", () => {
     );
     const key = createActiveToolsCacheKey(["read"]);
     const deps = makeDeps({
-      runtime: makeRuntime({ lastActiveToolsCacheKey: key }),
+      session: makeSession({ lastActiveToolsCacheKey: key }),
       getAllTools: vi.fn().mockReturnValue([{ name: "read" }]),
     });
     await handleBeforeAgentStart(deps, makeEvent(), makeCtx());
@@ -238,7 +228,7 @@ describe("handleBeforeAgentStart", () => {
     );
     // The prompt was modified, so systemPrompt should be returned
     expect(result).toHaveProperty("systemPrompt");
-    expect(deps.runtime.lastPromptStateCacheKey).not.toBeNull();
+    expect(deps.session.lastPromptStateCacheKey).not.toBeNull();
   });
 
   it("returns empty object when systemPrompt is unchanged", async () => {
@@ -259,7 +249,7 @@ describe("handleBeforeAgentStart", () => {
       getAllTools: vi.fn().mockReturnValue([]),
     });
     await handleBeforeAgentStart(deps, makeEvent(), makeCtx());
-    expect(deps.runtime.activeSkillEntries).toEqual(expect.any(Array));
+    expect(deps.session.activeSkillEntries).toEqual(expect.any(Array));
   });
 
   it("returns empty object and skips prompt work when prompt cache key is unchanged", async () => {
@@ -277,7 +267,7 @@ describe("handleBeforeAgentStart", () => {
       allowedToolNames: allowedTools,
     });
     const deps = makeDeps({
-      runtime: makeRuntime({
+      session: makeSession({
         permissionManager: pm as unknown as PermissionManager,
         lastPromptStateCacheKey: key,
       }),
@@ -286,6 +276,6 @@ describe("handleBeforeAgentStart", () => {
     const result = await handleBeforeAgentStart(deps, makeEvent("hello"), ctx);
     expect(result).toEqual({});
     // activeSkillEntries was not assigned by the handler (early return)
-    expect(deps.runtime.activeSkillEntries).toEqual([]);
+    expect(deps.session.activeSkillEntries).toEqual([]);
   });
 });

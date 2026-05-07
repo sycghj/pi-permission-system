@@ -41,12 +41,12 @@ export async function handleBeforeAgentStart(
   event: BeforeAgentStartPayload,
   ctx: ExtensionContext,
 ): Promise<BeforeAgentStartEventResult> {
-  deps.runtime.runtimeContext = ctx;
+  deps.session.runtimeContext = ctx;
   deps.refreshExtensionConfig(ctx);
   deps.startForwardedPermissionPolling(ctx);
 
   const agentName = deps.resolveAgentName(ctx, event.systemPrompt);
-  const { permissionManager } = deps.runtime;
+  const { permissionManager } = deps.session;
   const allTools = deps.getAllTools();
   const allowedTools: string[] = [];
 
@@ -63,12 +63,12 @@ export async function handleBeforeAgentStart(
   const activeToolsCacheKey = createActiveToolsCacheKey(allowedTools);
   if (
     shouldApplyCachedAgentStartState(
-      deps.runtime.lastActiveToolsCacheKey,
+      deps.session.lastActiveToolsCacheKey,
       activeToolsCacheKey,
     )
   ) {
     deps.setActiveTools(allowedTools);
-    deps.runtime.lastActiveToolsCacheKey = activeToolsCacheKey;
+    deps.session.lastActiveToolsCacheKey = activeToolsCacheKey;
   }
 
   const promptStateCacheKey = createBeforeAgentStartPromptStateKey({
@@ -83,14 +83,14 @@ export async function handleBeforeAgentStart(
 
   if (
     !shouldApplyCachedAgentStartState(
-      deps.runtime.lastPromptStateCacheKey,
+      deps.session.lastPromptStateCacheKey,
       promptStateCacheKey,
     )
   ) {
     return {};
   }
 
-  deps.runtime.lastPromptStateCacheKey = promptStateCacheKey;
+  deps.session.lastPromptStateCacheKey = promptStateCacheKey;
 
   const toolPromptResult = sanitizeAvailableToolsSection(
     event.systemPrompt,
@@ -102,7 +102,7 @@ export async function handleBeforeAgentStart(
     agentName,
     ctx.cwd,
   );
-  deps.runtime.activeSkillEntries = skillPromptResult.entries;
+  deps.session.activeSkillEntries = skillPromptResult.entries;
 
   if (skillPromptResult.prompt !== event.systemPrompt) {
     return { systemPrompt: skillPromptResult.prompt };

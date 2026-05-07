@@ -8,7 +8,7 @@ import { handleInput } from "../../src/handlers/input";
 import type { HandlerDeps } from "../../src/handlers/types";
 import type { PermissionDecisionEvent } from "../../src/permission-events";
 import { PERMISSIONS_DECISION_CHANNEL } from "../../src/permission-events";
-import type { ExtensionRuntime } from "../../src/runtime";
+import type { SessionState } from "../../src/runtime";
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -38,17 +38,8 @@ function makeCtx(overrides: Partial<ExtensionContext> = {}): ExtensionContext {
   } as unknown as ExtensionContext;
 }
 
-function makeRuntime(
-  state: "allow" | "deny" | "ask" = "allow",
-): ExtensionRuntime {
+function makeSession(state: "allow" | "deny" | "ask" = "allow"): SessionState {
   return {
-    agentDir: "/test/agent",
-    sessionsDir: "/test/agent/sessions",
-    subagentSessionsDir: "/test/agent/subagent-sessions",
-    forwardingDir: "/test/agent/sessions/permission-forwarding",
-    globalLogsDir: "/test/agent/extensions/pi-permission-system/logs",
-    piInfrastructureDirs: ["/test/agent"],
-    config: { debugLog: false, permissionReviewLog: true, yoloMode: false },
     runtimeContext: null,
     permissionManager: {
       checkPermission: vi.fn().mockReturnValue({
@@ -58,23 +49,17 @@ function makeRuntime(
         origin: "global",
         matchedPattern: "*",
       }),
-    } as unknown as ExtensionRuntime["permissionManager"],
+    } as unknown as SessionState["permissionManager"],
     activeSkillEntries: [],
     lastKnownActiveAgentName: null,
     lastActiveToolsCacheKey: null,
     lastPromptStateCacheKey: null,
-    lastConfigWarning: null,
     sessionRules: {
       approve: vi.fn(),
       getRuleset: vi.fn().mockReturnValue([]),
       clear: vi.fn(),
-    } as unknown as ExtensionRuntime["sessionRules"],
-    permissionForwardingContext: null,
-    permissionForwardingTimer: null,
-    isProcessingForwardedRequests: false,
-    writeDebugLog: vi.fn(),
-    writeReviewLog: vi.fn(),
-  } as ExtensionRuntime;
+    } as unknown as SessionState["sessionRules"],
+  };
 }
 
 function makeDeps(
@@ -82,7 +67,11 @@ function makeDeps(
   overrides: Partial<HandlerDeps> = {},
 ): HandlerDeps {
   return {
-    runtime: makeRuntime(state),
+    session: makeSession(state),
+    writeDebugLog: vi.fn(),
+    writeReviewLog: vi.fn(),
+    piInfrastructureDirs: ["/test/agent"],
+    getPiInfrastructureReadPaths: vi.fn().mockReturnValue([]),
     events: makeEvents(),
     createPermissionManagerForCwd: vi.fn(),
     refreshExtensionConfig: vi.fn(),

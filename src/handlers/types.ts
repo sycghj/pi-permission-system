@@ -3,7 +3,7 @@ import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import type { PermissionPromptDecision } from "../permission-dialog";
 import type { PermissionEventBus } from "../permission-events";
 import type { PermissionManager } from "../permission-manager";
-import type { ExtensionRuntime } from "../runtime";
+import type { SessionState } from "../runtime";
 
 export type PermissionReviewSource = "tool_call" | "skill_input" | "skill_read";
 
@@ -27,13 +27,26 @@ export interface PromptPermissionDetails {
 /**
  * Explicit dependency bag passed to each extracted event handler.
  *
- * Mutable state lives in `runtime`; handlers read and write `deps.runtime.*`
- * directly instead of going through getter/setter pairs.
+ * Mutable session state lives in `session`; handlers read and write
+ * `deps.session.*` directly. Logging, infrastructure paths, and the
+ * event bus are promoted to top-level fields so handlers and gate
+ * adapters never reach through nested objects for leaf operations.
  */
 export interface HandlerDeps {
-  // ── Runtime context ────────────────────────────────────────────────────
-  /** All mutable extension state and log-writing methods. */
-  readonly runtime: ExtensionRuntime;
+  // ── Session state ─────────────────────────────────────────────────────
+  /** Mutable session state: permissionManager, sessionRules, cache keys. */
+  readonly session: SessionState;
+
+  // ── Logging (promoted from runtime) ───────────────────────────────────
+  writeDebugLog(event: string, details?: Record<string, unknown>): void;
+  writeReviewLog(event: string, details?: Record<string, unknown>): void;
+
+  // ── Immutable infrastructure paths ───────────────────────────────────
+  readonly piInfrastructureDirs: string[];
+  /** Returns config-derived infrastructure read paths (current at call time). */
+  getPiInfrastructureReadPaths(): string[];
+
+  // ── Event bus ────────────────────────────────────────────────────────
   /** Event bus for emitting permissions:decision broadcast events. */
   readonly events: PermissionEventBus;
 
@@ -54,7 +67,7 @@ export interface HandlerDeps {
   // ── Permission helpers ─────────────────────────────────────────────────
   /**
    * Resolve the active agent name from the session context or system prompt.
-   * Updates runtime.lastKnownActiveAgentName as a side effect.
+   * Updates session.lastKnownActiveAgentName as a side effect.
    */
   resolveAgentName(ctx: ExtensionContext, systemPrompt?: string): string | null;
   /** Whether the current context can show an interactive permission prompt. */
