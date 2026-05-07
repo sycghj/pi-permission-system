@@ -15,6 +15,7 @@ import { evaluateExternalDirectoryGate } from "./gates/external-directory";
 import { evaluateSkillReadGate } from "./gates/skill-read";
 import { evaluateToolGate } from "./gates/tool";
 import type {
+  BashExternalDirectoryGateDeps,
   ExternalDirectoryGateDeps,
   ToolCallContext,
   ToolGateDeps,
@@ -121,7 +122,27 @@ export async function handleToolCall(
   }
 
   // ── Bash external-directory gate ─────────────────────────────────────────
-  const bashExtResult = await evaluateBashExternalDirectoryGate(tcc, deps);
+  const bashExtGateDeps: BashExternalDirectoryGateDeps = {
+    checkPermission: (surface, input, agent, sessionRules) =>
+      deps.runtime.permissionManager.checkPermission(
+        surface,
+        input,
+        agent,
+        sessionRules,
+      ),
+    getSessionRuleset: () => deps.runtime.sessionRules.getRuleset(),
+    approveSessionRule: (surface, pattern) =>
+      deps.runtime.sessionRules.approve(surface, pattern),
+    writeReviewLog: deps.runtime.writeReviewLog,
+    canConfirm: () =>
+      deps.canRequestPermissionConfirmation(deps.runtime.runtimeContext!),
+    promptPermission: (details) =>
+      deps.promptPermission(deps.runtime.runtimeContext!, details),
+  };
+  const bashExtResult = await evaluateBashExternalDirectoryGate(
+    tcc,
+    bashExtGateDeps,
+  );
   if (bashExtResult?.action === "block") {
     return { block: true, reason: bashExtResult.reason };
   }

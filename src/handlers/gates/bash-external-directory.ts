@@ -8,8 +8,11 @@ import {
 import type { PermissionPromptDecision } from "../../permission-dialog";
 import { applyPermissionGate } from "../../permission-gate";
 import { deriveApprovalPattern } from "../../session-rules";
-import type { HandlerDeps } from "../types";
-import type { GateOutcome, ToolCallContext } from "./types";
+import type {
+  BashExternalDirectoryGateDeps,
+  GateOutcome,
+  ToolCallContext,
+} from "./types";
 
 /**
  * Evaluate the bash external-directory permission gate.
@@ -20,7 +23,7 @@ import type { GateOutcome, ToolCallContext } from "./types";
  */
 export async function evaluateBashExternalDirectoryGate(
   tcc: ToolCallContext,
-  deps: HandlerDeps,
+  deps: BashExternalDirectoryGateDeps,
 ): Promise<GateOutcome | null> {
   if (tcc.toolName !== "bash" || !tcc.cwd) return null;
 
@@ -33,10 +36,10 @@ export async function evaluateBashExternalDirectoryGate(
   );
   if (externalPaths.length === 0) return null;
 
-  const bashSessionRules = deps.runtime.sessionRules.getRuleset();
+  const bashSessionRules = deps.getSessionRuleset();
   const uncoveredPaths = externalPaths.filter(
     (p) =>
-      deps.runtime.permissionManager.checkPermission(
+      deps.checkPermission(
         "external_directory",
         { path: p },
         tcc.agentName ?? undefined,
@@ -45,7 +48,7 @@ export async function evaluateBashExternalDirectoryGate(
   );
 
   if (uncoveredPaths.length === 0) {
-    deps.runtime.writeReviewLog("permission_request.session_approved", {
+    deps.writeReviewLog("permission_request.session_approved", {
       source: "tool_call",
       toolCallId: tcc.toolCallId,
       toolName: tcc.toolName,
@@ -58,7 +61,7 @@ export async function evaluateBashExternalDirectoryGate(
   }
 
   // Get the config-level policy (no path → no session check).
-  const extCheck = deps.runtime.permissionManager.checkPermission(
+  const extCheck = deps.checkPermission(
     "external_directory",
     {},
     tcc.agentName ?? undefined,
@@ -73,26 +76,21 @@ export async function evaluateBashExternalDirectoryGate(
   );
   const bashExtGate = await applyPermissionGate({
     state: extCheck.state,
-    canConfirm: deps.canRequestPermissionConfirmation(
-      deps.runtime.runtimeContext!,
-    ),
+    canConfirm: deps.canConfirm(),
     promptForApproval: async () => {
-      const decision = await deps.promptPermission(
-        deps.runtime.runtimeContext!,
-        {
-          requestId: tcc.toolCallId,
-          source: "tool_call",
-          agentName: tcc.agentName,
-          message: bashExtMessage,
-          toolCallId: tcc.toolCallId,
-          toolName: tcc.toolName,
-          command,
-        },
-      );
+      const decision = await deps.promptPermission({
+        requestId: tcc.toolCallId,
+        source: "tool_call",
+        agentName: tcc.agentName,
+        message: bashExtMessage,
+        toolCallId: tcc.toolCallId,
+        toolName: tcc.toolName,
+        command,
+      });
       bashExtDecision = decision;
       return decision;
     },
-    writeLog: deps.runtime.writeReviewLog,
+    writeLog: deps.writeReviewLog,
     logContext: {
       source: "tool_call",
       toolCallId: tcc.toolCallId,
@@ -126,7 +124,7 @@ export async function evaluateBashExternalDirectoryGate(
   if (bashExtDecision?.state === "approved_for_session") {
     for (const extPath of uncoveredPaths) {
       const pattern = deriveApprovalPattern(extPath);
-      deps.runtime.sessionRules.approve("external_directory", pattern);
+      deps.approveSessionRule("external_directory", pattern);
     }
   }
 
