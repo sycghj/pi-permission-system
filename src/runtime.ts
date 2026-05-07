@@ -48,6 +48,21 @@ import { syncPermissionSystemStatus } from "./status";
 import { isSubagentExecutionContext } from "./subagent-context";
 
 /**
+ * Mutable session state — the subset of ExtensionRuntime that handlers
+ * read and write. Lifecycle handlers reset fields here on session
+ * start/shutdown; gate adapters read permissionManager and sessionRules.
+ */
+export interface SessionState {
+  runtimeContext: ExtensionContext | null;
+  permissionManager: PermissionManager;
+  readonly sessionRules: SessionRules;
+  activeSkillEntries: SkillPromptEntry[];
+  lastKnownActiveAgentName: string | null;
+  lastActiveToolsCacheKey: string | null;
+  lastPromptStateCacheKey: string | null;
+}
+
+/**
  * Runtime context object created once inside `piPermissionSystemExtension()`.
  *
  * Holds all path constants (derived from `getAgentDir()` at construction time),
@@ -58,7 +73,7 @@ import { isSubagentExecutionContext } from "./subagent-context";
  * Tests construct this via `createExtensionRuntime({ agentDir: tmpDir })`
  * without timing issues around `PI_CODING_AGENT_DIR`.
  */
-export interface ExtensionRuntime {
+export interface ExtensionRuntime extends SessionState {
   // ── Immutable paths (derived from agentDir at construction) ───────────
   readonly agentDir: string;
   readonly sessionsDir: string;
@@ -74,16 +89,9 @@ export interface ExtensionRuntime {
    */
   readonly piInfrastructureDirs: string[];
 
-  // ── Mutable state ──────────────────────────────────────────────────────
+  // ── Mutable state (beyond SessionState) ───────────────────────────────────
   config: PermissionSystemExtensionConfig;
-  runtimeContext: ExtensionContext | null;
-  permissionManager: PermissionManager;
-  activeSkillEntries: SkillPromptEntry[];
-  lastKnownActiveAgentName: string | null;
-  lastActiveToolsCacheKey: string | null;
-  lastPromptStateCacheKey: string | null;
   lastConfigWarning: string | null;
-  readonly sessionRules: SessionRules;
 
   // ── Forwarding polling state ───────────────────────────────────────────
   permissionForwardingContext: ExtensionContext | null;
