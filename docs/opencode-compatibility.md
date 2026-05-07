@@ -40,7 +40,7 @@ If your OpenCode config uses these features, the equivalent works in this extens
 |`.env` file protection|Built-in `read` rules deny/ask `.env` files|No built-in rules; user configures manually|
 |`?` wildcard|Matches exactly one character|Not supported; `?` is a literal character|
 |Trailing wildcard optionality|`"ls *"` matches bare `"ls"` (trailing `*` is optional)|`"ls *"` does NOT match bare `"ls"`|
-|`doom_loop` surface|Active, defaults to `ask`|Deprecated and removed|
+|`doom_loop` surface|Active, defaults to `ask`|Not applicable — Pi does not fire doom-loop events; the config key was dead code and has been removed|
 |File mutation surfaces|`edit` covers `edit`, `write`, `apply_patch`|Separate `write` and `edit` surfaces|
 |Search/discovery surfaces|`glob`, `grep`, `list`|`find`, `grep`, `ls` (Pi tool names)|
 |OpenCode-only surfaces|`lsp`, `question`, `webfetch`, `websearch`, `todowrite`|Not applicable (Pi lacks these tools)|
