@@ -1,6 +1,5 @@
 import { toRecord } from "../../common";
 import { normalizePathForComparison } from "../../external-directory";
-import { applyPermissionGate } from "../../permission-gate";
 import {
   formatSkillPathAskPrompt,
   formatSkillPathDenyReason,
@@ -8,8 +7,7 @@ import {
 import type { SkillPromptEntry } from "../../skill-prompt-sanitizer";
 import { findSkillPathMatch } from "../../skill-prompt-sanitizer";
 import type { GateDescriptor } from "./descriptor";
-import { deriveResolution } from "./helpers";
-import type { GateOutcome, SkillReadGateDeps, ToolCallContext } from "./types";
+import type { ToolCallContext } from "./types";
 
 /**
  * Build a pure descriptor for the skill-read permission gate.
@@ -91,103 +89,4 @@ export function describeSkillReadGate(
       state: matchedSkill.state,
     },
   };
-}
-
-/**
- * Evaluate the skill-read permission gate.
- *
- * Returns `null` when the gate does not apply (tool is not `read`, no active
- * skill entries, or the read path does not match any skill).
- */
-export async function evaluateSkillReadGate(
-  tcc: ToolCallContext,
-  deps: SkillReadGateDeps,
-): Promise<GateOutcome | null> {
-  const activeSkillEntries = deps.getActiveSkillEntries();
-
-  // Only applies to read tool calls with active skill entries
-  if (tcc.toolName !== "read" || activeSkillEntries.length === 0) {
-    return null;
-  }
-
-  const inputRecord = toRecord(tcc.input);
-  const path = typeof inputRecord.path === "string" ? inputRecord.path : "";
-  if (!path) {
-    return null;
-  }
-
-  const normalizedReadPath = normalizePathForComparison(path, tcc.cwd);
-  const matchedSkill = findSkillPathMatch(
-    normalizedReadPath,
-    activeSkillEntries,
-  );
-
-  if (!matchedSkill) {
-    return null;
-  }
-
-  const skillReadMessage = formatSkillPathAskPrompt(
-    matchedSkill,
-    path,
-    tcc.agentName ?? undefined,
-  );
-  const skillReadCanConfirm = deps.canConfirm();
-  const skillReadGate = await applyPermissionGate({
-    state: matchedSkill.state,
-    canConfirm: skillReadCanConfirm,
-    promptForApproval: () =>
-      deps.promptPermission({
-        requestId: tcc.toolCallId,
-        source: "skill_read",
-        agentName: tcc.agentName,
-        message: skillReadMessage,
-        toolCallId: tcc.toolCallId,
-        toolName: tcc.toolName,
-        skillName: matchedSkill.name,
-        path,
-      }),
-    writeLog: deps.writeReviewLog,
-    logContext: {
-      source: "skill_read",
-      skillName: matchedSkill.name,
-      agentName: tcc.agentName,
-      path,
-      message: skillReadMessage,
-    },
-    messages: {
-      denyReason: formatSkillPathDenyReason(
-        matchedSkill,
-        path,
-        tcc.agentName ?? undefined,
-      ),
-      unavailableReason: `Accessing skill '${matchedSkill.name}' requires approval, but no interactive UI is available.`,
-      userDeniedReason: (decision) => {
-        const denialReason = decision.denialReason
-          ? ` Reason: ${decision.denialReason}.`
-          : "";
-        return `User denied access to skill '${matchedSkill.name}'.${denialReason}`;
-      },
-    },
-  });
-
-  deps.emitDecision({
-    surface: "skill",
-    value: matchedSkill.name,
-    result: skillReadGate.action === "allow" ? "allow" : "deny",
-    resolution: deriveResolution(
-      matchedSkill.state,
-      skillReadGate.action,
-      false,
-      skillReadCanConfirm,
-    ),
-    origin: null,
-    agentName: tcc.agentName ?? null,
-    matchedPattern: null,
-  });
-
-  if (skillReadGate.action === "block") {
-    return { action: "block", reason: skillReadGate.reason };
-  }
-
-  return { action: "allow" };
 }

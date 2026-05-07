@@ -17,7 +17,7 @@ import { describeExternalDirectoryGate } from "./gates/external-directory";
 import { runGateCheck } from "./gates/runner";
 import { describeSkillReadGate } from "./gates/skill-read";
 import { describeToolGate } from "./gates/tool";
-import type { ToolCallContext, ToolGateDeps } from "./gates/types";
+import type { ToolCallContext } from "./gates/types";
 import type { HandlerDeps, PromptPermissionDetails } from "./types";
 
 /**
@@ -89,10 +89,10 @@ export async function handleToolCall(
   const canConfirm = () => deps.canRequestPermissionConfirmation(ctx);
   const promptPermission = (details: PromptPermissionDetails) =>
     deps.promptPermission(ctx, details);
-  const emitDecision = (e: Parameters<ToolGateDeps["emitDecision"]>[0]) =>
+  const emitDecision: GateRunnerDeps["emitDecision"] = (e) =>
     emitDecisionEvent(deps.events, e);
   const { writeReviewLog } = deps;
-  const checkPermission: ToolGateDeps["checkPermission"] = (
+  const checkPermission: GateRunnerDeps["checkPermission"] = (
     surface,
     input,
     agent,
