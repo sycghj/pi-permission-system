@@ -18,7 +18,6 @@ import type {
   FlatPermissionConfig,
   PermissionCheckResult,
   PermissionState,
-  ScopeConfig,
 } from "./types";
 
 const BUILT_IN_TOOL_PERMISSION_NAMES = new Set([

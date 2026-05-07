@@ -166,13 +166,14 @@ function composeRuleset(defaults, baseline, config): Ruleset {
 
 ```mermaid
 flowchart TD
-    subgraph Load["Config loading (IO boundary)"]
+    subgraph Load["Config loading (IO boundary — PolicyLoader)"]
         GF["Global config file"]
         PF["Project config file"]
         AF["Agent frontmatter"]
-        GF --> Norm["normalizeFlatConfig()"]
-        PF --> Norm
-        AF --> Norm
+        GF --> PL["PolicyLoader"]
+        PF --> PL
+        AF --> PL
+        PL --> Norm["normalizeFlatConfig()"]
     end
 
     subgraph Defaults["Default synthesis"]
@@ -460,7 +461,8 @@ src/
 ├── bash-arity.ts             ⚠️ Command arity table for bash pattern suggestions (#52)
 ├── home-expand.ts            ⚠️ ~/$HOME expansion for patterns (#53)
 ├── session-rules.ts          ✅ Session approval store (Ruleset wrapper)
-├── permission-manager.ts     ✅ Config loading + merge + checkPermission() (target: extract pure checker, #81)
+├── policy-loader.ts          ✅ PolicyLoader interface + FilePolicyLoader (file I/O, mtime caching) (#108)
+├── permission-manager.ts     ✅ Policy merge + checkPermission(); delegates I/O to PolicyLoader (#108)
 ├── permission-gate.ts        ✅ Pure deny/ask/allow gate (injected IO)
 ├── permission-prompter.ts    ✅ Yolo-mode, review logging, UI/forwarding branch (#80)
 ├── permission-dialog.ts      ✅ Dialog options (once / session / deny)
@@ -571,6 +573,7 @@ flowchart TD
 |---|---|---|
 |#81|Unify `checkPermission()` surface branching (+ session concatenation + MCP extraction)|✅|
 |#82|Delete deprecated empty `defaults.ts` stub|✅|
+|#108|Extract PolicyLoader from PermissionManager (I/O boundary)|✅|
 
 ## Migration and compatibility
 
