@@ -80,6 +80,7 @@ For the full reference — all surfaces, runtime knobs, per-agent overrides, mer
 |[docs/event-api.md](docs/event-api.md)|Event bus integration, decision broadcasts, RPC check/prompt|
 |[docs/subagent-integration.md](docs/subagent-integration.md)|Permission forwarding, coexistence with subagent extensions|
 |[docs/guides/permission-frontmatter-for-subagent-extensions.md](docs/guides/permission-frontmatter-for-subagent-extensions.md)|Convention guide for subagent extension authors|
+|[docs/opencode-compatibility.md](docs/opencode-compatibility.md)|OpenCode compatibility — shared concepts, divergences, porting guide|
 |[docs/troubleshooting.md](docs/troubleshooting.md)|Common issues, diagnostic logging, threat model|
 |[docs/migration/legacy-to-flat.md](docs/migration/legacy-to-flat.md)|Migration from pre-v2 config layout|
 

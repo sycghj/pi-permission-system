@@ -11,6 +11,12 @@ One unified config file per scope:
 
 Project config overrides global config; per-agent frontmatter overrides both.
 
+> **Coming from OpenCode?**
+> This extension's permission model was inspired by OpenCode's.
+> See [OpenCode Compatibility](opencode-compatibility.md) for shared concepts, divergences, and a porting guide.
+
+<!-- -->
+
 > **Tip:** All `~/.pi/agent` paths shown in this document are defaults.
 > If the `PI_CODING_AGENT_DIR` environment variable is set, Pi uses that directory instead.
 
