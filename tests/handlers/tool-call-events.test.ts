@@ -2,7 +2,7 @@
  * Tests that handleToolCall emits permissions:decision events at every
  * gate resolution and fast-path site.
  */
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 
 import { PermissionGateHandler } from "../../src/handlers/permission-gate-handler";

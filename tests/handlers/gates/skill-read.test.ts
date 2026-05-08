@@ -6,9 +6,9 @@ import type { ToolCallContext } from "../../../src/handlers/gates/types";
 import type { SkillPromptEntry } from "../../../src/skill-prompt-sanitizer";
 
 // ── SDK stubs ──────────────────────────────────────────────────────────────
-vi.mock("@mariozechner/pi-coding-agent", async (importOriginal) => {
+vi.mock("@earendil-works/pi-coding-agent", async (importOriginal) => {
   const original =
-    await importOriginal<typeof import("@mariozechner/pi-coding-agent")>();
+    await importOriginal<typeof import("@earendil-works/pi-coding-agent")>();
   return { ...original };
 });
 

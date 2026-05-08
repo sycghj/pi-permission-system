@@ -66,7 +66,7 @@ vi.mock("../src/session-rules", () => ({
   deriveApprovalPattern: vi.fn(),
 }));
 
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import {
   getGlobalConfigPath,
   getGlobalLogsDir,

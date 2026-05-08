@@ -5,7 +5,7 @@
  * the Pi event bus so other extensions can query our policy and forward
  * permission prompts without importing this package.
  */
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type {
   PermissionPromptDecision,
   RequestPermissionOptions,

@@ -1,7 +1,7 @@
 import type {
   ExtensionContext,
   InputEventResult,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 
 import { toRecord } from "../common";
 import {

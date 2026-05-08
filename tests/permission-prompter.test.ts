@@ -13,7 +13,7 @@ vi.mock("../src/forwarded-permissions/polling", () => ({
 
 // ── Imports (after mocks) ───────────────────────────────────────────────────
 
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { DEFAULT_EXTENSION_CONFIG } from "../src/extension-config";
 import type { PermissionPromptDecision } from "../src/permission-dialog";
 import type { PromptPermissionDetails } from "../src/permission-prompter";

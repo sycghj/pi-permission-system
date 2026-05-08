@@ -10,7 +10,7 @@ import {
   type ExtensionCommandContext,
   type ExtensionContext,
   getAgentDir,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 
 import { loadAndMergeConfigs, loadUnifiedConfig } from "./config-loader";
 import {

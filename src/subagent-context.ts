@@ -1,5 +1,5 @@
 import { normalize } from "node:path";
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 import { SUBAGENT_ENV_HINT_KEYS } from "./permission-forwarding";
 

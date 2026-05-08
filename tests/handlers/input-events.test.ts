@@ -1,7 +1,7 @@
 /**
  * Tests that handleInput emits permissions:decision events for skill input gates.
  */
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 
 import { PermissionGateHandler } from "../../src/handlers/permission-gate-handler";

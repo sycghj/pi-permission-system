@@ -12,11 +12,11 @@ import {
 } from "../src/extension-config";
 import type { Rule } from "../src/rule";
 
-vi.mock("@mariozechner/pi-coding-agent", () => ({
+vi.mock("@earendil-works/pi-coding-agent", () => ({
   getSettingsListTheme: () => ({}),
 }));
 
-vi.mock("@mariozechner/pi-tui", () => ({
+vi.mock("@earendil-works/pi-tui", () => ({
   SettingsList: class {
     handleInput(): void {}
     updateValue(): void {}

@@ -2,8 +2,8 @@ import {
   type ExtensionAPI,
   type ExtensionCommandContext,
   getSettingsListTheme,
-} from "@mariozechner/pi-coding-agent";
-import { type SettingItem, SettingsList } from "@mariozechner/pi-tui";
+} from "@earendil-works/pi-coding-agent";
+import { type SettingItem, SettingsList } from "@earendil-works/pi-tui";
 
 import {
   DEFAULT_EXTENSION_CONFIG,

@@ -1,4 +1,4 @@
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -10,9 +10,9 @@ import type { ToolRegistry } from "../../src/tool-registry";
 import type { PermissionCheckResult, PermissionState } from "../../src/types";
 
 // ── SDK stubs ──────────────────────────────────────────────────────────────
-vi.mock("@mariozechner/pi-coding-agent", async (importOriginal) => {
+vi.mock("@earendil-works/pi-coding-agent", async (importOriginal) => {
   const original =
-    await importOriginal<typeof import("@mariozechner/pi-coding-agent")>();
+    await importOriginal<typeof import("@earendil-works/pi-coding-agent")>();
   return { ...original };
 });
 

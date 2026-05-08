@@ -24,7 +24,7 @@ function makeCtx(overrides: { hasUI?: boolean; sessionId?: string } = {}) {
       getSessionId: vi.fn().mockReturnValue(overrides.sessionId ?? "sess-1"),
     },
     cwd: "/project",
-  } as unknown as import("@mariozechner/pi-coding-agent").ExtensionContext;
+  } as unknown as import("@earendil-works/pi-coding-agent").ExtensionContext;
 }
 
 function makeForwardingDeps() {
