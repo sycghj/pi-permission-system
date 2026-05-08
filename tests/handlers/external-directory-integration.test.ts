@@ -493,3 +493,117 @@ describe("external_directory policy state — ask", () => {
     });
   });
 });
+
+// ── Per-agent override ─────────────────────────────────────────────────────
+
+describe("external_directory per-agent override", () => {
+  it("honors per-agent override of external_directory policy", async () => {
+    // checkPermission varies by agentName: allow for "special-agent", deny otherwise
+    const agentAwareCheck = vi
+      .fn()
+      .mockImplementation(
+        (
+          surface: string,
+          _input: unknown,
+          agentName?: string,
+        ): PermissionCheckResult => {
+          if (surface === "external_directory") {
+            const state =
+              agentName === "special-agent" ? "allow" : ("deny" as const);
+            return {
+              state,
+              toolName: surface,
+              source: "tool",
+              origin: agentName === "special-agent" ? "agent" : "global",
+            };
+          }
+          return {
+            state: "allow",
+            toolName: surface,
+            source: "tool",
+            origin: "builtin",
+          };
+        },
+      );
+
+    // With agent override → allowed
+    const { handler: handler1, events: events1 } = makeHandler({
+      session: {
+        checkPermission: agentAwareCheck,
+        resolveAgentName: vi.fn().mockReturnValue("special-agent"),
+      },
+    });
+    const event = makeToolCallEvent("read", { path: EXTERNAL_PATH });
+    const result1 = await handler1.handleToolCall(event, makeCtx());
+    expect(result1).toEqual({});
+
+    const decisions1 = getDecisionEvents(events1);
+    const extDir1 = decisions1.find((d) => d.surface === "external_directory");
+    expect(extDir1).toMatchObject({
+      result: "allow",
+      resolution: "policy_allow",
+      agentName: "special-agent",
+    });
+
+    // Without agent override → denied
+    const { handler: handler2 } = makeHandler({
+      session: {
+        checkPermission: agentAwareCheck,
+        resolveAgentName: vi.fn().mockReturnValue(null),
+      },
+    });
+    const result2 = await handler2.handleToolCall(event, makeCtx());
+    expect(result2).toMatchObject({ block: true });
+  });
+});
+
+// ── Decision event surface and value ──────────────────────────────────────
+
+describe("external_directory decision event fields", () => {
+  it("decision event value is the external path", async () => {
+    const { handler, events } = makeHandler({
+      session: { checkPermission: makeCheckPermission("deny") },
+    });
+    const event = makeToolCallEvent("read", { path: EXTERNAL_PATH });
+    await handler.handleToolCall(event, makeCtx());
+    const decisions = getDecisionEvents(events);
+    const extDirDecision = decisions.find(
+      (d) => d.surface === "external_directory",
+    );
+    expect(extDirDecision).toBeDefined();
+    expect(extDirDecision!.value).toBe(EXTERNAL_PATH);
+  });
+
+  it("decision event includes agentName when present", async () => {
+    const { handler, events } = makeHandler({
+      session: {
+        checkPermission: makeCheckPermission("allow"),
+        resolveAgentName: vi.fn().mockReturnValue("my-agent"),
+      },
+    });
+    const event = makeToolCallEvent("read", { path: EXTERNAL_PATH });
+    await handler.handleToolCall(event, makeCtx());
+    const decisions = getDecisionEvents(events);
+    const extDirDecision = decisions.find(
+      (d) => d.surface === "external_directory",
+    );
+    expect(extDirDecision).toMatchObject({
+      agentName: "my-agent",
+    });
+  });
+
+  it("decision event agentName is null when no agent", async () => {
+    const { handler, events } = makeHandler({
+      session: { checkPermission: makeCheckPermission("allow") },
+    });
+    const event = makeToolCallEvent("read", { path: EXTERNAL_PATH });
+    await handler.handleToolCall(event, makeCtx());
+    const decisions = getDecisionEvents(events);
+    const extDirDecision = decisions.find(
+      (d) => d.surface === "external_directory",
+    );
+    expect(extDirDecision).toMatchObject({
+      agentName: null,
+    });
+  });
+});
