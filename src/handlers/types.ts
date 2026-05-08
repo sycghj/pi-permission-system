@@ -2,26 +2,16 @@ import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 import type { PermissionPromptDecision } from "../permission-dialog";
 import type { PermissionEventBus } from "../permission-events";
+import type {
+  PermissionReviewSource,
+  PromptPermissionDetails,
+} from "../permission-prompter";
 import type { PermissionSession } from "../permission-session";
 
-export type PermissionReviewSource = "tool_call" | "skill_input" | "skill_read";
-
-/** Details passed when prompting the user for a permission decision. */
-export interface PromptPermissionDetails {
-  requestId: string;
-  source: PermissionReviewSource;
-  agentName: string | null;
-  message: string;
-  toolCallId?: string;
-  toolName?: string;
-  skillName?: string;
-  path?: string;
-  command?: string;
-  target?: string;
-  toolInputPreview?: string;
-  /** Override label for the "for this session" dialog option. */
-  sessionLabel?: string;
-}
+export type {
+  PermissionReviewSource,
+  PromptPermissionDetails,
+} from "../permission-prompter";
 
 /**
  * Explicit dependency bag passed to each extracted event handler.

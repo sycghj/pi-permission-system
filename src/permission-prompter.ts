@@ -5,12 +5,30 @@ import {
   confirmPermission,
   type PermissionForwardingDeps,
 } from "./forwarded-permissions/polling";
-import type { PromptPermissionDetails } from "./handlers/types";
 import type {
   PermissionPromptDecision,
   RequestPermissionOptions,
 } from "./permission-dialog";
 import { shouldAutoApprovePermissionState } from "./yolo-mode";
+
+export type PermissionReviewSource = "tool_call" | "skill_input" | "skill_read";
+
+/** Details passed when prompting the user for a permission decision. */
+export interface PromptPermissionDetails {
+  requestId: string;
+  source: PermissionReviewSource;
+  agentName: string | null;
+  message: string;
+  toolCallId?: string;
+  toolName?: string;
+  skillName?: string;
+  path?: string;
+  command?: string;
+  target?: string;
+  toolInputPreview?: string;
+  /** Override label for the "for this session" dialog option. */
+  sessionLabel?: string;
+}
 
 /** Mockable contract exposed to handlers via HandlerDeps. */
 export interface PermissionPrompterApi {

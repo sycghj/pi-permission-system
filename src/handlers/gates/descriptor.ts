@@ -3,9 +3,9 @@ import type {
   PermissionDecisionEvent,
   PermissionDecisionResolution,
 } from "../../permission-events";
+import type { PromptPermissionDetails } from "../../permission-prompter";
 import type { Rule } from "../../rule";
 import type { PermissionCheckResult, PermissionState } from "../../types";
-import type { PromptPermissionDetails } from "../types";
 
 // ── Descriptor types ───────────────────────────────────────────────────────
 
