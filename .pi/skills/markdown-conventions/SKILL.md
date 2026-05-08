@@ -17,6 +17,7 @@ Load this skill when writing or editing markdown files in this project.
 - Do not use bold text (`**...**`) as a substitute for headings — use proper heading syntax; markdownlint's MD036 rejects emphasis used as headings.
 - When embedding markdown that itself contains fenced code blocks, use a 4-backtick outer fence (` ````markdown `).
 - Use compact table style with no cell padding — markdownlint's MD060 enforces consistent column style and is not auto-fixable.
+  Example: `| Header | Header |` / `| --- | --- |` / `| cell | cell |` — spaces inside pipes, no padding variation.
 - Separate adjacent blockquotes with an HTML comment (`<!-- -->`) to satisfy markdownlint's MD028.
 
 ## Documentation frontmatter
