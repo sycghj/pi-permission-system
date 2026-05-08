@@ -7,19 +7,11 @@ const {
   mockGetActiveAgentName,
   mockGetActiveAgentNameFromSystemPrompt,
   mockCreatePermissionManagerForCwd,
-  mockRefreshExtensionConfig,
-  mockLogResolvedConfigPaths,
-  mockCanResolveAskPermissionRequest,
-  mockIsSubagentExecutionContext,
 } = vi.hoisted(() => ({
   mockGetActiveAgentName: vi.fn<(ctx: ExtensionContext) => string | null>(),
   mockGetActiveAgentNameFromSystemPrompt:
     vi.fn<(systemPrompt?: string) => string | null>(),
   mockCreatePermissionManagerForCwd: vi.fn(),
-  mockRefreshExtensionConfig: vi.fn(),
-  mockLogResolvedConfigPaths: vi.fn(),
-  mockCanResolveAskPermissionRequest: vi.fn(),
-  mockIsSubagentExecutionContext: vi.fn(),
 }));
 
 vi.mock("../src/active-agent", () => ({
@@ -28,33 +20,22 @@ vi.mock("../src/active-agent", () => ({
 }));
 
 vi.mock("../src/runtime", async (importOriginal) => {
-  const original = await importOriginal<typeof import("./src/runtime")>();
+  const original = await importOriginal<typeof import("../src/runtime")>();
   return {
     ...original,
     createPermissionManagerForCwd: mockCreatePermissionManagerForCwd,
-    refreshExtensionConfig: mockRefreshExtensionConfig,
-    logResolvedConfigPaths: mockLogResolvedConfigPaths,
   };
 });
-
-vi.mock("../src/yolo-mode", () => ({
-  canResolveAskPermissionRequest: mockCanResolveAskPermissionRequest,
-  isYoloModeEnabled: vi.fn().mockReturnValue(false),
-  shouldAutoApprovePermissionState: vi.fn().mockReturnValue(false),
-}));
-
-vi.mock("../src/subagent-context", () => ({
-  isSubagentExecutionContext: mockIsSubagentExecutionContext,
-}));
 
 // ── Test helpers ───────────────────────────────────────────────────────────
 
 import type { ExtensionPaths } from "../src/extension-paths";
 import type { ForwardingController } from "../src/forwarding-manager";
-import type { PermissionPromptDecision } from "../src/permission-dialog";
 import type { PermissionManager } from "../src/permission-manager";
-import type { PermissionPrompterApi } from "../src/permission-prompter";
-import { PermissionSession } from "../src/permission-session";
+import {
+  PermissionSession,
+  type PermissionSessionRuntimeDeps,
+} from "../src/permission-session";
 import type { SessionLogger } from "../src/session-logger";
 import type { PermissionCheckResult } from "../src/types";
 
@@ -78,12 +59,11 @@ function makeLogger(): SessionLogger {
   };
 }
 
-function makePrompter(): PermissionPrompterApi {
+function makeRuntimeDeps(): PermissionSessionRuntimeDeps {
   return {
-    prompt: vi.fn<PermissionPrompterApi["prompt"]>().mockResolvedValue({
-      approved: true,
-      state: "approved",
-    } as PermissionPromptDecision),
+    refreshExtensionConfig: vi.fn(),
+    logResolvedConfigPaths: vi.fn(),
+    getConfig: vi.fn().mockReturnValue({}),
   };
 }
 
@@ -135,21 +115,21 @@ function makePermissionManager(
 function createSession(overrides?: {
   paths?: Partial<ExtensionPaths>;
   logger?: SessionLogger;
-  prompter?: PermissionPrompterApi;
   forwarding?: ForwardingController;
+  runtimeDeps?: PermissionSessionRuntimeDeps;
 }): {
   session: PermissionSession;
   paths: ExtensionPaths;
   logger: SessionLogger;
-  prompter: PermissionPrompterApi;
   forwarding: ForwardingController;
+  runtimeDeps: PermissionSessionRuntimeDeps;
 } {
   const paths = makePaths(overrides?.paths);
   const logger = overrides?.logger ?? makeLogger();
-  const prompter = overrides?.prompter ?? makePrompter();
   const forwarding = overrides?.forwarding ?? makeForwarding();
-  const session = new PermissionSession(paths, logger, prompter, forwarding);
-  return { session, paths, logger, prompter, forwarding };
+  const runtimeDeps = overrides?.runtimeDeps ?? makeRuntimeDeps();
+  const session = new PermissionSession(paths, logger, forwarding, runtimeDeps);
+  return { session, paths, logger, forwarding, runtimeDeps };
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────
@@ -158,17 +138,11 @@ beforeEach(() => {
   mockGetActiveAgentName.mockReset();
   mockGetActiveAgentNameFromSystemPrompt.mockReset();
   mockCreatePermissionManagerForCwd.mockReset();
-  mockRefreshExtensionConfig.mockReset();
-  mockLogResolvedConfigPaths.mockReset();
-  mockCanResolveAskPermissionRequest.mockReset();
-  mockIsSubagentExecutionContext.mockReset();
 
   // Default: createPermissionManagerForCwd returns a fresh mock PM
   mockCreatePermissionManagerForCwd.mockReturnValue(makePermissionManager());
   mockGetActiveAgentName.mockReturnValue(null);
   mockGetActiveAgentNameFromSystemPrompt.mockReturnValue(null);
-  mockCanResolveAskPermissionRequest.mockReturnValue(true);
-  mockIsSubagentExecutionContext.mockReturnValue(false);
 });
 
 describe("PermissionSession", () => {
@@ -465,6 +439,97 @@ describe("PermissionSession", () => {
         "/test/agent",
         "/test/agent/git",
       ]);
+    });
+
+    it("getInfrastructureReadPaths returns config paths", () => {
+      const runtimeDeps = makeRuntimeDeps();
+      (runtimeDeps.getConfig as ReturnType<typeof vi.fn>).mockReturnValue({
+        piInfrastructureReadPaths: ["/extra/path"],
+      });
+      const { session } = createSession({ runtimeDeps });
+      expect(session.getInfrastructureReadPaths()).toEqual(["/extra/path"]);
+    });
+
+    it("getInfrastructureReadPaths returns empty when config omits the field", () => {
+      const { session } = createSession();
+      expect(session.getInfrastructureReadPaths()).toEqual([]);
+    });
+  });
+
+  describe("config delegation", () => {
+    it("refreshConfig delegates to runtimeDeps", () => {
+      const { session, runtimeDeps } = createSession();
+      const ctx = makeCtx();
+      session.refreshConfig(ctx);
+      expect(runtimeDeps.refreshExtensionConfig).toHaveBeenCalledWith(ctx);
+    });
+
+    it("logResolvedConfigPaths delegates to runtimeDeps", () => {
+      const { session, runtimeDeps } = createSession();
+      session.logResolvedConfigPaths();
+      expect(runtimeDeps.logResolvedConfigPaths).toHaveBeenCalled();
+    });
+
+    it("config getter delegates to runtimeDeps.getConfig", () => {
+      const runtimeDeps = makeRuntimeDeps();
+      const fakeConfig = { debugLog: true };
+      (runtimeDeps.getConfig as ReturnType<typeof vi.fn>).mockReturnValue(
+        fakeConfig,
+      );
+      const { session } = createSession({ runtimeDeps });
+      expect(session.config).toBe(fakeConfig);
+    });
+  });
+
+  describe("reload", () => {
+    it("recreates PermissionManager for current context cwd", () => {
+      const { session } = createSession();
+      const ctx = makeCtx({ cwd: "/project" });
+      session.activate(ctx);
+
+      const pm2 = makePermissionManager();
+      mockCreatePermissionManagerForCwd.mockReturnValue(pm2);
+
+      session.reload();
+
+      expect(mockCreatePermissionManagerForCwd).toHaveBeenCalledWith(
+        "/test/agent",
+        "/project",
+      );
+    });
+
+    it("clears caches and skill entries", () => {
+      const { session } = createSession();
+      session.commitActiveToolsCacheKey("k1");
+      session.commitPromptStateCacheKey("k2");
+      session.setActiveSkillEntries([{ name: "s", path: "/s", content: "x" }]);
+
+      session.reload();
+
+      expect(session.shouldUpdateActiveTools("k1")).toBe(true);
+      expect(session.shouldUpdatePromptState("k2")).toBe(true);
+      expect(session.getActiveSkillEntries()).toEqual([]);
+    });
+  });
+
+  describe("getRuntimeContext", () => {
+    it("returns null before activation", () => {
+      const { session } = createSession();
+      expect(session.getRuntimeContext()).toBeNull();
+    });
+
+    it("returns context after activation", () => {
+      const { session } = createSession();
+      const ctx = makeCtx();
+      session.activate(ctx);
+      expect(session.getRuntimeContext()).toBe(ctx);
+    });
+
+    it("returns null after deactivation", () => {
+      const { session } = createSession();
+      session.activate(makeCtx());
+      session.deactivate();
+      expect(session.getRuntimeContext()).toBeNull();
     });
   });
 });

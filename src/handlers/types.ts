@@ -1,11 +1,8 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 
-import type { ForwardingController } from "../forwarding-manager";
 import type { PermissionPromptDecision } from "../permission-dialog";
 import type { PermissionEventBus } from "../permission-events";
-import type { PermissionManager } from "../permission-manager";
-import type { SessionState } from "../runtime";
-import type { SessionLogger } from "../session-logger";
+import type { PermissionSession } from "../permission-session";
 
 export type PermissionReviewSource = "tool_call" | "skill_input" | "skill_read";
 
@@ -29,46 +26,23 @@ export interface PromptPermissionDetails {
 /**
  * Explicit dependency bag passed to each extracted event handler.
  *
- * Mutable session state lives in `session`; handlers read and write
- * `deps.session.*` directly. Logging, infrastructure paths, and the
- * event bus are promoted to top-level fields so handlers and gate
- * adapters never reach through nested objects for leaf operations.
+ * `session` is a `PermissionSession` that encapsulates all mutable state
+ * and exposes operations instead of fields — eliminating LoD violations,
+ * output arguments, and scattered field resets.
+ *
+ * Remaining top-level fields are things the session does not own:
+ * event bus, RPC cleanup, Pi tool API, and permission request ID generation.
  */
 export interface HandlerDeps {
-  // ── Session state ─────────────────────────────────────────────────────
-  /** Mutable session state: permissionManager, sessionRules, cache keys. */
-  readonly session: SessionState;
-
-  // ── Logging ────────────────────────────────────────────────────────────
-  readonly logger: SessionLogger;
-
-  // ── Immutable infrastructure paths ───────────────────────────────────
-  readonly piInfrastructureDirs: readonly string[];
-  /** Returns config-derived infrastructure read paths (current at call time). */
-  getPiInfrastructureReadPaths(): string[];
+  // ── Session ─────────────────────────────────────────────────────────
+  /** Encapsulates all mutable session state and permission operations. */
+  readonly session: PermissionSession;
 
   // ── Event bus ────────────────────────────────────────────────────────
   /** Event bus for emitting permissions:decision broadcast events. */
   readonly events: PermissionEventBus;
 
-  // ── Factories ──────────────────────────────────────────────────────────
-  /** Create a new PermissionManager scoped to cwd's config hierarchy. */
-  createPermissionManagerForCwd(
-    cwd: string | undefined | null,
-  ): PermissionManager;
-
-  // ── Config & lifecycle helpers ─────────────────────────────────────────
-  /** Reload merged config from disk; optionally update the stored runtime context. */
-  refreshExtensionConfig(ctx?: ExtensionContext): void;
-  /** Write the resolved config path set to the review and debug logs. */
-  logResolvedConfigPaths(): void;
-
   // ── Permission helpers ─────────────────────────────────────────────────
-  /**
-   * Resolve the active agent name from the session context or system prompt.
-   * Updates session.lastKnownActiveAgentName as a side effect.
-   */
-  resolveAgentName(ctx: ExtensionContext, systemPrompt?: string): string | null;
   /** Whether the current context can show an interactive permission prompt. */
   canRequestPermissionConfirmation(ctx: ExtensionContext): boolean;
   /** Prompt the user for a permission decision, log the outcome, and return it. */
@@ -79,8 +53,7 @@ export interface HandlerDeps {
   /** Generate a unique ID for a permission request. */
   createPermissionRequestId(prefix: string): string;
 
-  // ── Forwarding ─────────────────────────────────────────────────────────
-  readonly forwarding: ForwardingController;
+  // ── Lifecycle ───────────────────────────────────────────────────────────
   /** Unsubscribe the permissions:rpc:check and permissions:rpc:prompt handlers. */
   stopPermissionRpcHandlers(): void;
 

@@ -4,16 +4,31 @@ import {
   getActiveAgentName,
   getActiveAgentNameFromSystemPrompt,
 } from "./active-agent";
+import type { PermissionSystemExtensionConfig } from "./extension-config";
 import type { ExtensionPaths } from "./extension-paths";
 import type { ForwardingController } from "./forwarding-manager";
 import type { PermissionManager } from "./permission-manager";
-import type { PermissionPrompterApi } from "./permission-prompter";
 import type { Rule } from "./rule";
 import { createPermissionManagerForCwd } from "./runtime";
 import type { SessionLogger } from "./session-logger";
 import { SessionRules } from "./session-rules";
 import type { SkillPromptEntry } from "./skill-prompt-sanitizer";
 import type { PermissionCheckResult, PermissionState } from "./types";
+
+/**
+ * Runtime operations that `PermissionSession` delegates to but does not own.
+ *
+ * Injected at construction time from the composition root (`index.ts`),
+ * where the `ExtensionRuntime` is available.
+ */
+export interface PermissionSessionRuntimeDeps {
+  /** Reload merged config from disk; optionally update the stored runtime context. */
+  refreshExtensionConfig(ctx?: ExtensionContext): void;
+  /** Write the resolved config path set to the review and debug logs. */
+  logResolvedConfigPaths(): void;
+  /** Read current extension config (called at query time). */
+  getConfig(): PermissionSystemExtensionConfig;
+}
 
 /**
  * Encapsulates all mutable session state and exposes operations instead of
@@ -23,26 +38,26 @@ import type { PermissionCheckResult, PermissionState } from "./types";
  * with a single class that owns the `PermissionManager`, `SessionRules`,
  * cache keys, skill entries, and runtime context.
  *
- * Constructor takes 4 high-level deps:
- * - `ExtensionPaths` (immutable path constants)
- * - `SessionLogger` (debug + review + warn)
- * - `PermissionPrompterApi` (interactive permission prompting)
- * - `ForwardingController` (polling lifecycle)
+ * Constructor deps:
+ * - `ExtensionPaths` — immutable path constants
+ * - `SessionLogger` — debug + review + warn
+ * - `ForwardingController` — polling lifecycle
+ * - `PermissionSessionRuntimeDeps` — config refresh + log delegates
  */
 export class PermissionSession {
   private context: ExtensionContext | null = null;
   private permissionManager: PermissionManager;
   private readonly sessionRules = new SessionRules();
-  private activeSkillEntries: SkillPromptEntry[] = [];
+  private skillEntries: SkillPromptEntry[] = [];
   private knownAgentName: string | null = null;
-  private activeToolsCacheKey: string | null = null;
-  private promptStateCacheKey: string | null = null;
+  private toolsCacheKey: string | null = null;
+  private promptCacheKey: string | null = null;
 
   constructor(
     private readonly paths: ExtensionPaths,
     readonly logger: SessionLogger,
-    private readonly prompter: PermissionPrompterApi,
     private readonly forwarding: ForwardingController,
+    private readonly runtimeDeps: PermissionSessionRuntimeDeps,
   ) {
     this.permissionManager = createPermissionManagerForCwd(
       paths.agentDir,
@@ -62,6 +77,11 @@ export class PermissionSession {
   deactivate(): void {
     this.context = null;
     this.forwarding.stop();
+  }
+
+  /** Return the current runtime context, or null if not activated. */
+  getRuntimeContext(): ExtensionContext | null {
+    return this.context;
   }
 
   // ── Permission checking (delegates to PermissionManager) ───────────────
@@ -108,17 +128,16 @@ export class PermissionSession {
    * Reset all mutable state for a new session.
    *
    * Creates a fresh PermissionManager scoped to `ctx.cwd`, clears caches,
-   * skill entries, and activates the new context. Replaces the 4-field
-   * copy-paste reset previously scattered across lifecycle handlers.
+   * skill entries, and activates the new context.
    */
   resetForNewSession(ctx: ExtensionContext): void {
     this.permissionManager = createPermissionManagerForCwd(
       this.paths.agentDir,
       ctx.cwd,
     );
-    this.activeSkillEntries = [];
-    this.activeToolsCacheKey = null;
-    this.promptStateCacheKey = null;
+    this.skillEntries = [];
+    this.toolsCacheKey = null;
+    this.promptCacheKey = null;
     this.activate(ctx);
   }
 
@@ -128,38 +147,52 @@ export class PermissionSession {
    */
   shutdown(): void {
     this.sessionRules.clear();
-    this.activeSkillEntries = [];
-    this.activeToolsCacheKey = null;
-    this.promptStateCacheKey = null;
+    this.skillEntries = [];
+    this.toolsCacheKey = null;
+    this.promptCacheKey = null;
     this.deactivate();
+  }
+
+  /**
+   * Reload permission manager and clear caches for the current context.
+   * Used on config reload (e.g. `resources_discover` with reason "reload").
+   */
+  reload(): void {
+    this.permissionManager = createPermissionManagerForCwd(
+      this.paths.agentDir,
+      this.context?.cwd,
+    );
+    this.skillEntries = [];
+    this.toolsCacheKey = null;
+    this.promptCacheKey = null;
   }
 
   // ── Agent-start caching ────────────────────────────────────────────────
 
   shouldUpdateActiveTools(cacheKey: string): boolean {
-    return this.activeToolsCacheKey !== cacheKey;
+    return this.toolsCacheKey !== cacheKey;
   }
 
   commitActiveToolsCacheKey(cacheKey: string): void {
-    this.activeToolsCacheKey = cacheKey;
+    this.toolsCacheKey = cacheKey;
   }
 
   shouldUpdatePromptState(cacheKey: string): boolean {
-    return this.promptStateCacheKey !== cacheKey;
+    return this.promptCacheKey !== cacheKey;
   }
 
   commitPromptStateCacheKey(cacheKey: string): void {
-    this.promptStateCacheKey = cacheKey;
+    this.promptCacheKey = cacheKey;
   }
 
   // ── Skill entries ──────────────────────────────────────────────────────
 
   getActiveSkillEntries(): SkillPromptEntry[] {
-    return this.activeSkillEntries;
+    return this.skillEntries;
   }
 
   setActiveSkillEntries(entries: SkillPromptEntry[]): void {
-    this.activeSkillEntries = entries;
+    this.skillEntries = entries;
   }
 
   // ── Agent name ─────────────────────────────────────────────────────────
@@ -189,9 +222,31 @@ export class PermissionSession {
     return this.knownAgentName;
   }
 
+  // ── Config ─────────────────────────────────────────────────────────────
+
+  /** Reload merged config from disk; optionally update the stored runtime context. */
+  refreshConfig(ctx?: ExtensionContext): void {
+    this.runtimeDeps.refreshExtensionConfig(ctx);
+  }
+
+  /** Write the resolved config path set to the review and debug logs. */
+  logResolvedConfigPaths(): void {
+    this.runtimeDeps.logResolvedConfigPaths();
+  }
+
+  /** Read current extension config. */
+  get config(): PermissionSystemExtensionConfig {
+    return this.runtimeDeps.getConfig();
+  }
+
   // ── Infrastructure paths ───────────────────────────────────────────────
 
   getInfrastructureDirs(): readonly string[] {
     return this.paths.piInfrastructureDirs;
+  }
+
+  /** Config-derived infrastructure read paths (current at call time). */
+  getInfrastructureReadPaths(): string[] {
+    return this.config.piInfrastructureReadPaths ?? [];
   }
 }
