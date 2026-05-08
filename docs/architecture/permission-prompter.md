@@ -56,7 +56,7 @@ requests forwarded from subagents.
 ## Wiring
 
 `PermissionPrompter` is instantiated once in `piPermissionSystemExtension()` (`src/index.ts`) and
-injected into `HandlerDeps.promptPermission`:
+injected into `PermissionSessionRuntimeDeps.promptPermission`:
 
 ```typescript
 const prompter = new PermissionPrompter({ … });
@@ -64,4 +64,5 @@ const prompter = new PermissionPrompter({ … });
 promptPermission: (ctx, details) => prompter.prompt(ctx, details),
 ```
 
-Tests mock `promptPermission` on `HandlerDeps` directly — the same ergonomics as before.
+Handler classes call `session.prompt(ctx, details)` which delegates to the injected prompter.
+Tests mock `prompt` on the `PermissionSession` mock directly.

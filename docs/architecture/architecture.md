@@ -434,17 +434,15 @@ src/
 ├── policy-loader.ts          PolicyLoader interface + FilePolicyLoader (file I/O, mtime caching)
 ├── permission-manager.ts     Policy merge + checkPermission(); delegates I/O to PolicyLoader
 ├── permission-gate.ts        Pure deny/ask/allow gate (injected IO)
-├── permission-prompter.ts    Yolo-mode, review logging, UI/forwarding branch
+├── permission-prompter.ts    Yolo-mode, review logging, UI/forwarding branch; PromptPermissionDetails type
 ├── permission-dialog.ts      Dialog options (once / session / deny)
 │
 ├── permission-session.ts     PermissionSession class — encapsulates all mutable session state
-├── handlers/                 Extracted event handlers
-│   ├── index.ts              Re-exports
-│   ├── types.ts              HandlerDeps (session + events + Pi API), PromptPermissionDetails
-│   ├── lifecycle.ts          session_start, session_shutdown, resources_discover
-│   ├── before-agent-start.ts Tool filtering + prompt sanitization
-│   ├── input.ts              Skill input gate
-│   ├── tool-call.ts          Invocation gating orchestrator
+├── handlers/                 Handler classes with narrow constructor injection
+│   ├── index.ts              Barrel re-exports
+│   ├── lifecycle.ts          SessionLifecycleHandler (session + cleanupRpc)
+│   ├── before-agent-start.ts AgentPrepHandler (session + toolRegistry); shouldExposeTool pure helper
+│   ├── permission-gate-handler.ts PermissionGateHandler (session + events + toolRegistry); getEventInput + extractSkillNameFromInput pure helpers
 │   └── gates/               Pure descriptor factories + runner
 │       ├── types.ts          GateOutcome, ToolCallContext
 │       ├── descriptor.ts     GateDescriptor, GateBypass, GateResult, GateRunnerDeps types
@@ -475,7 +473,7 @@ src/
 ├── skill-prompt-sanitizer.ts  Skill prompt filtering by policy
 ├── permission-prompts.ts      User-facing message formatting per surface
 ├── tool-input-preview.ts      Loggable context from tool inputs
-├── tool-registry.ts           Tool name validation
+├── tool-registry.ts           ToolRegistry interface + tool name validation
 ├── active-agent.ts            Agent name detection from session/system prompt
 ├── subagent-context.ts        Subagent execution context detection
 ├── permission-forwarding.ts   Constants for cross-session forwarding
