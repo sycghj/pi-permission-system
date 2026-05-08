@@ -12,10 +12,6 @@ import {
   getAgentDir,
 } from "@mariozechner/pi-coding-agent";
 
-import {
-  getActiveAgentName,
-  getActiveAgentNameFromSystemPrompt,
-} from "./active-agent";
 import { loadAndMergeConfigs, loadUnifiedConfig } from "./config-loader";
 import {
   DEBUG_LOG_FILENAME,
@@ -45,11 +41,12 @@ import type { SkillPromptEntry } from "./skill-prompt-sanitizer";
 import { syncPermissionSystemStatus } from "./status";
 
 /**
- * Mutable session state — the subset of ExtensionRuntime that handlers
- * read and write. Lifecycle handlers reset fields here on session
- * start/shutdown; gate adapters read permissionManager and sessionRules.
+ * Mutable session state — the subset of ExtensionRuntime that holds
+ * per-session fields. `PermissionSession` now owns these for handler
+ * use; this interface remains so `ExtensionRuntime` can still serve
+ * as the internal composition root (config-modal, RPC handlers).
  */
-export interface SessionState {
+interface SessionState {
   runtimeContext: ExtensionContext | null;
   permissionManager: PermissionManager;
   readonly sessionRules: SessionRules;
@@ -207,28 +204,6 @@ export function saveExtensionConfig(
     permissionReviewLog: normalized.permissionReviewLog,
     yoloMode: normalized.yoloMode,
   });
-}
-
-/**
- * Resolve the active agent name from the Pi session, system prompt, or last
- * known name. Updates `runtime.lastKnownActiveAgentName` as a side effect.
- */
-export function resolveAgentName(
-  runtime: ExtensionRuntime,
-  ctx: ExtensionContext,
-  systemPrompt?: string,
-): string | null {
-  const fromSession = getActiveAgentName(ctx);
-  if (fromSession) {
-    runtime.lastKnownActiveAgentName = fromSession;
-    return fromSession;
-  }
-  const fromSystemPrompt = getActiveAgentNameFromSystemPrompt(systemPrompt);
-  if (fromSystemPrompt) {
-    runtime.lastKnownActiveAgentName = fromSystemPrompt;
-    return fromSystemPrompt;
-  }
-  return runtime.lastKnownActiveAgentName;
 }
 
 /**

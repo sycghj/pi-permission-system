@@ -8,8 +8,6 @@ const {
   mockCreateLogger,
   mockLoadAndMergeConfigs,
   mockSyncPermissionSystemStatus,
-  mockGetActiveAgentName,
-  mockGetActiveAgentNameFromSystemPrompt,
   mockBuildResolvedConfigLogEntry,
   mockDiscoverGlobalNodeModulesRoot,
 } = vi.hoisted(() => ({
@@ -24,9 +22,6 @@ const {
   mockCreateLogger: vi.fn(),
   mockLoadAndMergeConfigs: vi.fn(),
   mockSyncPermissionSystemStatus: vi.fn(),
-  mockGetActiveAgentName: vi.fn<() => string | null>(),
-  mockGetActiveAgentNameFromSystemPrompt:
-    vi.fn<(prompt?: string) => string | null>(),
   mockBuildResolvedConfigLogEntry: vi.fn(),
   mockDiscoverGlobalNodeModulesRoot: vi.fn<() => string | null>(),
 }));
@@ -48,11 +43,6 @@ vi.mock("../src/status", () => ({
   PERMISSION_SYSTEM_STATUS_KEY: "permission-system",
   syncPermissionSystemStatus: mockSyncPermissionSystemStatus,
   getPermissionSystemStatus: vi.fn(),
-}));
-
-vi.mock("../src/active-agent", () => ({
-  getActiveAgentName: mockGetActiveAgentName,
-  getActiveAgentNameFromSystemPrompt: mockGetActiveAgentNameFromSystemPrompt,
 }));
 
 vi.mock("../src/config-reporter", () => ({
@@ -89,7 +79,6 @@ import {
   createPermissionManagerForCwd,
   derivePiProjectPaths,
   refreshExtensionConfig,
-  resolveAgentName,
 } from "../src/runtime";
 
 // ── test suite ─────────────────────────────────────────────────────────────
@@ -578,69 +567,5 @@ describe("refreshExtensionConfig", () => {
   });
 });
 
-// ── resolveAgentName ──────────────────────────────────────────────────────
-
-describe("resolveAgentName", () => {
-  function makeRuntime() {
-    mockCreateLogger.mockReturnValue({
-      debug: mockLoggerDebug,
-      review: mockLoggerReview,
-    });
-    return createExtensionRuntime({ agentDir: "/test/agent" });
-  }
-
-  function makeCtx(): ExtensionContext {
-    return {
-      cwd: "/test/project",
-      hasUI: false,
-      ui: {},
-      sessionManager: { getEntries: vi.fn(), addEntry: vi.fn() },
-    } as unknown as ExtensionContext;
-  }
-
-  beforeEach(() => {
-    mockLoggerDebug.mockReset().mockReturnValue(undefined);
-    mockGetActiveAgentName.mockReset().mockReturnValue(null);
-    mockGetActiveAgentNameFromSystemPrompt.mockReset().mockReturnValue(null);
-  });
-
-  it("returns and stores name from getActiveAgentName when available", () => {
-    const runtime = makeRuntime();
-    mockGetActiveAgentName.mockReturnValue("session-agent");
-    const result = resolveAgentName(runtime, makeCtx());
-    expect(result).toBe("session-agent");
-    expect(runtime.lastKnownActiveAgentName).toBe("session-agent");
-  });
-
-  it("falls back to getActiveAgentNameFromSystemPrompt when session name is null", () => {
-    const runtime = makeRuntime();
-    mockGetActiveAgentName.mockReturnValue(null);
-    mockGetActiveAgentNameFromSystemPrompt.mockReturnValue("prompt-agent");
-    const result = resolveAgentName(runtime, makeCtx(), "system prompt text");
-    expect(result).toBe("prompt-agent");
-    expect(runtime.lastKnownActiveAgentName).toBe("prompt-agent");
-  });
-
-  it("falls back to lastKnownActiveAgentName when both sources return null", () => {
-    const runtime = makeRuntime();
-    runtime.lastKnownActiveAgentName = "remembered-agent";
-    mockGetActiveAgentName.mockReturnValue(null);
-    mockGetActiveAgentNameFromSystemPrompt.mockReturnValue(null);
-    const result = resolveAgentName(runtime, makeCtx());
-    expect(result).toBe("remembered-agent");
-  });
-
-  it("returns null when all sources are null and no prior name", () => {
-    const runtime = makeRuntime();
-    const result = resolveAgentName(runtime, makeCtx());
-    expect(result).toBeNull();
-  });
-
-  it("does not update lastKnownActiveAgentName when falling back to stored value", () => {
-    const runtime = makeRuntime();
-    runtime.lastKnownActiveAgentName = "remembered-agent";
-    resolveAgentName(runtime, makeCtx());
-    // Value unchanged — not overwritten with null
-    expect(runtime.lastKnownActiveAgentName).toBe("remembered-agent");
-  });
-});
+// resolveAgentName was moved to PermissionSession (#129)
+// Tests live in tests/permission-session.test.ts
