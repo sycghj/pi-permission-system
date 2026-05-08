@@ -1,14 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, vi } from "vitest";
 import { registerPermissionSystemCommand } from "../src/config-modal";
 import {
   DEFAULT_EXTENSION_CONFIG,
-  loadPermissionSystemConfig,
+  normalizePermissionSystemConfig,
   type PermissionSystemExtensionConfig,
-  savePermissionSystemConfig,
 } from "../src/extension-config";
 import type { Rule } from "../src/rule";
 
@@ -136,17 +135,28 @@ test("permission-system command handlers manage config summary, persistence, and
   };
 
   try {
-    const initialSave = savePermissionSystemConfig(config, configPath);
-    assert.equal(initialSave.success, true);
+    writeFileSync(
+      configPath,
+      `${JSON.stringify(normalizePermissionSystemConfig(config), null, 2)}\n`,
+      "utf-8",
+    );
 
     const controller = {
       getConfig: () => config,
       setConfig: (next: PermissionSystemExtensionConfig) => {
-        const normalized = loadPermissionSystemConfig(configPath).config;
-        const saved = savePermissionSystemConfig(next, configPath);
-        assert.equal(saved.success, true);
-        config = loadPermissionSystemConfig(configPath).config;
-        assert.notDeepEqual(config, normalized);
+        const currentConfig = normalizePermissionSystemConfig(
+          JSON.parse(readFileSync(configPath, "utf-8")) as unknown,
+        );
+        const normalized = normalizePermissionSystemConfig(next);
+        writeFileSync(
+          configPath,
+          `${JSON.stringify(normalized, null, 2)}\n`,
+          "utf-8",
+        );
+        config = normalizePermissionSystemConfig(
+          JSON.parse(readFileSync(configPath, "utf-8")) as unknown,
+        );
+        assert.notDeepEqual(config, currentConfig);
       },
       getConfigPath: () => configPath,
     };
