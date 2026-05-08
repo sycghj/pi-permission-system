@@ -77,13 +77,11 @@ function makeSession(overrides: Partial<SessionState> = {}): SessionState {
 function makeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
   return {
     session: makeSession(),
-    writeDebugLog: vi.fn(),
-    writeReviewLog: vi.fn(),
+    logger: { debug: vi.fn(), review: vi.fn(), warn: vi.fn() },
     piInfrastructureDirs: ["/test/agent", "/test/agent/git"],
     getPiInfrastructureReadPaths: vi.fn().mockReturnValue([]),
     createPermissionManagerForCwd: vi.fn(),
     refreshExtensionConfig: vi.fn(),
-    notifyWarning: vi.fn(),
     logResolvedConfigPaths: vi.fn(),
     resolveAgentName: vi.fn().mockReturnValue(null),
     canRequestPermissionConfirmation: vi.fn().mockReturnValue(true),

@@ -83,15 +83,13 @@ function makeSession(overrides: Partial<SessionState> = {}): SessionState {
 function makeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
   return {
     session: makeSession(),
-    writeDebugLog: vi.fn(),
-    writeReviewLog: vi.fn(),
+    logger: { debug: vi.fn(), review: vi.fn(), warn: vi.fn() },
     piInfrastructureDirs: ["/test/agent", "/test/agent/git"],
     getPiInfrastructureReadPaths: vi.fn().mockReturnValue([]),
     createPermissionManagerForCwd: vi
       .fn()
       .mockReturnValue(makePermissionManager()),
     refreshExtensionConfig: vi.fn(),
-    notifyWarning: vi.fn(),
     logResolvedConfigPaths: vi.fn(),
     resolveAgentName: vi.fn().mockReturnValue(null),
     canRequestPermissionConfirmation: vi.fn().mockReturnValue(false),
@@ -189,21 +187,21 @@ describe("handleSessionStart", () => {
       createPermissionManagerForCwd: vi.fn().mockReturnValue(pm),
     });
     await handleSessionStart(deps, { reason: "startup" }, makeCtx());
-    expect(deps.notifyWarning).toHaveBeenCalledWith("issue A");
-    expect(deps.notifyWarning).toHaveBeenCalledWith("issue B");
+    expect(deps.logger.warn).toHaveBeenCalledWith("issue A");
+    expect(deps.logger.warn).toHaveBeenCalledWith("issue B");
   });
 
   it("does not call notifyWarning when there are no policy issues", async () => {
     const deps = makeDeps();
     await handleSessionStart(deps, { reason: "startup" }, makeCtx());
-    expect(deps.notifyWarning).not.toHaveBeenCalled();
+    expect(deps.logger.warn).not.toHaveBeenCalled();
   });
 
   it("writes lifecycle.reload debug log when reason is reload", async () => {
     const ctx = makeCtx({ cwd: "/proj" });
     const deps = makeDeps();
     await handleSessionStart(deps, { reason: "reload" }, ctx);
-    expect(deps.writeDebugLog).toHaveBeenCalledWith("lifecycle.reload", {
+    expect(deps.logger.debug).toHaveBeenCalledWith("lifecycle.reload", {
       triggeredBy: "session_start",
       reason: "reload",
       cwd: "/proj",
@@ -213,7 +211,7 @@ describe("handleSessionStart", () => {
   it("does not write lifecycle.reload debug log for non-reload reasons", async () => {
     const deps = makeDeps();
     await handleSessionStart(deps, { reason: "startup" }, makeCtx());
-    expect(deps.writeDebugLog).not.toHaveBeenCalled();
+    expect(deps.logger.debug).not.toHaveBeenCalled();
   });
 });
 
@@ -224,7 +222,7 @@ describe("handleResourcesDiscover", () => {
     const deps = makeDeps();
     await handleResourcesDiscover(deps, { reason: "startup" });
     expect(deps.createPermissionManagerForCwd).not.toHaveBeenCalled();
-    expect(deps.writeDebugLog).not.toHaveBeenCalled();
+    expect(deps.logger.debug).not.toHaveBeenCalled();
   });
 
   it("creates and stores a new PM using runtimeContext.cwd on reload", async () => {
@@ -259,7 +257,7 @@ describe("handleResourcesDiscover", () => {
     const ctx = makeCtx({ cwd: "/proj" });
     const deps = makeDeps({ session: makeSession({ runtimeContext: ctx }) });
     await handleResourcesDiscover(deps, { reason: "reload" });
-    expect(deps.writeDebugLog).toHaveBeenCalledWith("lifecycle.reload", {
+    expect(deps.logger.debug).toHaveBeenCalledWith("lifecycle.reload", {
       triggeredBy: "resources_discover",
       reason: "reload",
       cwd: "/proj",
@@ -269,7 +267,7 @@ describe("handleResourcesDiscover", () => {
   it("logs cwd as null when runtimeContext is null on reload", async () => {
     const deps = makeDeps();
     await handleResourcesDiscover(deps, { reason: "reload" });
-    expect(deps.writeDebugLog).toHaveBeenCalledWith("lifecycle.reload", {
+    expect(deps.logger.debug).toHaveBeenCalledWith("lifecycle.reload", {
       triggeredBy: "resources_discover",
       reason: "reload",
       cwd: null,
