@@ -16,7 +16,9 @@ This activates automatically for any shell or agent session where mise is active
 |Pattern|Reason|
 |-------|------|
 |`npm root`|The extension calls `npm root -g` at startup to discover the global `node_modules` directory where Pi installs skills and extensions.|
-|`npm ... --prefix */.pi/npm`|Pi itself runs `npm install --prefix <project>/.pi/npm` to manage extensions and skills. These are Pi-internal operations, not developer misuse.|
+|`npm ... --prefix */.pi/npm`|Pi itself runs `npm install/uninstall --prefix <project>/.pi/npm` to manage extensions and skills. Any subcommand with a `.pi/npm` path is passed through as a Pi-internal operation.|
+|`npm install -g ...`|Pi runs `npm install -g <pkg>` to install global packages. Global installs don't affect the project lockfile.|
+|`npm uninstall -g ...`|Pi runs `npm uninstall -g <pkg>` to remove global packages. Global uninstalls don't affect the project lockfile.|
 
 All other npm subcommands are blocked.
 

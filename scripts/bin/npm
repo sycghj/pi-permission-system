@@ -8,7 +8,9 @@
 #   - `npm root` — the extension calls `npm root -g` at startup to discover
 #     the global node_modules directory where Pi installs skills/extensions.
 #   - any invocation with a `*/.pi/npm` argument — Pi itself runs
-#     `npm install --prefix <project>/.pi/npm` to manage extensions.
+#     `npm install/uninstall --prefix <project>/.pi/npm` to manage extensions.
+#   - `npm install -g` / `npm uninstall -g` — Pi manages global packages
+#     this way. Global operations don't affect the project lockfile.
 #
 # To bypass this shim in an emergency: use the full path to npm, e.g.
 #   $(mise where node)/bin/npm ...
@@ -17,57 +19,54 @@
 ORIG_ARGS="$*"
 SUBCMD="${1:-}"
 
-# ── Pass-through: Pi internal package management (.pi/npm) ─────────────────
-# Pi itself runs `npm install --prefix <project>/.pi/npm` to manage extensions.
-# These calls are not developer misuse — let them through.
-for arg in $ORIG_ARGS; do
-  case "$arg" in
-    */.pi/npm|*/.pi/npm/)
-      # Find the real npm binary (skip this shim in PATH)
-      SELF="$(cd "$(dirname "$0")" && pwd)/npm"
-      REAL_NPM=""
-      OIFS="$IFS"; IFS=":"; set -- $PATH; IFS="$OIFS"
-      for dir in "$@"; do
-        candidate="$dir/npm"
-        if [ -x "$candidate" ] && [ "$candidate" != "$SELF" ]; then
-          REAL_NPM="$candidate"
-          break
-        fi
-      done
-      if [ -z "$REAL_NPM" ]; then
-        echo "npm shim: could not find real npm binary" >&2
-        exit 1
-      fi
-      exec "$REAL_NPM" $ORIG_ARGS
-      ;;
-  esac
+# ── Locate the real npm binary (skip this shim in PATH) ────────────────────
+SELF="$(cd "$(dirname "$0")" && pwd)/npm"
+REAL_NPM=""
+OIFS="$IFS"; IFS=":"; set -- $PATH; IFS="$OIFS"
+for dir in "$@"; do
+  candidate="$dir/npm"
+  if [ -x "$candidate" ] && [ "$candidate" != "$SELF" ]; then
+    REAL_NPM="$candidate"
+    break
+  fi
 done
-
-# Restore positional parameters (consumed by the .pi/npm loop above).
 set -- $ORIG_ARGS
 SUBCMD="${1:-}"
 
-# ── Pass-through for read-only queries ──────────────────────────────────────
+pass_through() {
+  if [ -z "$REAL_NPM" ]; then
+    echo "npm shim: could not find real npm binary" >&2
+    exit 1
+  fi
+  # shellcheck disable=SC2086
+  exec "$REAL_NPM" $ORIG_ARGS
+}
+
+# ── Pass-through: Pi internal package management (.pi/npm) ─────────────────
+# Pi itself runs `npm install/uninstall --prefix <project>/.pi/npm` to manage
+# extensions. Any subcommand with a .pi/npm path is passed through.
+for arg in $ORIG_ARGS; do
+  case "$arg" in
+    */.pi/npm|*/.pi/npm/) pass_through ;;
+  esac
+done
+
+# ── Pass-through: global installs/uninstalls ────────────────────────────────
+# Pi runs `npm install -g <pkg>` and `npm uninstall -g <pkg>` for global
+# package management. Global operations don't affect the project lockfile.
 case "$SUBCMD" in
-  root)
-    # Find the real npm binary (skip this shim in PATH)
-    SELF="$(cd "$(dirname "$0")" && pwd)/npm"
-    REAL_NPM=""
-    OIFS="$IFS"; IFS=":"; set -- $PATH; IFS="$OIFS"
-    for dir in "$@"; do
-      candidate="$dir/npm"
-      if [ -x "$candidate" ] && [ "$candidate" != "$SELF" ]; then
-        REAL_NPM="$candidate"
-        break
-      fi
+  install|i|add|uninstall|remove|rm|un)
+    for arg in $ORIG_ARGS; do
+      case "$arg" in
+        -g|--global) pass_through ;;
+      esac
     done
-    if [ -z "$REAL_NPM" ]; then
-      echo "npm shim: could not find real npm binary" >&2
-      exit 1
-    fi
-    # shellcheck disable=SC2086
-    exec "$REAL_NPM" $ORIG_ARGS
     ;;
+esac
+
+# ── Pass-through: read-only queries ─────────────────────────────────────────
+case "$SUBCMD" in
+  root) pass_through ;;
 esac
 
 # ── Block everything else ──────────────────────────────────────────────────
