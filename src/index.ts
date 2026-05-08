@@ -7,10 +7,8 @@ import {
   type HandlerDeps,
   handleBeforeAgentStart,
   handleInput,
-  handleResourcesDiscover,
-  handleSessionShutdown,
-  handleSessionStart,
   handleToolCall,
+  SessionLifecycleHandler,
 } from "./handlers";
 import { requestPermissionDecisionFromUi } from "./permission-dialog";
 import { registerPermissionRpcHandlers } from "./permission-event-rpc";
@@ -122,9 +120,18 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
 
   emitReadyEvent(pi.events);
 
-  pi.on("session_start", (event, ctx) => handleSessionStart(deps, event, ctx));
-  pi.on("resources_discover", (event) => handleResourcesDiscover(deps, event));
-  pi.on("session_shutdown", () => handleSessionShutdown(deps));
+  const lifecycle = new SessionLifecycleHandler(session, () => {
+    rpcHandles.unsubCheck();
+    rpcHandles.unsubPrompt();
+  });
+
+  pi.on("session_start", (event, ctx) =>
+    lifecycle.handleSessionStart(event, ctx),
+  );
+  pi.on("resources_discover", (event) =>
+    lifecycle.handleResourcesDiscover(event),
+  );
+  pi.on("session_shutdown", () => lifecycle.handleSessionShutdown());
   pi.on("before_agent_start", (event, ctx) =>
     handleBeforeAgentStart(deps, event, ctx),
   );

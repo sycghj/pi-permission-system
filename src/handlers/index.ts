@@ -3,11 +3,7 @@ export {
   shouldExposeTool,
 } from "./before-agent-start";
 export { extractSkillNameFromInput, handleInput } from "./input";
-export {
-  handleResourcesDiscover,
-  handleSessionShutdown,
-  handleSessionStart,
-} from "./lifecycle";
+export { SessionLifecycleHandler } from "./lifecycle";
 export { getEventInput, handleToolCall } from "./tool-call";
 export type {
   HandlerDeps,

@@ -1,7 +1,7 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 
+import type { PermissionSession } from "../permission-session";
 import { PERMISSION_SYSTEM_STATUS_KEY } from "../status";
-import type { HandlerDeps } from "./types";
 
 /** Minimal subset of SessionStartEvent used by this handler. */
 interface SessionStartPayload {
@@ -13,54 +13,66 @@ interface ResourcesDiscoverPayload {
   reason: string;
 }
 
-export async function handleSessionStart(
-  deps: HandlerDeps,
-  event: SessionStartPayload,
-  ctx: ExtensionContext,
-): Promise<void> {
-  const { session } = deps;
-  session.refreshConfig(ctx);
-  session.resetForNewSession(ctx);
-  session.logResolvedConfigPaths();
+/**
+ * Handles session lifecycle events: start, reload, and shutdown.
+ *
+ * Constructor deps:
+ * - `session` — encapsulates all mutable session state
+ * - `cleanupRpc` — unsubscribes RPC handlers on shutdown
+ */
+export class SessionLifecycleHandler {
+  constructor(
+    private readonly session: PermissionSession,
+    private readonly cleanupRpc: () => void,
+  ) {}
 
-  const agentName = session.resolveAgentName(ctx);
-  const policyIssues = session.getConfigIssues(agentName);
-  for (const issue of policyIssues) {
-    session.logger.warn(issue);
+  async handleSessionStart(
+    event: SessionStartPayload,
+    ctx: ExtensionContext,
+  ): Promise<void> {
+    const { session } = this;
+    session.refreshConfig(ctx);
+    session.resetForNewSession(ctx);
+    session.logResolvedConfigPaths();
+
+    const agentName = session.resolveAgentName(ctx);
+    const policyIssues = session.getConfigIssues(agentName);
+    for (const issue of policyIssues) {
+      session.logger.warn(issue);
+    }
+
+    if (event.reason === "reload") {
+      session.logger.debug("lifecycle.reload", {
+        triggeredBy: "session_start",
+        reason: event.reason,
+        cwd: ctx.cwd,
+      });
+    }
   }
 
-  if (event.reason === "reload") {
+  async handleResourcesDiscover(
+    event: ResourcesDiscoverPayload,
+  ): Promise<void> {
+    if (event.reason !== "reload") {
+      return;
+    }
+
+    const { session } = this;
+    session.reload();
     session.logger.debug("lifecycle.reload", {
-      triggeredBy: "session_start",
+      triggeredBy: "resources_discover",
       reason: event.reason,
-      cwd: ctx.cwd,
+      cwd: session.getRuntimeContext()?.cwd ?? null,
     });
   }
-}
 
-export async function handleResourcesDiscover(
-  deps: HandlerDeps,
-  event: ResourcesDiscoverPayload,
-): Promise<void> {
-  if (event.reason !== "reload") {
-    return;
+  async handleSessionShutdown(): Promise<void> {
+    const { session } = this;
+    const ctx = session.getRuntimeContext();
+    if (ctx) {
+      ctx.ui.setStatus(PERMISSION_SYSTEM_STATUS_KEY, undefined);
+    }
+    session.shutdown();
+    this.cleanupRpc();
   }
-
-  const { session } = deps;
-  session.reload();
-  session.logger.debug("lifecycle.reload", {
-    triggeredBy: "resources_discover",
-    reason: event.reason,
-    cwd: session.getRuntimeContext()?.cwd ?? null,
-  });
-}
-
-export async function handleSessionShutdown(deps: HandlerDeps): Promise<void> {
-  const { session } = deps;
-  const ctx = session.getRuntimeContext();
-  if (ctx) {
-    ctx.ui.setStatus(PERMISSION_SYSTEM_STATUS_KEY, undefined);
-  }
-  session.shutdown();
-  deps.stopPermissionRpcHandlers();
 }
