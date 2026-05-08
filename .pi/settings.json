@@ -3,6 +3,7 @@
     "~/development/pi/pi-coding-agent-catppuccin",
     "npm:@gotgenes/pi-anthropic-auth",
     "npm:@gotgenes/pi-autoformat",
+    { "source": "npm:@gotgenes/pi-permission-system", "extensions": [] },
     "../",
     "npm:pi-prompt-template-model",
     "npm:pi-web-access",
