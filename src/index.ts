@@ -64,6 +64,16 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
       refreshExtensionConfig: (ctx) => refreshExtensionConfig(runtime, ctx),
       logResolvedConfigPaths: () => logResolvedConfigPaths(runtime),
       getConfig: () => runtime.config,
+      canRequestPermissionConfirmation: (ctx) =>
+        canResolveAskPermissionRequest({
+          config: runtime.config,
+          hasUI: ctx.hasUI,
+          isSubagent: isSubagentExecutionContext(
+            ctx,
+            runtime.subagentSessionsDir,
+          ),
+        }),
+      promptPermission: (ctx, details) => prompter.prompt(ctx, details),
     },
   );
 

@@ -7,7 +7,9 @@ import {
 import type { PermissionSystemExtensionConfig } from "./extension-config";
 import type { ExtensionPaths } from "./extension-paths";
 import type { ForwardingController } from "./forwarding-manager";
+import type { PermissionPromptDecision } from "./permission-dialog";
 import type { PermissionManager } from "./permission-manager";
+import type { PromptPermissionDetails } from "./permission-prompter";
 import type { Rule } from "./rule";
 import { createPermissionManagerForCwd } from "./runtime";
 import type { SessionLogger } from "./session-logger";
@@ -28,6 +30,13 @@ export interface PermissionSessionRuntimeDeps {
   logResolvedConfigPaths(): void;
   /** Read current extension config (called at query time). */
   getConfig(): PermissionSystemExtensionConfig;
+  /** Whether the current context can show an interactive permission prompt. */
+  canRequestPermissionConfirmation(ctx: ExtensionContext): boolean;
+  /** Prompt the user for a permission decision, log the outcome, and return it. */
+  promptPermission(
+    ctx: ExtensionContext,
+    details: PromptPermissionDetails,
+  ): Promise<PermissionPromptDecision>;
 }
 
 /**
@@ -248,5 +257,25 @@ export class PermissionSession {
   /** Config-derived infrastructure read paths (current at call time). */
   getInfrastructureReadPaths(): string[] {
     return this.config.piInfrastructureReadPaths ?? [];
+  }
+
+  // ── Prompting ──────────────────────────────────────────────────────────
+
+  /** Whether the current context can show an interactive permission prompt. */
+  canPrompt(ctx: ExtensionContext): boolean {
+    return this.runtimeDeps.canRequestPermissionConfirmation(ctx);
+  }
+
+  /** Prompt the user for a permission decision, log the outcome, and return it. */
+  prompt(
+    ctx: ExtensionContext,
+    details: PromptPermissionDetails,
+  ): Promise<PermissionPromptDecision> {
+    return this.runtimeDeps.promptPermission(ctx, details);
+  }
+
+  /** Generate a unique ID for a permission request. */
+  createPermissionRequestId(prefix: string): string {
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${process.pid}`;
   }
 }

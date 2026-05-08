@@ -80,6 +80,10 @@ function makeRuntimeDeps(): PermissionSessionRuntimeDeps {
     refreshExtensionConfig: vi.fn(),
     logResolvedConfigPaths: vi.fn(),
     getConfig: vi.fn().mockReturnValue({}),
+    canRequestPermissionConfirmation: vi.fn().mockReturnValue(true),
+    promptPermission: vi
+      .fn()
+      .mockResolvedValue({ approved: true, state: "approved" }),
   };
 }
 
@@ -541,6 +545,63 @@ describe("PermissionSession", () => {
       session.activate(makeCtx());
       session.deactivate();
       expect(session.getRuntimeContext()).toBeNull();
+    });
+  });
+
+  describe("canPrompt", () => {
+    it("delegates to runtimeDeps.canRequestPermissionConfirmation", () => {
+      const { session, runtimeDeps } = createSession();
+      const ctx = makeCtx();
+
+      const result = session.canPrompt(ctx);
+
+      expect(runtimeDeps.canRequestPermissionConfirmation).toHaveBeenCalledWith(
+        ctx,
+      );
+      expect(result).toBe(true);
+    });
+
+    it("returns false when runtimeDeps says no", () => {
+      const runtimeDeps = makeRuntimeDeps();
+      (
+        runtimeDeps.canRequestPermissionConfirmation as ReturnType<typeof vi.fn>
+      ).mockReturnValue(false);
+      const { session } = createSession({ runtimeDeps });
+
+      expect(session.canPrompt(makeCtx())).toBe(false);
+    });
+  });
+
+  describe("prompt", () => {
+    it("delegates to runtimeDeps.promptPermission", async () => {
+      const { session, runtimeDeps } = createSession();
+      const ctx = makeCtx();
+      const details = {
+        requestId: "req-1",
+        source: "tool_call" as const,
+        agentName: null,
+        message: "Allow?",
+      };
+
+      const result = await session.prompt(ctx, details);
+
+      expect(runtimeDeps.promptPermission).toHaveBeenCalledWith(ctx, details);
+      expect(result).toEqual({ approved: true, state: "approved" });
+    });
+  });
+
+  describe("createPermissionRequestId", () => {
+    it("starts with the given prefix", () => {
+      const { session } = createSession();
+      const id = session.createPermissionRequestId("skill-input");
+      expect(id.startsWith("skill-input-")).toBe(true);
+    });
+
+    it("generates unique IDs on repeated calls", () => {
+      const { session } = createSession();
+      const id1 = session.createPermissionRequestId("test");
+      const id2 = session.createPermissionRequestId("test");
+      expect(id1).not.toBe(id2);
     });
   });
 });
