@@ -437,9 +437,10 @@ src/
 ├── permission-prompter.ts    Yolo-mode, review logging, UI/forwarding branch
 ├── permission-dialog.ts      Dialog options (once / session / deny)
 │
+├── permission-session.ts     PermissionSession class — encapsulates all mutable session state
 ├── handlers/                 Extracted event handlers
 │   ├── index.ts              Re-exports
-│   ├── types.ts              HandlerDeps (session + SessionLogger + paths), PromptPermissionDetails
+│   ├── types.ts              HandlerDeps (session + events + Pi API), PromptPermissionDetails
 │   ├── lifecycle.ts          session_start, session_shutdown, resources_discover
 │   ├── before-agent-start.ts Tool filtering + prompt sanitization
 │   ├── input.ts              Skill input gate
@@ -460,7 +461,7 @@ src/
 ├── index.ts                  Extension factory - event wiring
 ├── permission-events.ts      Event channel constants, payload types, emit helpers
 ├── permission-event-rpc.ts   permissions:rpc:check and permissions:rpc:prompt handlers
-├── runtime.ts                SessionState, ExtensionRuntime context object
+├── runtime.ts                ExtensionRuntime context object, config refresh/save
 ├── config-loader.ts          File I/O, format detection
 ├── config-paths.ts           Path derivation
 ├── config-reporter.ts        Structured log entries for resolved config
