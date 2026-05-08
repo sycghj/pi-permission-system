@@ -9,8 +9,8 @@ import { handleToolCall } from "../../src/handlers/tool-call";
 import type { HandlerDeps } from "../../src/handlers/types";
 import type { PermissionDecisionEvent } from "../../src/permission-events";
 import { PERMISSIONS_DECISION_CHANNEL } from "../../src/permission-events";
-import type { SessionState } from "../../src/runtime";
-import type { PermissionCheckResult } from "../../src/types";
+import type { PermissionSession } from "../../src/permission-session";
+import type { PermissionCheckResult, PermissionState } from "../../src/types";
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -67,42 +67,35 @@ function makeCheckResult(
   };
 }
 
-function makeSession(overrides: Partial<SessionState> = {}): SessionState {
+function makeSession(
+  overrides: Partial<Record<keyof PermissionSession, unknown>> = {},
+): PermissionSession {
   return {
-    runtimeContext: null,
-    permissionManager: {
-      checkPermission: vi.fn().mockReturnValue(makeCheckResult("allow")),
-    } as unknown as SessionState["permissionManager"],
-    activeSkillEntries: [],
-    lastKnownActiveAgentName: null,
-    lastActiveToolsCacheKey: null,
-    lastPromptStateCacheKey: null,
-    sessionRules: {
-      approve: vi.fn(),
-      getRuleset: vi.fn().mockReturnValue([]),
-      clear: vi.fn(),
-    } as unknown as SessionState["sessionRules"],
+    logger: { debug: vi.fn(), review: vi.fn(), warn: vi.fn() },
+    activate: vi.fn(),
+    resolveAgentName: vi.fn().mockReturnValue(null),
+    checkPermission: vi.fn().mockReturnValue(makeCheckResult("allow")),
+    getToolPermission: vi.fn().mockReturnValue("allow" as PermissionState),
+    getSessionRuleset: vi.fn().mockReturnValue([]),
+    approveSessionRule: vi.fn(),
+    getActiveSkillEntries: vi.fn().mockReturnValue([]),
+    getInfrastructureDirs: vi
+      .fn()
+      .mockReturnValue(["/test/agent", "/test/agent/git"]),
+    getInfrastructureReadPaths: vi.fn().mockReturnValue([]),
     ...overrides,
-  };
+  } as unknown as PermissionSession;
 }
 
 function makeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
   return {
     session: makeSession(),
-    logger: { debug: vi.fn(), review: vi.fn(), warn: vi.fn() },
-    piInfrastructureDirs: ["/test/agent", "/test/agent/git"],
-    getPiInfrastructureReadPaths: vi.fn().mockReturnValue([]),
     events: makeEvents(),
-    createPermissionManagerForCwd: vi.fn(),
-    refreshExtensionConfig: vi.fn(),
-    logResolvedConfigPaths: vi.fn(),
-    resolveAgentName: vi.fn().mockReturnValue(null),
     canRequestPermissionConfirmation: vi.fn().mockReturnValue(true),
     promptPermission: vi
       .fn()
       .mockResolvedValue({ approved: true, state: "approved" }),
     createPermissionRequestId: vi.fn().mockReturnValue("req-id"),
-    forwarding: { start: vi.fn(), stop: vi.fn() },
     stopPermissionRpcHandlers: vi.fn(),
     getAllTools: vi.fn().mockReturnValue([{ name: "read" }, { name: "bash" }]),
     setActiveTools: vi.fn(),
@@ -122,18 +115,15 @@ function getDecisionEvents(deps: HandlerDeps): PermissionDecisionEvent[] {
 
 describe("handleToolCall decision events — policy_allow", () => {
   it("emits allow with policy_allow when checkPermission returns allow", async () => {
-    const deps = makeDeps({
-      session: makeSession({
-        permissionManager: {
-          checkPermission: vi.fn().mockReturnValue(
-            makeCheckResult("allow", {
-              origin: "global",
-              matchedPattern: "*",
-            }),
-          ),
-        } as unknown as SessionState["permissionManager"],
-      }),
+    const session = makeSession({
+      checkPermission: vi.fn().mockReturnValue(
+        makeCheckResult("allow", {
+          origin: "global",
+          matchedPattern: "*",
+        }),
+      ),
     });
+    const deps = makeDeps({ session });
 
     await handleToolCall(deps, makeToolCallEvent("read"), makeCtx());
 
@@ -153,18 +143,15 @@ describe("handleToolCall decision events — policy_allow", () => {
 
 describe("handleToolCall decision events — policy_deny", () => {
   it("emits deny with policy_deny when checkPermission returns deny", async () => {
-    const deps = makeDeps({
-      session: makeSession({
-        permissionManager: {
-          checkPermission: vi.fn().mockReturnValue(
-            makeCheckResult("deny", {
-              origin: "project",
-              matchedPattern: "read",
-            }),
-          ),
-        } as unknown as SessionState["permissionManager"],
-      }),
+    const session = makeSession({
+      checkPermission: vi.fn().mockReturnValue(
+        makeCheckResult("deny", {
+          origin: "project",
+          matchedPattern: "read",
+        }),
+      ),
     });
+    const deps = makeDeps({ session });
 
     await handleToolCall(deps, makeToolCallEvent("read"), makeCtx());
 
@@ -182,18 +169,15 @@ describe("handleToolCall decision events — policy_deny", () => {
 
 describe("handleToolCall decision events — session_approved", () => {
   it("emits allow with session_approved when checkPermission returns source:session", async () => {
-    const deps = makeDeps({
-      session: makeSession({
-        permissionManager: {
-          checkPermission: vi.fn().mockReturnValue(
-            makeCheckResult("allow", {
-              source: "session",
-              matchedPattern: "git *",
-            }),
-          ),
-        } as unknown as SessionState["permissionManager"],
-      }),
+    const session = makeSession({
+      checkPermission: vi.fn().mockReturnValue(
+        makeCheckResult("allow", {
+          source: "session",
+          matchedPattern: "git *",
+        }),
+      ),
     });
+    const deps = makeDeps({ session });
 
     await handleToolCall(
       deps,
@@ -215,12 +199,11 @@ describe("handleToolCall decision events — session_approved", () => {
 
 describe("handleToolCall decision events — user_approved", () => {
   it("emits allow with user_approved when state=ask and user approves once", async () => {
+    const session = makeSession({
+      checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
+    });
     const deps = makeDeps({
-      session: makeSession({
-        permissionManager: {
-          checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
-        } as unknown as SessionState["permissionManager"],
-      }),
+      session,
       promptPermission: vi
         .fn()
         .mockResolvedValue({ approved: true, state: "approved" }),
@@ -237,12 +220,11 @@ describe("handleToolCall decision events — user_approved", () => {
   });
 
   it("emits allow with user_approved_for_session when user approves for session", async () => {
+    const session = makeSession({
+      checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
+    });
     const deps = makeDeps({
-      session: makeSession({
-        permissionManager: {
-          checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
-        } as unknown as SessionState["permissionManager"],
-      }),
+      session,
       promptPermission: vi
         .fn()
         .mockResolvedValue({ approved: true, state: "approved_for_session" }),
@@ -263,12 +245,11 @@ describe("handleToolCall decision events — user_approved", () => {
 
 describe("handleToolCall decision events — user_denied", () => {
   it("emits deny with user_denied when state=ask and user denies", async () => {
+    const session = makeSession({
+      checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
+    });
     const deps = makeDeps({
-      session: makeSession({
-        permissionManager: {
-          checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
-        } as unknown as SessionState["permissionManager"],
-      }),
+      session,
       promptPermission: vi
         .fn()
         .mockResolvedValue({ approved: false, state: "denied" }),
@@ -289,12 +270,11 @@ describe("handleToolCall decision events — user_denied", () => {
 
 describe("handleToolCall decision events — confirmation_unavailable", () => {
   it("emits deny with confirmation_unavailable when state=ask but no UI", async () => {
+    const session = makeSession({
+      checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
+    });
     const deps = makeDeps({
-      session: makeSession({
-        permissionManager: {
-          checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
-        } as unknown as SessionState["permissionManager"],
-      }),
+      session,
       canRequestPermissionConfirmation: vi.fn().mockReturnValue(false),
     });
 
@@ -318,14 +298,11 @@ describe("handleToolCall decision events — confirmation_unavailable", () => {
 describe("handleToolCall decision events — infrastructure_auto_allowed", () => {
   it("emits allow with infrastructure_auto_allowed for Pi infra reads", async () => {
     const infraDir = "/test/agent";
-    const deps = makeDeps({
-      piInfrastructureDirs: [infraDir],
-      session: makeSession({
-        permissionManager: {
-          checkPermission: vi.fn().mockReturnValue(makeCheckResult("allow")),
-        } as unknown as SessionState["permissionManager"],
-      }),
+    const session = makeSession({
+      checkPermission: vi.fn().mockReturnValue(makeCheckResult("allow")),
+      getInfrastructureDirs: vi.fn().mockReturnValue([infraDir]),
     });
+    const deps = makeDeps({ session });
 
     const event = makeToolCallEvent("read", {
       input: { path: `${infraDir}/some-file.json` },
@@ -333,7 +310,6 @@ describe("handleToolCall decision events — infrastructure_auto_allowed", () =>
     await handleToolCall(deps, event, makeCtx());
 
     const events = getDecisionEvents(deps);
-    // One infrastructure_auto_allowed event + one policy_allow for the normal gate
     const infraEvents = events.filter(
       (e) => e.resolution === "infrastructure_auto_allowed",
     );
@@ -349,13 +325,11 @@ describe("handleToolCall decision events — infrastructure_auto_allowed", () =>
 
 describe("handleToolCall decision events — auto_approved", () => {
   it("emits allow with auto_approved when promptPermission returns autoApproved:true", async () => {
+    const session = makeSession({
+      checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
+    });
     const deps = makeDeps({
-      session: makeSession({
-        permissionManager: {
-          checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
-        } as unknown as SessionState["permissionManager"],
-      }),
-      // Simulate what PermissionPrompter returns in yolo mode
+      session,
       promptPermission: vi.fn().mockResolvedValue({
         approved: true,
         state: "approved",

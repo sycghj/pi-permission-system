@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { getEventInput, handleToolCall } from "../../src/handlers/tool-call";
 import type { HandlerDeps } from "../../src/handlers/types";
-import type { SessionState } from "../../src/runtime";
-import type { PermissionCheckResult } from "../../src/types";
+import type { PermissionSession } from "../../src/permission-session";
+import type { PermissionCheckResult, PermissionState } from "../../src/types";
 
 // ── SDK stubs ──────────────────────────────────────────────────────────────
 vi.mock("@mariozechner/pi-coding-agent", async (importOriginal) => {
@@ -55,42 +55,35 @@ function makePermissionResult(
   return { state, toolName: "read", source: "tool", origin: "builtin" };
 }
 
-function makeSession(overrides: Partial<SessionState> = {}): SessionState {
+function makeSession(
+  overrides: Partial<Record<keyof PermissionSession, unknown>> = {},
+): PermissionSession {
   return {
-    runtimeContext: null,
-    permissionManager: {
-      checkPermission: vi.fn().mockReturnValue(makePermissionResult("allow")),
-    } as unknown as SessionState["permissionManager"],
-    activeSkillEntries: [],
-    lastKnownActiveAgentName: null,
-    lastActiveToolsCacheKey: null,
-    lastPromptStateCacheKey: null,
-    sessionRules: {
-      approve: vi.fn(),
-      getRuleset: vi.fn().mockReturnValue([]),
-      clear: vi.fn(),
-    } as unknown as SessionState["sessionRules"],
+    logger: { debug: vi.fn(), review: vi.fn(), warn: vi.fn() },
+    activate: vi.fn(),
+    resolveAgentName: vi.fn().mockReturnValue(null),
+    checkPermission: vi.fn().mockReturnValue(makePermissionResult("allow")),
+    getToolPermission: vi.fn().mockReturnValue("allow" as PermissionState),
+    getSessionRuleset: vi.fn().mockReturnValue([]),
+    approveSessionRule: vi.fn(),
+    getActiveSkillEntries: vi.fn().mockReturnValue([]),
+    getInfrastructureDirs: vi
+      .fn()
+      .mockReturnValue(["/test/agent", "/test/agent/git"]),
+    getInfrastructureReadPaths: vi.fn().mockReturnValue([]),
     ...overrides,
-  };
+  } as unknown as PermissionSession;
 }
 
 function makeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
   return {
     session: makeSession(),
-    logger: { debug: vi.fn(), review: vi.fn(), warn: vi.fn() },
-    piInfrastructureDirs: ["/test/agent", "/test/agent/git"],
-    getPiInfrastructureReadPaths: vi.fn().mockReturnValue([]),
-    createPermissionManagerForCwd: vi.fn(),
-    refreshExtensionConfig: vi.fn(),
-    logResolvedConfigPaths: vi.fn(),
-    resolveAgentName: vi.fn().mockReturnValue(null),
+    events: { emit: vi.fn(), on: vi.fn().mockReturnValue(() => undefined) },
     canRequestPermissionConfirmation: vi.fn().mockReturnValue(true),
     promptPermission: vi
       .fn()
       .mockResolvedValue({ approved: true, state: "approved" }),
     createPermissionRequestId: vi.fn().mockReturnValue("req-id"),
-    events: { emit: vi.fn(), on: vi.fn().mockReturnValue(() => undefined) },
-    forwarding: { start: vi.fn(), stop: vi.fn() },
     stopPermissionRpcHandlers: vi.fn(),
     getAllTools: vi.fn().mockReturnValue([{ name: "read" }, { name: "bash" }]),
     setActiveTools: vi.fn(),
@@ -127,23 +120,15 @@ describe("getEventInput", () => {
 // ── handleToolCall ─────────────────────────────────────────────────────────
 
 describe("handleToolCall", () => {
-  it("sets runtime context", async () => {
+  it("activates session with ctx", async () => {
     const ctx = makeCtx();
     const deps = makeDeps();
     await handleToolCall(deps, makeToolCallEvent("read"), ctx);
-    expect(deps.session.runtimeContext).toBe(ctx);
-  });
-
-  it("starts forwarded permission polling", async () => {
-    const ctx = makeCtx();
-    const deps = makeDeps();
-    await handleToolCall(deps, makeToolCallEvent("read"), ctx);
-    expect(deps.forwarding.start).toHaveBeenCalledWith(ctx);
+    expect(deps.session.activate).toHaveBeenCalledWith(ctx);
   });
 
   it("blocks when tool name cannot be resolved", async () => {
     const deps = makeDeps();
-    // An event with no recognisable name field
     const result = await handleToolCall(deps, { type: "tool_call" }, makeCtx());
     expect(result).toEqual({
       block: true,
@@ -164,7 +149,6 @@ describe("handleToolCall", () => {
   });
 
   it("returns empty object when tool is allowed", async () => {
-    // default makeRuntime() has checkPermission → "allow"
     const deps = makeDeps();
     const result = await handleToolCall(
       deps,
@@ -175,15 +159,10 @@ describe("handleToolCall", () => {
   });
 
   it("blocks when tool is denied by policy", async () => {
-    const deps = makeDeps({
-      session: makeSession({
-        permissionManager: {
-          checkPermission: vi
-            .fn()
-            .mockReturnValue(makePermissionResult("deny")),
-        } as unknown as SessionState["permissionManager"],
-      }),
+    const session = makeSession({
+      checkPermission: vi.fn().mockReturnValue(makePermissionResult("deny")),
     });
+    const deps = makeDeps({ session });
     const result = await handleToolCall(
       deps,
       makeToolCallEvent("read"),
@@ -205,8 +184,11 @@ describe("handleToolCall — skill-read gate", () => {
       normalizedLocation: "/skills/librarian/SKILL.md",
       normalizedBaseDir: "/skills/librarian",
     };
+    const session = makeSession({
+      getActiveSkillEntries: vi.fn().mockReturnValue([skillEntry]),
+    });
     const deps = makeDeps({
-      session: makeSession({ activeSkillEntries: [skillEntry] }),
+      session,
       getAllTools: vi.fn().mockReturnValue([{ toolName: "read" }]),
     });
     const event = {
@@ -228,8 +210,11 @@ describe("handleToolCall — skill-read gate", () => {
       normalizedLocation: "/skills/librarian/SKILL.md",
       normalizedBaseDir: "/skills/librarian",
     };
+    const session = makeSession({
+      getActiveSkillEntries: vi.fn().mockReturnValue([skillEntry]),
+    });
     const deps = makeDeps({
-      session: makeSession({ activeSkillEntries: [skillEntry] }),
+      session,
       getAllTools: vi.fn().mockReturnValue([{ toolName: "read" }]),
     });
     const event = {
@@ -247,14 +232,11 @@ describe("handleToolCall — skill-read gate", () => {
 
 describe("handleToolCall — external-directory gate", () => {
   it("blocks a read of a path outside cwd when policy is deny", async () => {
+    const session = makeSession({
+      checkPermission: vi.fn().mockReturnValue(makePermissionResult("deny")),
+    });
     const deps = makeDeps({
-      session: makeSession({
-        permissionManager: {
-          checkPermission: vi
-            .fn()
-            .mockReturnValue(makePermissionResult("deny")),
-        } as unknown as SessionState["permissionManager"],
-      }),
+      session,
       getAllTools: vi.fn().mockReturnValue([{ name: "read" }]),
     });
     const event = {
@@ -272,14 +254,11 @@ describe("handleToolCall — external-directory gate", () => {
 
 describe("handleToolCall — bash external-directory gate", () => {
   it("blocks a bash command referencing an external path when policy is deny", async () => {
+    const session = makeSession({
+      checkPermission: vi.fn().mockReturnValue(makePermissionResult("deny")),
+    });
     const deps = makeDeps({
-      session: makeSession({
-        permissionManager: {
-          checkPermission: vi
-            .fn()
-            .mockReturnValue(makePermissionResult("deny")),
-        } as unknown as SessionState["permissionManager"],
-      }),
+      session,
       getAllTools: vi.fn().mockReturnValue([{ name: "bash" }]),
     });
     const event = {

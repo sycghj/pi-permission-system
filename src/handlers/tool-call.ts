@@ -43,10 +43,10 @@ export async function handleToolCall(
   event: unknown,
   ctx: ExtensionContext,
 ): Promise<{ block?: true; reason?: string }> {
-  deps.session.runtimeContext = ctx;
-  deps.forwarding.start(ctx);
+  const { session } = deps;
+  session.activate(ctx);
 
-  const agentName = deps.resolveAgentName(ctx);
+  const agentName = session.resolveAgentName(ctx);
   const toolName = getToolNameFromValue(event);
 
   if (!toolName) {
@@ -91,22 +91,16 @@ export async function handleToolCall(
     deps.promptPermission(ctx, details);
   const emitDecision: GateRunnerDeps["emitDecision"] = (e) =>
     emitDecisionEvent(deps.events, e);
-  const { review: writeReviewLog } = deps.logger;
+  const writeReviewLog = session.logger.review;
   const checkPermission: GateRunnerDeps["checkPermission"] = (
     surface,
     input,
     agent,
     sessionRules,
-  ) =>
-    deps.session.permissionManager.checkPermission(
-      surface,
-      input,
-      agent,
-      sessionRules,
-    );
-  const getSessionRuleset = () => deps.session.sessionRules.getRuleset();
+  ) => session.checkPermission(surface, input, agent, sessionRules);
+  const getSessionRuleset = () => session.getSessionRuleset();
   const approveSessionRule = (surface: string, pattern: string) =>
-    deps.session.sessionRules.approve(surface, pattern);
+    session.approveSessionRule(surface, pattern);
 
   // ── Shared runner deps (built once, reused for all gates) ─────────────
   const runnerDeps: GateRunnerDeps = {
@@ -120,9 +114,8 @@ export async function handleToolCall(
   };
 
   // ── Skill-read gate (descriptor + runner) ────────────────────────────────
-  const skillDescriptor = describeSkillReadGate(
-    tcc,
-    () => deps.session.activeSkillEntries,
+  const skillDescriptor = describeSkillReadGate(tcc, () =>
+    session.getActiveSkillEntries(),
   );
   if (skillDescriptor) {
     const skillResult = await runGateCheck(
@@ -138,8 +131,8 @@ export async function handleToolCall(
 
   // ── External-directory gate (descriptor + runner) ─────────────────────────
   const infraDirs = [
-    ...deps.piInfrastructureDirs,
-    ...deps.getPiInfrastructureReadPaths(),
+    ...session.getInfrastructureDirs(),
+    ...session.getInfrastructureReadPaths(),
   ];
   const extDirDesc = describeExternalDirectoryGate(tcc, infraDirs);
   if (extDirDesc) {
