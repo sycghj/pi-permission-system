@@ -6,6 +6,6 @@
     "../",
     "npm:pi-prompt-template-model",
     "npm:pi-web-access",
-    "npm:pi-ask-user"
+    "npm:@eko24ive/pi-ask"
   ]
 }
