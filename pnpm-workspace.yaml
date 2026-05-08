@@ -2,3 +2,4 @@ allowBuilds:
   "@google/genai": true
   koffi: true
   protobufjs: true
+  tree-sitter-bash: true
