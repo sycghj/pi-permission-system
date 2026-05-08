@@ -3,7 +3,7 @@ import type { ExtensionRuntime } from "./runtime";
 /**
  * Unified logging + notification surface for handler deps.
  *
- * Replaces three separate HandlerDeps fields (`writeDebugLog`,
+ * Replaces three separate logging fields (`writeDebugLog`,
  * `writeReviewLog`, `notifyWarning`) with a single typed collaborator.
  * This is an intermediate abstraction on the path to PermissionSession (#129).
  */

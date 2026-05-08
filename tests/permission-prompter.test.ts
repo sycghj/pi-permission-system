@@ -15,8 +15,8 @@ vi.mock("../src/forwarded-permissions/polling", () => ({
 
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { DEFAULT_EXTENSION_CONFIG } from "../src/extension-config";
-import type { PromptPermissionDetails } from "../src/handlers/types";
 import type { PermissionPromptDecision } from "../src/permission-dialog";
+import type { PromptPermissionDetails } from "../src/permission-prompter";
 import {
   PermissionPrompter,
   type PermissionPrompterDeps,

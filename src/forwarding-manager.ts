@@ -6,7 +6,7 @@ import { PERMISSION_FORWARDING_POLL_INTERVAL_MS } from "./permission-forwarding"
 import { isSubagentExecutionContext } from "./subagent-context";
 
 /**
- * Narrow interface for the forwarding lifecycle used by `HandlerDeps`.
+ * Narrow interface for the forwarding lifecycle used by `PermissionSession`.
  * `ForwardingManager` satisfies it; tests can provide a plain object mock.
  */
 export interface ForwardingController {

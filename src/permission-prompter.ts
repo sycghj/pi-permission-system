@@ -30,7 +30,7 @@ export interface PromptPermissionDetails {
   sessionLabel?: string;
 }
 
-/** Mockable contract exposed to handlers via HandlerDeps. */
+/** Mockable contract for permission prompting. */
 export interface PermissionPrompterApi {
   prompt(
     ctx: ExtensionContext,
@@ -70,10 +70,9 @@ export interface PermissionPrompterDeps {
  *   3. UI-present vs. subagent-forwarding branching (via confirmPermission).
  *   4. Review-log "approved" / "denied" entry.
  *
- * Injecting a single PermissionPrompter instance into HandlerDeps means
- * adding a new prompt parameter (e.g. a future sessionLabel variant) only
- * requires changing PromptPermissionDetails and this class — not the full
- * 4-file threading chain.
+ * Injecting a single PermissionPrompter instance means adding a new prompt
+ * parameter (e.g. a future sessionLabel variant) only requires changing
+ * PromptPermissionDetails and this class — not the full threading chain.
  */
 export class PermissionPrompter implements PermissionPrompterApi {
   constructor(private readonly deps: PermissionPrompterDeps) {}

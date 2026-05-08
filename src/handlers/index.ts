@@ -5,8 +5,3 @@ export {
   getEventInput,
   PermissionGateHandler,
 } from "./permission-gate-handler";
-export type {
-  HandlerDeps,
-  PermissionReviewSource,
-  PromptPermissionDetails,
-} from "./types";
