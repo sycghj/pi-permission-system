@@ -98,8 +98,7 @@ function makeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
       .mockResolvedValue({ approved: true, state: "approved" }),
     createPermissionRequestId: vi.fn().mockReturnValue("test-id"),
     events: { emit: vi.fn(), on: vi.fn().mockReturnValue(() => undefined) },
-    startForwardedPermissionPolling: vi.fn(),
-    stopForwardedPermissionPolling: vi.fn(),
+    forwarding: { start: vi.fn(), stop: vi.fn() },
     stopPermissionRpcHandlers: vi.fn(),
     getAllTools: vi.fn().mockReturnValue([]),
     setActiveTools: vi.fn(),
@@ -171,7 +170,7 @@ describe("handleSessionStart", () => {
     const ctx = makeCtx();
     const deps = makeDeps();
     await handleSessionStart(deps, { reason: "startup" }, ctx);
-    expect(deps.startForwardedPermissionPolling).toHaveBeenCalledWith(ctx);
+    expect(deps.forwarding.start).toHaveBeenCalledWith(ctx);
   });
 
   it("logs resolved config paths", async () => {
@@ -319,7 +318,7 @@ describe("handleSessionShutdown", () => {
   it("stops forwarded permission polling", async () => {
     const deps = makeDeps();
     await handleSessionShutdown(deps);
-    expect(deps.stopForwardedPermissionPolling).toHaveBeenCalledOnce();
+    expect(deps.forwarding.stop).toHaveBeenCalledOnce();
   });
 
   it("calls stopPermissionRpcHandlers on shutdown", async () => {

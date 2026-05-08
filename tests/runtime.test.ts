@@ -212,21 +212,6 @@ describe("createExtensionRuntime", () => {
     expect(runtime.lastConfigWarning).toBeNull();
   });
 
-  it("initializes permissionForwardingContext to null", () => {
-    const runtime = createExtensionRuntime({ agentDir: "/test/agent" });
-    expect(runtime.permissionForwardingContext).toBeNull();
-  });
-
-  it("initializes permissionForwardingTimer to null", () => {
-    const runtime = createExtensionRuntime({ agentDir: "/test/agent" });
-    expect(runtime.permissionForwardingTimer).toBeNull();
-  });
-
-  it("initializes isProcessingForwardedRequests to false", () => {
-    const runtime = createExtensionRuntime({ agentDir: "/test/agent" });
-    expect(runtime.isProcessingForwardedRequests).toBe(false);
-  });
-
   it("creates a sessionRules instance", () => {
     const runtime = createExtensionRuntime({ agentDir: "/test/agent" });
     expect(runtime.sessionRules).toBeDefined();

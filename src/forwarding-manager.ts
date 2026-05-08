@@ -6,6 +6,15 @@ import { PERMISSION_FORWARDING_POLL_INTERVAL_MS } from "./permission-forwarding"
 import { isSubagentExecutionContext } from "./subagent-context";
 
 /**
+ * Narrow interface for the forwarding lifecycle used by `HandlerDeps`.
+ * `ForwardingManager` satisfies it; tests can provide a plain object mock.
+ */
+export interface ForwardingController {
+  start(ctx: ExtensionContext): void;
+  stop(): void;
+}
+
+/**
  * Encapsulates the forwarded-permission polling lifecycle.
  *
  * Owns the timer, current context, and processing-lock state that previously

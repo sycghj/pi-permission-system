@@ -1,5 +1,6 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 
+import type { ForwardingController } from "../forwarding-manager";
 import type { PermissionPromptDecision } from "../permission-dialog";
 import type { PermissionEventBus } from "../permission-events";
 import type { PermissionManager } from "../permission-manager";
@@ -79,8 +80,7 @@ export interface HandlerDeps {
   createPermissionRequestId(prefix: string): string;
 
   // ── Forwarding ─────────────────────────────────────────────────────────
-  startForwardedPermissionPolling(ctx: ExtensionContext): void;
-  stopForwardedPermissionPolling(): void;
+  readonly forwarding: ForwardingController;
   /** Unsubscribe the permissions:rpc:check and permissions:rpc:prompt handlers. */
   stopPermissionRpcHandlers(): void;
 

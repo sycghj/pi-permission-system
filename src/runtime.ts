@@ -38,17 +38,11 @@ import { computeExtensionPaths, type ExtensionPaths } from "./extension-paths";
 
 export type { ExtensionPaths } from "./extension-paths";
 
-import {
-  type PermissionForwardingDeps,
-  processForwardedPermissionRequests,
-} from "./forwarded-permissions/polling";
 import { createPermissionSystemLogger } from "./logging";
-import { PERMISSION_FORWARDING_POLL_INTERVAL_MS } from "./permission-forwarding";
 import { PermissionManager } from "./permission-manager";
 import { SessionRules } from "./session-rules";
 import type { SkillPromptEntry } from "./skill-prompt-sanitizer";
 import { syncPermissionSystemStatus } from "./status";
-import { isSubagentExecutionContext } from "./subagent-context";
 
 /**
  * Mutable session state — the subset of ExtensionRuntime that handlers
@@ -80,11 +74,6 @@ export interface ExtensionRuntime extends ExtensionPaths, SessionState {
   // ── Mutable state (beyond SessionState) ───────────────────────────────────
   config: PermissionSystemExtensionConfig;
   lastConfigWarning: string | null;
-
-  // ── Forwarding polling state ───────────────────────────────────────────
-  permissionForwardingContext: ExtensionContext | null;
-  permissionForwardingTimer: NodeJS.Timeout | null;
-  isProcessingForwardedRequests: boolean;
 
   // ── Logging (backed by logger created at construction) ─────────────────
   writeDebugLog(event: string, details?: Record<string, unknown>): void;
@@ -277,58 +266,6 @@ export function logResolvedConfigPaths(runtime: ExtensionRuntime): void {
   );
 }
 
-// ── Forwarding polling lifecycle ───────────────────────────────────────────
-
-/** Stop the forwarded-permission polling interval and clear related state. */
-export function stopForwardedPermissionPolling(
-  runtime: ExtensionRuntime,
-): void {
-  if (runtime.permissionForwardingTimer) {
-    clearInterval(runtime.permissionForwardingTimer);
-    runtime.permissionForwardingTimer = null;
-  }
-  runtime.permissionForwardingContext = null;
-  runtime.isProcessingForwardedRequests = false;
-}
-
-/**
- * Start the forwarded-permission polling interval.
- * No-ops (and stops any existing poll) when the context has no UI or is a
- * subagent execution context.
- */
-export function startForwardedPermissionPolling(
-  runtime: ExtensionRuntime,
-  forwardingDeps: PermissionForwardingDeps,
-  ctx: ExtensionContext,
-): void {
-  if (
-    !ctx.hasUI ||
-    isSubagentExecutionContext(ctx, runtime.subagentSessionsDir)
-  ) {
-    stopForwardedPermissionPolling(runtime);
-    return;
-  }
-  runtime.permissionForwardingContext = ctx;
-  if (runtime.permissionForwardingTimer) {
-    return;
-  }
-  runtime.permissionForwardingTimer = setInterval(() => {
-    if (
-      !runtime.permissionForwardingContext ||
-      runtime.isProcessingForwardedRequests
-    ) {
-      return;
-    }
-    runtime.isProcessingForwardedRequests = true;
-    void processForwardedPermissionRequests(
-      runtime.permissionForwardingContext,
-      forwardingDeps,
-    ).finally(() => {
-      runtime.isProcessingForwardedRequests = false;
-    });
-  }, PERMISSION_FORWARDING_POLL_INTERVAL_MS);
-}
-
 // ── Factory ────────────────────────────────────────────────────────────────
 
 /**
@@ -356,9 +293,6 @@ export function createExtensionRuntime(options?: {
     lastPromptStateCacheKey: null,
     lastConfigWarning: null,
     sessionRules: new SessionRules(),
-    permissionForwardingContext: null,
-    permissionForwardingTimer: null,
-    isProcessingForwardedRequests: false,
     // Logging methods are replaced below after the logger is constructed.
     writeDebugLog: () => {},
     writeReviewLog: () => {},

@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { registerPermissionSystemCommand } from "./config-modal";
 import { getGlobalConfigPath } from "./config-paths";
 import type { PermissionForwardingDeps } from "./forwarded-permissions/polling";
+import { ForwardingManager } from "./forwarding-manager";
 import {
   type HandlerDeps,
   handleBeforeAgentStart,
@@ -22,8 +23,6 @@ import {
   refreshExtensionConfig,
   resolveAgentName,
   saveExtensionConfig,
-  startForwardedPermissionPolling,
-  stopForwardedPermissionPolling,
 } from "./runtime";
 import { createSessionLogger } from "./session-logger";
 import { isSubagentExecutionContext } from "./subagent-context";
@@ -102,10 +101,10 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
       }),
     promptPermission: (ctx, details) => prompter.prompt(ctx, details),
     createPermissionRequestId,
-    startForwardedPermissionPolling: (ctx) =>
-      startForwardedPermissionPolling(runtime, forwardingDeps, ctx),
-    stopForwardedPermissionPolling: () =>
-      stopForwardedPermissionPolling(runtime),
+    forwarding: new ForwardingManager(
+      runtime.subagentSessionsDir,
+      forwardingDeps,
+    ),
     stopPermissionRpcHandlers: () => {
       rpcHandles.unsubCheck();
       rpcHandles.unsubPrompt();

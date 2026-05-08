@@ -41,7 +41,7 @@ export async function handleInput(
   ctx: ExtensionContext,
 ): Promise<InputEventResult> {
   deps.session.runtimeContext = ctx;
-  deps.startForwardedPermissionPolling(ctx);
+  deps.forwarding.start(ctx);
 
   const skillName = extractSkillNameFromInput(event.text);
   if (!skillName) {

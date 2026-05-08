@@ -26,7 +26,7 @@ export async function handleSessionStart(
   deps.session.lastActiveToolsCacheKey = null;
   deps.session.lastPromptStateCacheKey = null;
   deps.session.lastKnownActiveAgentName = getActiveAgentName(ctx);
-  deps.startForwardedPermissionPolling(ctx);
+  deps.forwarding.start(ctx);
   deps.logResolvedConfigPaths();
 
   const agentName = deps.session.lastKnownActiveAgentName;
@@ -77,6 +77,6 @@ export async function handleSessionShutdown(deps: HandlerDeps): Promise<void> {
   deps.session.lastActiveToolsCacheKey = null;
   deps.session.lastPromptStateCacheKey = null;
   deps.session.sessionRules.clear();
-  deps.stopForwardedPermissionPolling();
+  deps.forwarding.stop();
   deps.stopPermissionRpcHandlers();
 }

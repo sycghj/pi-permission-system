@@ -44,7 +44,7 @@ export async function handleToolCall(
   ctx: ExtensionContext,
 ): Promise<{ block?: true; reason?: string }> {
   deps.session.runtimeContext = ctx;
-  deps.startForwardedPermissionPolling(ctx);
+  deps.forwarding.start(ctx);
 
   const agentName = deps.resolveAgentName(ctx);
   const toolName = getToolNameFromValue(event);

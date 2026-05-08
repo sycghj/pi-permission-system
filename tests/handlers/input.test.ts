@@ -69,8 +69,7 @@ function makeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
       .mockResolvedValue({ approved: true, state: "approved" }),
     createPermissionRequestId: vi.fn().mockReturnValue("req-id"),
     events: { emit: vi.fn(), on: vi.fn().mockReturnValue(() => undefined) },
-    startForwardedPermissionPolling: vi.fn(),
-    stopForwardedPermissionPolling: vi.fn(),
+    forwarding: { start: vi.fn(), stop: vi.fn() },
     stopPermissionRpcHandlers: vi.fn(),
     getAllTools: vi.fn().mockReturnValue([]),
     setActiveTools: vi.fn(),
@@ -126,7 +125,7 @@ describe("handleInput", () => {
     const ctx = makeCtx();
     const deps = makeDeps();
     await handleInput(deps, makeInputEvent("hello"), ctx);
-    expect(deps.startForwardedPermissionPolling).toHaveBeenCalledWith(ctx);
+    expect(deps.forwarding.start).toHaveBeenCalledWith(ctx);
   });
 
   it("returns continue for non-skill input", async () => {

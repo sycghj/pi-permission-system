@@ -90,8 +90,7 @@ function makeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
       .mockResolvedValue({ approved: true, state: "approved" }),
     createPermissionRequestId: vi.fn().mockReturnValue("test-id"),
     events: { emit: vi.fn(), on: vi.fn().mockReturnValue(() => undefined) },
-    startForwardedPermissionPolling: vi.fn(),
-    stopForwardedPermissionPolling: vi.fn(),
+    forwarding: { start: vi.fn(), stop: vi.fn() },
     stopPermissionRpcHandlers: vi.fn(),
     getAllTools: vi.fn().mockReturnValue([]),
     setActiveTools: vi.fn(),
@@ -144,7 +143,7 @@ describe("handleBeforeAgentStart", () => {
     const ctx = makeCtx();
     const deps = makeDeps();
     await handleBeforeAgentStart(deps, makeEvent(), ctx);
-    expect(deps.startForwardedPermissionPolling).toHaveBeenCalledWith(ctx);
+    expect(deps.forwarding.start).toHaveBeenCalledWith(ctx);
   });
 
   it("resolves agent name using systemPrompt", async () => {

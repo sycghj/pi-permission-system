@@ -90,8 +90,7 @@ function makeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
       .mockResolvedValue({ approved: true, state: "approved" }),
     createPermissionRequestId: vi.fn().mockReturnValue("req-id"),
     events: { emit: vi.fn(), on: vi.fn().mockReturnValue(() => undefined) },
-    startForwardedPermissionPolling: vi.fn(),
-    stopForwardedPermissionPolling: vi.fn(),
+    forwarding: { start: vi.fn(), stop: vi.fn() },
     stopPermissionRpcHandlers: vi.fn(),
     getAllTools: vi.fn().mockReturnValue([{ name: "read" }, { name: "bash" }]),
     setActiveTools: vi.fn(),
@@ -139,7 +138,7 @@ describe("handleToolCall", () => {
     const ctx = makeCtx();
     const deps = makeDeps();
     await handleToolCall(deps, makeToolCallEvent("read"), ctx);
-    expect(deps.startForwardedPermissionPolling).toHaveBeenCalledWith(ctx);
+    expect(deps.forwarding.start).toHaveBeenCalledWith(ctx);
   });
 
   it("blocks when tool name cannot be resolved", async () => {

@@ -43,7 +43,7 @@ export async function handleBeforeAgentStart(
 ): Promise<BeforeAgentStartEventResult> {
   deps.session.runtimeContext = ctx;
   deps.refreshExtensionConfig(ctx);
-  deps.startForwardedPermissionPolling(ctx);
+  deps.forwarding.start(ctx);
 
   const agentName = deps.resolveAgentName(ctx, event.systemPrompt);
   const { permissionManager } = deps.session;
