@@ -439,7 +439,7 @@ src/
 │
 ├── handlers/                 Extracted event handlers
 │   ├── index.ts              Re-exports
-│   ├── types.ts              HandlerDeps (session + promoted logging/paths), PromptPermissionDetails
+│   ├── types.ts              HandlerDeps (session + SessionLogger + paths), PromptPermissionDetails
 │   ├── lifecycle.ts          session_start, session_shutdown, resources_discover
 │   ├── before-agent-start.ts Tool filtering + prompt sanitization
 │   ├── input.ts              Skill input gate
@@ -479,6 +479,7 @@ src/
 ├── subagent-context.ts        Subagent execution context detection
 ├── permission-forwarding.ts   Constants for cross-session forwarding
 ├── forwarded-permissions/     Poll-based approval forwarding for subagents
+├── session-logger.ts          SessionLogger interface + createSessionLogger() factory
 ├── logging.ts                 JSONL review/debug log writer
 ├── status.ts                  Footer status bar integration
 ├── yolo-mode.ts               Auto-approve logic
