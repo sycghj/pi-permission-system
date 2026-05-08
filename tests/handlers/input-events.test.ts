@@ -8,7 +8,8 @@ import { handleInput } from "../../src/handlers/input";
 import type { HandlerDeps } from "../../src/handlers/types";
 import type { PermissionDecisionEvent } from "../../src/permission-events";
 import { PERMISSIONS_DECISION_CHANNEL } from "../../src/permission-events";
-import type { SessionState } from "../../src/runtime";
+import type { PermissionSession } from "../../src/permission-session";
+import type { PermissionState } from "../../src/types";
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -38,28 +39,24 @@ function makeCtx(overrides: Partial<ExtensionContext> = {}): ExtensionContext {
   } as unknown as ExtensionContext;
 }
 
-function makeSession(state: "allow" | "deny" | "ask" = "allow"): SessionState {
+function makeSession(
+  state: "allow" | "deny" | "ask" = "allow",
+): PermissionSession {
   return {
-    runtimeContext: null,
-    permissionManager: {
-      checkPermission: vi.fn().mockReturnValue({
-        state,
-        toolName: "skill",
-        source: "skill",
-        origin: "global",
-        matchedPattern: "*",
-      }),
-    } as unknown as SessionState["permissionManager"],
-    activeSkillEntries: [],
-    lastKnownActiveAgentName: null,
-    lastActiveToolsCacheKey: null,
-    lastPromptStateCacheKey: null,
-    sessionRules: {
-      approve: vi.fn(),
-      getRuleset: vi.fn().mockReturnValue([]),
-      clear: vi.fn(),
-    } as unknown as SessionState["sessionRules"],
-  };
+    logger: { debug: vi.fn(), review: vi.fn(), warn: vi.fn() },
+    activate: vi.fn(),
+    resolveAgentName: vi.fn().mockReturnValue(null),
+    checkPermission: vi.fn().mockReturnValue({
+      state,
+      toolName: "skill",
+      source: "skill",
+      origin: "global",
+      matchedPattern: "*",
+    }),
+    getToolPermission: vi.fn().mockReturnValue("allow" as PermissionState),
+    getSessionRuleset: vi.fn().mockReturnValue([]),
+    approveSessionRule: vi.fn(),
+  } as unknown as PermissionSession;
 }
 
 function makeDeps(
@@ -68,20 +65,12 @@ function makeDeps(
 ): HandlerDeps {
   return {
     session: makeSession(state),
-    logger: { debug: vi.fn(), review: vi.fn(), warn: vi.fn() },
-    piInfrastructureDirs: ["/test/agent"],
-    getPiInfrastructureReadPaths: vi.fn().mockReturnValue([]),
     events: makeEvents(),
-    createPermissionManagerForCwd: vi.fn(),
-    refreshExtensionConfig: vi.fn(),
-    logResolvedConfigPaths: vi.fn(),
-    resolveAgentName: vi.fn().mockReturnValue(null),
     canRequestPermissionConfirmation: vi.fn().mockReturnValue(true),
     promptPermission: vi
       .fn()
       .mockResolvedValue({ approved: true, state: "approved" }),
     createPermissionRequestId: vi.fn().mockReturnValue("req-id"),
-    forwarding: { start: vi.fn(), stop: vi.fn() },
     stopPermissionRpcHandlers: vi.fn(),
     getAllTools: vi.fn().mockReturnValue([]),
     setActiveTools: vi.fn(),
@@ -191,7 +180,6 @@ describe("handleInput decision events — skill gate", () => {
 
   it("emits allow with auto_approved when promptPermission returns autoApproved:true", async () => {
     const deps = makeDeps("ask", {
-      // Simulate what PermissionPrompter returns in yolo mode
       promptPermission: vi.fn().mockResolvedValue({
         approved: true,
         state: "approved",

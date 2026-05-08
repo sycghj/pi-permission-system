@@ -40,16 +40,16 @@ export async function handleInput(
   event: InputPayload,
   ctx: ExtensionContext,
 ): Promise<InputEventResult> {
-  deps.session.runtimeContext = ctx;
-  deps.forwarding.start(ctx);
+  const { session } = deps;
+  session.activate(ctx);
 
   const skillName = extractSkillNameFromInput(event.text);
   if (!skillName) {
     return { action: "continue" };
   }
 
-  const agentName = deps.resolveAgentName(ctx);
-  const check = deps.session.permissionManager.checkPermission(
+  const agentName = session.resolveAgentName(ctx);
+  const check = session.checkPermission(
     "skill",
     { name: skillName },
     agentName ?? undefined,
@@ -82,7 +82,7 @@ export async function handleInput(
       skillInputAutoApproved = decision.autoApproved === true;
       return decision;
     },
-    writeLog: deps.logger.review,
+    writeLog: session.logger.review,
     logContext: {
       source: "skill_input",
       skillName,
