@@ -1,7 +1,10 @@
 export { AgentPrepHandler, shouldExposeTool } from "./before-agent-start";
-export { extractSkillNameFromInput, handleInput } from "./input";
 export { SessionLifecycleHandler } from "./lifecycle";
-export { getEventInput, handleToolCall } from "./tool-call";
+export {
+  extractSkillNameFromInput,
+  getEventInput,
+  PermissionGateHandler,
+} from "./permission-gate-handler";
 export type {
   HandlerDeps,
   PermissionReviewSource,

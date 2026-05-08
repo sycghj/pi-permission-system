@@ -4,11 +4,11 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 
-import { handleInput } from "../../src/handlers/input";
-import type { HandlerDeps } from "../../src/handlers/types";
+import { PermissionGateHandler } from "../../src/handlers/permission-gate-handler";
 import type { PermissionDecisionEvent } from "../../src/permission-events";
 import { PERMISSIONS_DECISION_CHANNEL } from "../../src/permission-events";
 import type { PermissionSession } from "../../src/permission-session";
+import type { ToolRegistry } from "../../src/tool-registry";
 import type { PermissionState } from "../../src/types";
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -41,6 +41,7 @@ function makeCtx(overrides: Partial<ExtensionContext> = {}): ExtensionContext {
 
 function makeSession(
   state: "allow" | "deny" | "ask" = "allow",
+  overrides: Partial<Record<keyof PermissionSession, unknown>> = {},
 ): PermissionSession {
   return {
     logger: { debug: vi.fn(), review: vi.fn(), warn: vi.fn() },
@@ -56,31 +57,42 @@ function makeSession(
     getToolPermission: vi.fn().mockReturnValue("allow" as PermissionState),
     getSessionRuleset: vi.fn().mockReturnValue([]),
     approveSessionRule: vi.fn(),
+    canPrompt: vi.fn().mockReturnValue(true),
+    prompt: vi.fn().mockResolvedValue({ approved: true, state: "approved" }),
+    createPermissionRequestId: vi.fn().mockReturnValue("req-id"),
+    ...overrides,
   } as unknown as PermissionSession;
 }
 
-function makeDeps(
-  state: "allow" | "deny" | "ask" = "allow",
-  overrides: Partial<HandlerDeps> = {},
-): HandlerDeps {
+function makeToolRegistry(): ToolRegistry {
   return {
-    session: makeSession(state),
-    events: makeEvents(),
-    canRequestPermissionConfirmation: vi.fn().mockReturnValue(true),
-    promptPermission: vi
-      .fn()
-      .mockResolvedValue({ approved: true, state: "approved" }),
-    createPermissionRequestId: vi.fn().mockReturnValue("req-id"),
-    stopPermissionRpcHandlers: vi.fn(),
-    getAllTools: vi.fn().mockReturnValue([]),
-    setActiveTools: vi.fn(),
-    ...overrides,
+    getAll: vi.fn().mockReturnValue([]),
+    setActive: vi.fn(),
   };
 }
 
-function getDecisionEvents(deps: HandlerDeps): PermissionDecisionEvent[] {
-  const emitMock = (deps.events as ReturnType<typeof makeEvents>).emit;
-  return emitMock.mock.calls
+function makeHandler(
+  state: "allow" | "deny" | "ask" = "allow",
+  sessionOverrides: Partial<Record<keyof PermissionSession, unknown>> = {},
+): {
+  handler: PermissionGateHandler;
+  events: ReturnType<typeof makeEvents>;
+} {
+  const session = makeSession(state, sessionOverrides);
+  const events = makeEvents();
+  const handler = new PermissionGateHandler(
+    session,
+    events,
+    makeToolRegistry(),
+  );
+  return { handler, events };
+}
+
+/** Extract all permissions:decision payloads from the events.emit mock. */
+function getDecisionEvents(
+  events: ReturnType<typeof makeEvents>,
+): PermissionDecisionEvent[] {
+  return events.emit.mock.calls
     .filter(([channel]) => channel === PERMISSIONS_DECISION_CHANNEL)
     .map(([, payload]) => payload as PermissionDecisionEvent);
 }
@@ -89,18 +101,18 @@ function getDecisionEvents(deps: HandlerDeps): PermissionDecisionEvent[] {
 
 describe("handleInput decision events — skill gate", () => {
   it("does not emit when input is not a skill invocation", async () => {
-    const deps = makeDeps();
-    await handleInput(deps, { text: "hello world" }, makeCtx());
-    expect(getDecisionEvents(deps)).toHaveLength(0);
+    const { handler, events } = makeHandler();
+    await handler.handleInput({ text: "hello world" }, makeCtx());
+    expect(getDecisionEvents(events)).toHaveLength(0);
   });
 
   it("emits allow with policy_allow for an allowed skill", async () => {
-    const deps = makeDeps("allow");
-    await handleInput(deps, { text: "/skill:librarian" }, makeCtx());
+    const { handler, events } = makeHandler("allow");
+    await handler.handleInput({ text: "/skill:librarian" }, makeCtx());
 
-    const events = getDecisionEvents(deps);
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
+    const decisions = getDecisionEvents(events);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({
       surface: "skill",
       value: "librarian",
       result: "allow",
@@ -109,12 +121,12 @@ describe("handleInput decision events — skill gate", () => {
   });
 
   it("emits deny with policy_deny for a denied skill", async () => {
-    const deps = makeDeps("deny");
-    await handleInput(deps, { text: "/skill:restricted" }, makeCtx());
+    const { handler, events } = makeHandler("deny");
+    await handler.handleInput({ text: "/skill:restricted" }, makeCtx());
 
-    const events = getDecisionEvents(deps);
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
+    const decisions = getDecisionEvents(events);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({
       surface: "skill",
       value: "restricted",
       result: "deny",
@@ -123,16 +135,14 @@ describe("handleInput decision events — skill gate", () => {
   });
 
   it("emits allow with user_approved when state=ask and user approves", async () => {
-    const deps = makeDeps("ask", {
-      promptPermission: vi
-        .fn()
-        .mockResolvedValue({ approved: true, state: "approved" }),
+    const { handler, events } = makeHandler("ask", {
+      prompt: vi.fn().mockResolvedValue({ approved: true, state: "approved" }),
     });
-    await handleInput(deps, { text: "/skill:explorer" }, makeCtx());
+    await handler.handleInput({ text: "/skill:explorer" }, makeCtx());
 
-    const events = getDecisionEvents(deps);
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
+    const decisions = getDecisionEvents(events);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({
       surface: "skill",
       value: "explorer",
       result: "allow",
@@ -141,16 +151,14 @@ describe("handleInput decision events — skill gate", () => {
   });
 
   it("emits deny with user_denied when state=ask and user denies", async () => {
-    const deps = makeDeps("ask", {
-      promptPermission: vi
-        .fn()
-        .mockResolvedValue({ approved: false, state: "denied" }),
+    const { handler, events } = makeHandler("ask", {
+      prompt: vi.fn().mockResolvedValue({ approved: false, state: "denied" }),
     });
-    await handleInput(deps, { text: "/skill:explorer" }, makeCtx());
+    await handler.handleInput({ text: "/skill:explorer" }, makeCtx());
 
-    const events = getDecisionEvents(deps);
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
+    const decisions = getDecisionEvents(events);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({
       surface: "skill",
       value: "explorer",
       result: "deny",
@@ -159,18 +167,17 @@ describe("handleInput decision events — skill gate", () => {
   });
 
   it("emits deny with confirmation_unavailable when state=ask but no UI", async () => {
-    const deps = makeDeps("ask", {
-      canRequestPermissionConfirmation: vi.fn().mockReturnValue(false),
+    const { handler, events } = makeHandler("ask", {
+      canPrompt: vi.fn().mockReturnValue(false),
     });
-    await handleInput(
-      deps,
+    await handler.handleInput(
       { text: "/skill:explorer" },
       makeCtx({ hasUI: false }),
     );
 
-    const events = getDecisionEvents(deps);
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
+    const decisions = getDecisionEvents(events);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({
       surface: "skill",
       value: "explorer",
       result: "deny",
@@ -178,19 +185,19 @@ describe("handleInput decision events — skill gate", () => {
     });
   });
 
-  it("emits allow with auto_approved when promptPermission returns autoApproved:true", async () => {
-    const deps = makeDeps("ask", {
-      promptPermission: vi.fn().mockResolvedValue({
+  it("emits allow with auto_approved when prompt returns autoApproved:true", async () => {
+    const { handler, events } = makeHandler("ask", {
+      prompt: vi.fn().mockResolvedValue({
         approved: true,
         state: "approved",
         autoApproved: true,
       }),
     });
-    await handleInput(deps, { text: "/skill:explorer" }, makeCtx());
+    await handler.handleInput({ text: "/skill:explorer" }, makeCtx());
 
-    const events = getDecisionEvents(deps);
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
+    const decisions = getDecisionEvents(events);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({
       surface: "skill",
       value: "explorer",
       result: "allow",

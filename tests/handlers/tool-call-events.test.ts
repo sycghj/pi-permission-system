@@ -5,11 +5,11 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 
-import { handleToolCall } from "../../src/handlers/tool-call";
-import type { HandlerDeps } from "../../src/handlers/types";
+import { PermissionGateHandler } from "../../src/handlers/permission-gate-handler";
 import type { PermissionDecisionEvent } from "../../src/permission-events";
 import { PERMISSIONS_DECISION_CHANNEL } from "../../src/permission-events";
 import type { PermissionSession } from "../../src/permission-session";
+import type { ToolRegistry } from "../../src/tool-registry";
 import type { PermissionCheckResult, PermissionState } from "../../src/types";
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -83,30 +83,40 @@ function makeSession(
       .fn()
       .mockReturnValue(["/test/agent", "/test/agent/git"]),
     getInfrastructureReadPaths: vi.fn().mockReturnValue([]),
+    canPrompt: vi.fn().mockReturnValue(true),
+    prompt: vi.fn().mockResolvedValue({ approved: true, state: "approved" }),
     ...overrides,
   } as unknown as PermissionSession;
 }
 
-function makeDeps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
+function makeToolRegistry(overrides: Partial<ToolRegistry> = {}): ToolRegistry {
   return {
-    session: makeSession(),
-    events: makeEvents(),
-    canRequestPermissionConfirmation: vi.fn().mockReturnValue(true),
-    promptPermission: vi
-      .fn()
-      .mockResolvedValue({ approved: true, state: "approved" }),
-    createPermissionRequestId: vi.fn().mockReturnValue("req-id"),
-    stopPermissionRpcHandlers: vi.fn(),
-    getAllTools: vi.fn().mockReturnValue([{ name: "read" }, { name: "bash" }]),
-    setActiveTools: vi.fn(),
+    getAll: vi.fn().mockReturnValue([{ name: "read" }, { name: "bash" }]),
+    setActive: vi.fn(),
     ...overrides,
   };
 }
 
+function makeHandler(overrides?: {
+  session?: Partial<Record<keyof PermissionSession, unknown>>;
+  toolRegistry?: Partial<ToolRegistry>;
+}): {
+  handler: PermissionGateHandler;
+  events: ReturnType<typeof makeEvents>;
+  session: PermissionSession;
+} {
+  const session = makeSession(overrides?.session);
+  const events = makeEvents();
+  const toolRegistry = makeToolRegistry(overrides?.toolRegistry);
+  const handler = new PermissionGateHandler(session, events, toolRegistry);
+  return { handler, events, session };
+}
+
 /** Extract all permissions:decision payloads from the events.emit mock. */
-function getDecisionEvents(deps: HandlerDeps): PermissionDecisionEvent[] {
-  const emitMock = (deps.events as ReturnType<typeof makeEvents>).emit;
-  return emitMock.mock.calls
+function getDecisionEvents(
+  events: ReturnType<typeof makeEvents>,
+): PermissionDecisionEvent[] {
+  return events.emit.mock.calls
     .filter(([channel]) => channel === PERMISSIONS_DECISION_CHANNEL)
     .map(([, payload]) => payload as PermissionDecisionEvent);
 }
@@ -115,21 +125,22 @@ function getDecisionEvents(deps: HandlerDeps): PermissionDecisionEvent[] {
 
 describe("handleToolCall decision events — policy_allow", () => {
   it("emits allow with policy_allow when checkPermission returns allow", async () => {
-    const session = makeSession({
-      checkPermission: vi.fn().mockReturnValue(
-        makeCheckResult("allow", {
-          origin: "global",
-          matchedPattern: "*",
-        }),
-      ),
+    const { handler, events } = makeHandler({
+      session: {
+        checkPermission: vi.fn().mockReturnValue(
+          makeCheckResult("allow", {
+            origin: "global",
+            matchedPattern: "*",
+          }),
+        ),
+      },
     });
-    const deps = makeDeps({ session });
 
-    await handleToolCall(deps, makeToolCallEvent("read"), makeCtx());
+    await handler.handleToolCall(makeToolCallEvent("read"), makeCtx());
 
-    const events = getDecisionEvents(deps);
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
+    const decisions = getDecisionEvents(events);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({
       surface: "read",
       result: "allow",
       resolution: "policy_allow",
@@ -143,21 +154,22 @@ describe("handleToolCall decision events — policy_allow", () => {
 
 describe("handleToolCall decision events — policy_deny", () => {
   it("emits deny with policy_deny when checkPermission returns deny", async () => {
-    const session = makeSession({
-      checkPermission: vi.fn().mockReturnValue(
-        makeCheckResult("deny", {
-          origin: "project",
-          matchedPattern: "read",
-        }),
-      ),
+    const { handler, events } = makeHandler({
+      session: {
+        checkPermission: vi.fn().mockReturnValue(
+          makeCheckResult("deny", {
+            origin: "project",
+            matchedPattern: "read",
+          }),
+        ),
+      },
     });
-    const deps = makeDeps({ session });
 
-    await handleToolCall(deps, makeToolCallEvent("read"), makeCtx());
+    await handler.handleToolCall(makeToolCallEvent("read"), makeCtx());
 
-    const events = getDecisionEvents(deps);
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
+    const decisions = getDecisionEvents(events);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({
       surface: "read",
       result: "deny",
       resolution: "policy_deny",
@@ -169,25 +181,25 @@ describe("handleToolCall decision events — policy_deny", () => {
 
 describe("handleToolCall decision events — session_approved", () => {
   it("emits allow with session_approved when checkPermission returns source:session", async () => {
-    const session = makeSession({
-      checkPermission: vi.fn().mockReturnValue(
-        makeCheckResult("allow", {
-          source: "session",
-          matchedPattern: "git *",
-        }),
-      ),
+    const { handler, events } = makeHandler({
+      session: {
+        checkPermission: vi.fn().mockReturnValue(
+          makeCheckResult("allow", {
+            source: "session",
+            matchedPattern: "git *",
+          }),
+        ),
+      },
     });
-    const deps = makeDeps({ session });
 
-    await handleToolCall(
-      deps,
+    await handler.handleToolCall(
       makeToolCallEvent("bash", { input: { command: "git status" } }),
       makeCtx(),
     );
 
-    const events = getDecisionEvents(deps);
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
+    const decisions = getDecisionEvents(events);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({
       surface: "bash",
       result: "allow",
       resolution: "session_approved",
@@ -199,42 +211,41 @@ describe("handleToolCall decision events — session_approved", () => {
 
 describe("handleToolCall decision events — user_approved", () => {
   it("emits allow with user_approved when state=ask and user approves once", async () => {
-    const session = makeSession({
-      checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
-    });
-    const deps = makeDeps({
-      session,
-      promptPermission: vi
-        .fn()
-        .mockResolvedValue({ approved: true, state: "approved" }),
+    const { handler, events } = makeHandler({
+      session: {
+        checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
+        prompt: vi
+          .fn()
+          .mockResolvedValue({ approved: true, state: "approved" }),
+      },
     });
 
-    await handleToolCall(deps, makeToolCallEvent("read"), makeCtx());
+    await handler.handleToolCall(makeToolCallEvent("read"), makeCtx());
 
-    const events = getDecisionEvents(deps);
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
+    const decisions = getDecisionEvents(events);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({
       result: "allow",
       resolution: "user_approved",
     });
   });
 
   it("emits allow with user_approved_for_session when user approves for session", async () => {
-    const session = makeSession({
-      checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
-    });
-    const deps = makeDeps({
-      session,
-      promptPermission: vi
-        .fn()
-        .mockResolvedValue({ approved: true, state: "approved_for_session" }),
+    const { handler, events } = makeHandler({
+      session: {
+        checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
+        prompt: vi.fn().mockResolvedValue({
+          approved: true,
+          state: "approved_for_session",
+        }),
+      },
     });
 
-    await handleToolCall(deps, makeToolCallEvent("read"), makeCtx());
+    await handler.handleToolCall(makeToolCallEvent("read"), makeCtx());
 
-    const events = getDecisionEvents(deps);
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
+    const decisions = getDecisionEvents(events);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({
       result: "allow",
       resolution: "user_approved_for_session",
     });
@@ -245,21 +256,18 @@ describe("handleToolCall decision events — user_approved", () => {
 
 describe("handleToolCall decision events — user_denied", () => {
   it("emits deny with user_denied when state=ask and user denies", async () => {
-    const session = makeSession({
-      checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
-    });
-    const deps = makeDeps({
-      session,
-      promptPermission: vi
-        .fn()
-        .mockResolvedValue({ approved: false, state: "denied" }),
+    const { handler, events } = makeHandler({
+      session: {
+        checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
+        prompt: vi.fn().mockResolvedValue({ approved: false, state: "denied" }),
+      },
     });
 
-    await handleToolCall(deps, makeToolCallEvent("read"), makeCtx());
+    await handler.handleToolCall(makeToolCallEvent("read"), makeCtx());
 
-    const events = getDecisionEvents(deps);
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
+    const decisions = getDecisionEvents(events);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({
       result: "deny",
       resolution: "user_denied",
     });
@@ -270,23 +278,21 @@ describe("handleToolCall decision events — user_denied", () => {
 
 describe("handleToolCall decision events — confirmation_unavailable", () => {
   it("emits deny with confirmation_unavailable when state=ask but no UI", async () => {
-    const session = makeSession({
-      checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
-    });
-    const deps = makeDeps({
-      session,
-      canRequestPermissionConfirmation: vi.fn().mockReturnValue(false),
+    const { handler, events } = makeHandler({
+      session: {
+        checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
+        canPrompt: vi.fn().mockReturnValue(false),
+      },
     });
 
-    await handleToolCall(
-      deps,
+    await handler.handleToolCall(
       makeToolCallEvent("read"),
       makeCtx({ hasUI: false }),
     );
 
-    const events = getDecisionEvents(deps);
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
+    const decisions = getDecisionEvents(events);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({
       result: "deny",
       resolution: "confirmation_unavailable",
     });
@@ -298,19 +304,20 @@ describe("handleToolCall decision events — confirmation_unavailable", () => {
 describe("handleToolCall decision events — infrastructure_auto_allowed", () => {
   it("emits allow with infrastructure_auto_allowed for Pi infra reads", async () => {
     const infraDir = "/test/agent";
-    const session = makeSession({
-      checkPermission: vi.fn().mockReturnValue(makeCheckResult("allow")),
-      getInfrastructureDirs: vi.fn().mockReturnValue([infraDir]),
+    const { handler, events } = makeHandler({
+      session: {
+        checkPermission: vi.fn().mockReturnValue(makeCheckResult("allow")),
+        getInfrastructureDirs: vi.fn().mockReturnValue([infraDir]),
+      },
     });
-    const deps = makeDeps({ session });
 
     const event = makeToolCallEvent("read", {
       input: { path: `${infraDir}/some-file.json` },
     });
-    await handleToolCall(deps, event, makeCtx());
+    await handler.handleToolCall(event, makeCtx());
 
-    const events = getDecisionEvents(deps);
-    const infraEvents = events.filter(
+    const decisions = getDecisionEvents(events);
+    const infraEvents = decisions.filter(
       (e) => e.resolution === "infrastructure_auto_allowed",
     );
     expect(infraEvents).toHaveLength(1);
@@ -324,24 +331,23 @@ describe("handleToolCall decision events — infrastructure_auto_allowed", () =>
 // ── auto_approved path (yolo mode) ───────────────────────────────────
 
 describe("handleToolCall decision events — auto_approved", () => {
-  it("emits allow with auto_approved when promptPermission returns autoApproved:true", async () => {
-    const session = makeSession({
-      checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
-    });
-    const deps = makeDeps({
-      session,
-      promptPermission: vi.fn().mockResolvedValue({
-        approved: true,
-        state: "approved",
-        autoApproved: true,
-      }),
+  it("emits allow with auto_approved when prompt returns autoApproved:true", async () => {
+    const { handler, events } = makeHandler({
+      session: {
+        checkPermission: vi.fn().mockReturnValue(makeCheckResult("ask")),
+        prompt: vi.fn().mockResolvedValue({
+          approved: true,
+          state: "approved",
+          autoApproved: true,
+        }),
+      },
     });
 
-    await handleToolCall(deps, makeToolCallEvent("read"), makeCtx());
+    await handler.handleToolCall(makeToolCallEvent("read"), makeCtx());
 
-    const events = getDecisionEvents(deps);
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
+    const decisions = getDecisionEvents(events);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({
       result: "allow",
       resolution: "auto_approved",
     });

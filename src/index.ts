@@ -5,9 +5,7 @@ import type { PermissionForwardingDeps } from "./forwarded-permissions/polling";
 import { ForwardingManager } from "./forwarding-manager";
 import {
   AgentPrepHandler,
-  type HandlerDeps,
-  handleInput,
-  handleToolCall,
+  PermissionGateHandler,
   SessionLifecycleHandler,
 } from "./handlers";
 import { requestPermissionDecisionFromUi } from "./permission-dialog";
@@ -85,9 +83,6 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
       ),
   });
 
-  const createPermissionRequestId = (prefix: string): string =>
-    `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${process.pid}`;
-
   const rpcHandles = registerPermissionRpcHandlers(pi.events, {
     getPermissionManager: () => runtime.permissionManager,
     getSessionRules: () => runtime.sessionRules.getRuleset(),
@@ -96,34 +91,19 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
     writeReviewLog: runtime.writeReviewLog.bind(runtime),
   });
 
-  const deps: HandlerDeps = {
-    session,
-    events: pi.events,
-    canRequestPermissionConfirmation: (ctx) =>
-      canResolveAskPermissionRequest({
-        config: runtime.config,
-        hasUI: ctx.hasUI,
-        isSubagent: isSubagentExecutionContext(
-          ctx,
-          runtime.subagentSessionsDir,
-        ),
-      }),
-    promptPermission: (ctx, details) => prompter.prompt(ctx, details),
-    createPermissionRequestId,
-    stopPermissionRpcHandlers: () => {
-      rpcHandles.unsubCheck();
-      rpcHandles.unsubPrompt();
-    },
-    getAllTools: () => pi.getAllTools(),
-    setActiveTools: (names) => pi.setActiveTools(names),
-  };
-
   emitReadyEvent(pi.events);
+
+  const toolRegistry = {
+    getAll: () => pi.getAllTools(),
+    setActive: (names: string[]) => pi.setActiveTools(names),
+  };
 
   const lifecycle = new SessionLifecycleHandler(session, () => {
     rpcHandles.unsubCheck();
     rpcHandles.unsubPrompt();
   });
+  const agentPrep = new AgentPrepHandler(session, toolRegistry);
+  const gates = new PermissionGateHandler(session, pi.events, toolRegistry);
 
   pi.on("session_start", (event, ctx) =>
     lifecycle.handleSessionStart(event, ctx),
@@ -132,12 +112,7 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
     lifecycle.handleResourcesDiscover(event),
   );
   pi.on("session_shutdown", () => lifecycle.handleSessionShutdown());
-  const agentPrep = new AgentPrepHandler(session, {
-    getAll: () => pi.getAllTools(),
-    setActive: (names) => pi.setActiveTools(names),
-  });
-
   pi.on("before_agent_start", (event, ctx) => agentPrep.handle(event, ctx));
-  pi.on("input", (event, ctx) => handleInput(deps, event, ctx));
-  pi.on("tool_call", (event, ctx) => handleToolCall(deps, event, ctx));
+  pi.on("input", (event, ctx) => gates.handleInput(event, ctx));
+  pi.on("tool_call", (event, ctx) => gates.handleToolCall(event, ctx));
 }
