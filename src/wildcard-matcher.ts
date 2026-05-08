@@ -21,10 +21,17 @@ export function compileWildcardPattern<TState>(
   state: TState,
 ): CompiledWildcardPattern<TState> {
   const expanded = expandHomePath(pattern);
-  const escaped = expanded
+  let escaped = expanded
     .split("*")
     .map((part) => escapeRegExp(part))
     .join(".*");
+
+  // If the pattern ends with " *" (space + wildcard), make the trailing
+  // space-and-arguments portion optional so that e.g. "git *" matches both
+  // "git status" and bare "git". Mirrors OpenCode wildcard semantics.
+  if (escaped.endsWith(" .*")) {
+    escaped = escaped.slice(0, -3) + "( .*)?";
+  }
 
   return {
     pattern,
