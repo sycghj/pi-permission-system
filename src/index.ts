@@ -16,12 +16,11 @@ import { requestPermissionDecisionFromUi } from "./permission-dialog";
 import { registerPermissionRpcHandlers } from "./permission-event-rpc";
 import { emitReadyEvent } from "./permission-events";
 import { PermissionPrompter } from "./permission-prompter";
+import { PermissionSession } from "./permission-session";
 import {
   createExtensionRuntime,
-  createPermissionManagerForCwd,
   logResolvedConfigPaths,
   refreshExtensionConfig,
-  resolveAgentName,
   saveExtensionConfig,
 } from "./runtime";
 import { createSessionLogger } from "./session-logger";
@@ -56,6 +55,18 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
   };
 
   refreshExtensionConfig(runtime);
+
+  const session = new PermissionSession(
+    runtime,
+    createSessionLogger(runtime),
+    new ForwardingManager(runtime.subagentSessionsDir, forwardingDeps),
+    {
+      refreshExtensionConfig: (ctx) => refreshExtensionConfig(runtime, ctx),
+      logResolvedConfigPaths: () => logResolvedConfigPaths(runtime),
+      getConfig: () => runtime.config,
+    },
+  );
+
   registerPermissionSystemCommand(pi, {
     getConfig: () => runtime.config,
     setConfig: (next, ctx) => saveExtensionConfig(runtime, next, ctx),
@@ -78,18 +89,8 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
   });
 
   const deps: HandlerDeps = {
-    session: runtime,
-    logger: createSessionLogger(runtime),
-    piInfrastructureDirs: runtime.piInfrastructureDirs,
-    getPiInfrastructureReadPaths: () =>
-      runtime.config.piInfrastructureReadPaths ?? [],
+    session,
     events: pi.events,
-    createPermissionManagerForCwd: (cwd) =>
-      createPermissionManagerForCwd(runtime.agentDir, cwd),
-    refreshExtensionConfig: (ctx) => refreshExtensionConfig(runtime, ctx),
-    logResolvedConfigPaths: () => logResolvedConfigPaths(runtime),
-    resolveAgentName: (ctx, systemPrompt) =>
-      resolveAgentName(runtime, ctx, systemPrompt),
     canRequestPermissionConfirmation: (ctx) =>
       canResolveAskPermissionRequest({
         config: runtime.config,
@@ -101,10 +102,6 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
       }),
     promptPermission: (ctx, details) => prompter.prompt(ctx, details),
     createPermissionRequestId,
-    forwarding: new ForwardingManager(
-      runtime.subagentSessionsDir,
-      forwardingDeps,
-    ),
     stopPermissionRpcHandlers: () => {
       rpcHandles.unsubCheck();
       rpcHandles.unsubPrompt();

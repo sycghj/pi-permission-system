@@ -37,7 +37,23 @@ import {
   type PermissionSessionRuntimeDeps,
 } from "../src/permission-session";
 import type { SessionLogger } from "../src/session-logger";
+import type { SkillPromptEntry } from "../src/skill-prompt-sanitizer";
 import type { PermissionCheckResult } from "../src/types";
+
+function makeSkillEntry(
+  name: string,
+  overrides: Partial<SkillPromptEntry> = {},
+): SkillPromptEntry {
+  return {
+    name,
+    description: `${name} skill`,
+    location: `/${name}/SKILL.md`,
+    state: "allow",
+    normalizedLocation: `/${name}/SKILL.md`,
+    normalizedBaseDir: `/${name}`,
+    ...overrides,
+  };
+}
 
 function makePaths(overrides: Partial<ExtensionPaths> = {}): ExtensionPaths {
   return {
@@ -239,7 +255,7 @@ describe("PermissionSession", () => {
           state: "deny",
           toolName: "bash",
           source: "bash",
-          origin: "config",
+          origin: "global",
         } as PermissionCheckResult),
       });
       mockCreatePermissionManagerForCwd.mockReturnValue(pm2);
@@ -273,9 +289,7 @@ describe("PermissionSession", () => {
 
     it("clears skill entries", () => {
       const { session } = createSession();
-      session.setActiveSkillEntries([
-        { name: "test", path: "/test", content: "c" },
-      ]);
+      session.setActiveSkillEntries([makeSkillEntry("test")]);
       expect(session.getActiveSkillEntries()).toHaveLength(1);
 
       session.resetForNewSession(makeCtx());
@@ -329,7 +343,7 @@ describe("PermissionSession", () => {
 
     it("clears skill entries", () => {
       const { session } = createSession();
-      session.setActiveSkillEntries([{ name: "s", path: "/s", content: "x" }]);
+      session.setActiveSkillEntries([makeSkillEntry("s")]);
 
       session.shutdown();
 
@@ -379,10 +393,7 @@ describe("PermissionSession", () => {
   describe("skill entries", () => {
     it("get/set skill entries", () => {
       const { session } = createSession();
-      const entries = [
-        { name: "a", path: "/a", content: "x" },
-        { name: "b", path: "/b", content: "y" },
-      ];
+      const entries = [makeSkillEntry("a"), makeSkillEntry("b")];
       session.setActiveSkillEntries(entries);
       expect(session.getActiveSkillEntries()).toEqual(entries);
     });
@@ -502,7 +513,7 @@ describe("PermissionSession", () => {
       const { session } = createSession();
       session.commitActiveToolsCacheKey("k1");
       session.commitPromptStateCacheKey("k2");
-      session.setActiveSkillEntries([{ name: "s", path: "/s", content: "x" }]);
+      session.setActiveSkillEntries([makeSkillEntry("s")]);
 
       session.reload();
 
