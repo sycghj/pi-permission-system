@@ -25,15 +25,18 @@ Before locating or reading the plan, make sure the working tree is up to date wi
 
 Read the plan in full before doing anything else. If the plan has a "TDD Order" section with red→green test cycles, stop and tell the user to run `/tdd-plan` instead.
 
-## Read project rules
+## Read project rules and load skills
 
-Read `AGENTS.md`. The relevant rules for this template:
+Read `AGENTS.md` for project priorities and conventions.
+If the plan touches code: load the `code-style` skill.
+If the plan touches markdown/docs: load the `markdown-conventions` skill.
+
+Key rules:
 
 - Conventional Commits; commit at meaningful checkpoints.
-- Don't remove functionality without explicit user discussion.
-- Keep `schemas/permissions.schema.json`, `config/config.example.json`, `README.md`, and the TypeScript types/loaders aligned when any one of them changes.
+- Keep `schemas/permissions.schema.json`, `config/config.example.json`, `README.md`, and the TypeScript types/loaders aligned.
 - Default to least privilege — never weaken a permission default without an explicit goal in the plan.
-- Preserve the `/permission-system` slash command name and the `pi-permission-system:permission-request` event channel name.
+- Preserve the `/permission-system` slash command name.
 
 ## Execute the plan steps
 

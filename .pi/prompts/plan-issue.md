@@ -23,13 +23,21 @@ Before reading anything, make sure the working tree is up to date with the remot
 3. List `docs/plans/` to see numbering and style conventions (create the directory if it does not exist yet). Pick the next free `NNNN` (prefer matching the issue number when reasonable).
 4. Read every issue the body references as a prerequisite or related (`gh issue view <n>`). Note whether each is implemented yet — your plan must say what it depends on vs. defers.
 5. Open the source files most relevant to the change and skim them before writing. Common entry points: `src/permission-manager.ts`, `src/bash-filter.ts`, `src/wildcard-matcher.ts`, `src/system-prompt-sanitizer.ts`, `src/skill-prompt-sanitizer.ts`, `src/extension-config.ts`, `schemas/permissions.schema.json`, `config/config.example.json`.
-6. If the change adds a field to a shared interface, threads a parameter through multiple layers, or touches handler/event wiring, run the `design-review` skill on the affected modules before writing the plan. Incorporate any findings (wide deps, LoD violations, output arguments, scattered resets) into the Design Overview and Module-Level Changes sections.
 
 ## Decide
 
 Before writing the plan, identify any genuinely ambiguous design choices. If there are 1–2 such choices (breaking-vs-non-breaking, policy-precedence change, default-state change, on-disk-identity impact, etc.), use the `ask-user` skill once to surface them with a short context summary and concrete options. Skip this step if the issue's "Proposed change" section is unambiguous.
 
 Specifically flag for confirmation any change that renames the `/permission-system` slash command or changes a default policy state — those are breaking changes.
+
+## Load skills
+
+Before writing the plan, load skills relevant to the change:
+
+- If the plan involves code changes: load the `code-style` skill.
+- If the plan involves test changes or TDD steps: load the `testing` skill.
+- If the plan involves markdown/doc changes: load the `markdown-conventions` skill.
+- If the plan adds fields to shared interfaces or touches handler wiring: load the `design-review` skill and run its checklist on the affected modules.
 
 ## Write the plan
 
