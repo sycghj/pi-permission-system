@@ -19,6 +19,7 @@ The following concepts are shared between OpenCode and this extension:
 |Granular object syntax|Surface key → string (catch-all) or `{ pattern: action }` map|
 |Last-match-wins|When multiple patterns match, the last one in config order wins|
 |`*` wildcard|Matches zero or more of any character (including path separators)|
+|`?` wildcard|Matches exactly one character|
 |Home directory expansion|`~/` and `$HOME/` expand to the OS home directory in patterns|
 |`external_directory` surface|Gates access to paths outside the working directory|
 |`bash` surface|Command patterns matched against shell commands|
@@ -41,7 +42,6 @@ If your OpenCode config uses these features, the equivalent works in this extens
 |---|---|---|
 |Default fallback|`"*": "allow"` (permissive)|`"*": "ask"` (least privilege)|
 |`.env` file protection|Built-in `read` rules deny/ask `.env` files|No built-in rules; user configures manually|
-|`?` wildcard|Matches exactly one character|Not supported; `?` is a literal character|
 |OpenCode-only surfaces|`lsp`, `question`, `webfetch`, `websearch`, `todowrite`, `doom_loop`|Not applicable — Pi does not expose these tools or events|
 |File mutation surfaces|`edit` covers `edit`, `write`, `apply_patch`|Separate `write` and `edit` surfaces|
 |Search/discovery surfaces|`glob`, `grep`, `list`|`find`, `grep`, `ls` (Pi tool names)|
@@ -87,12 +87,6 @@ To replicate OpenCode's unified behavior, set both to the same action:
   }
 }
 ```
-
-#### `?` Wildcard
-
-OpenCode supports `?` to match exactly one character (e.g., `"file?.txt"` matches `"file1.txt"` but not `"file12.txt"`).
-This extension treats `?` as a literal character.
-Use `*` for broader matching instead.
 
 #### MCP Surface (Pi-Only)
 

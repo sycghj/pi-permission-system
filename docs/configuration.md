@@ -118,7 +118,11 @@ If a tool is not registered at runtime, this extension blocks it before permissi
 
 ### `bash` Surface
 
-Command patterns use `*` wildcards matched against the full command string.
+Command patterns use wildcards matched against the full command string:
+
+- `*` matches zero or more of any character.
+- `?` matches exactly one character.
+
 **Last matching rule wins** — put broad catch-alls first, specific overrides after.
 
 A pattern ending with `*` (space + wildcard) also matches the bare command without arguments.
@@ -187,7 +191,7 @@ permission:
 
 ### `skill` Surface
 
-Skill name patterns use `*` wildcards (note: surface is `skill`, not `skills`):
+Skill name patterns use `*` and `?` wildcards (note: surface is `skill`, not `skills`):
 
 ```jsonc
 {
