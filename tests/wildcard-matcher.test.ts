@@ -289,6 +289,53 @@ describe("wildcardMatch", () => {
   });
 });
 
+describe("? single-character wildcard", () => {
+  test("'?' matches exactly one character", () => {
+    expect(wildcardMatch("?", "a")).toBe(true);
+    expect(wildcardMatch("?", "Z")).toBe(true);
+    expect(wildcardMatch("?", "5")).toBe(true);
+  });
+
+  test("'?' does not match zero characters", () => {
+    expect(wildcardMatch("?", "")).toBe(false);
+    expect(wildcardMatch("a?", "a")).toBe(false);
+  });
+
+  test("'?' does not match two or more characters", () => {
+    expect(wildcardMatch("?", "ab")).toBe(false);
+    expect(wildcardMatch("?", "abc")).toBe(false);
+  });
+
+  test("multiple '?' match exactly that many characters", () => {
+    expect(wildcardMatch("f??", "foo")).toBe(true);
+    expect(wildcardMatch("f??", "fo")).toBe(false);
+    expect(wildcardMatch("f??", "fooo")).toBe(false);
+  });
+
+  test("'?' combined with '*'", () => {
+    // git + one char + anything
+    expect(wildcardMatch("git?*", "git status")).toBe(true);
+    // git + zero chars — '?' requires one
+    expect(wildcardMatch("git?*", "git")).toBe(false);
+  });
+
+  test("'?' matches path separators and special characters", () => {
+    expect(wildcardMatch("a?b", "a/b")).toBe(true);
+    expect(wildcardMatch("a?b", "a.b")).toBe(true);
+    expect(wildcardMatch("a?b", "a\nb")).toBe(true);
+  });
+
+  test("'?' in pattern matches literal '?' in value", () => {
+    expect(wildcardMatch("a?c", "a?c")).toBe(true);
+  });
+
+  test("'?' in bash-style patterns", () => {
+    expect(wildcardMatch("git statu?", "git status")).toBe(true);
+    expect(wildcardMatch("git statu?", "git statux")).toBe(true);
+    expect(wildcardMatch("git statu?", "git statu")).toBe(false);
+  });
+});
+
 describe("home path expansion in patterns", () => {
   test("wildcardMatch expands ~ prefix in pattern before matching", () => {
     const expandedPath = join(FAKE_HOME, "dev/project");
