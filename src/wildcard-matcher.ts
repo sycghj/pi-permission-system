@@ -23,7 +23,7 @@ export function compileWildcardPattern<TState>(
   const expanded = expandHomePath(pattern);
   let escaped = expanded
     .split("*")
-    .map((part) => escapeRegExp(part))
+    .map((part) => escapeRegExp(part).replaceAll("\\?", "."))
     .join(".*");
 
   // If the pattern ends with " *" (space + wildcard), make the trailing
@@ -69,7 +69,8 @@ export function findCompiledWildcardMatch<TState>(
 
 /**
  * Test whether `value` matches `pattern` using wildcard rules.
- * `*` in the pattern matches any sequence of characters (including empty).
+ * `*` matches any sequence of characters (including empty).
+ * `?` matches exactly one character.
  * Used by evaluate() for rule matching.
  */
 export function wildcardMatch(pattern: string, value: string): boolean {
