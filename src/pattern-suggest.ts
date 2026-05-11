@@ -57,8 +57,12 @@ export function suggestMcpPattern(target: string): string {
   return "*";
 }
 
-function buildLabel(pattern: string): string {
-  return `Yes, allow "${pattern}" for this session`;
+function buildLabel(pattern: string, surface?: string): string {
+  // When the pattern is a bare wildcard, show the surface name instead so
+  // the user sees e.g. 'Yes, allow "find" for this session' rather than
+  // the confusing 'Yes, allow "*" for this session'.
+  const display = pattern === "*" && surface ? surface : pattern;
+  return `Yes, allow "${display}" for this session`;
 }
 
 /**
@@ -92,5 +96,5 @@ export function suggestSessionPattern(
       break;
   }
 
-  return { surface, pattern, label: buildLabel(pattern) };
+  return { surface, pattern, label: buildLabel(pattern, surface) };
 }

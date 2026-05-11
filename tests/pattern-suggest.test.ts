@@ -136,6 +136,11 @@ describe("suggestSessionPattern", () => {
       const result = suggestSessionPattern("edit", "*");
       expect(result).toMatchObject({ surface: "edit", pattern: "*" });
     });
+
+    it("label shows tool name instead of bare wildcard", () => {
+      const result = suggestSessionPattern("find", "*");
+      expect(result.label).toBe('Yes, allow "find" for this session');
+    });
   });
 
   describe("label field", () => {
