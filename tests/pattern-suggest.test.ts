@@ -139,25 +139,43 @@ describe("suggestSessionPattern", () => {
 
     it("label shows tool name instead of bare wildcard", () => {
       const result = suggestSessionPattern("find", "*");
-      expect(result.label).toBe('Yes, allow "find" for this session');
+      expect(result.label).toBe('Yes, allow tool "find" for this session');
     });
   });
 
   describe("label field", () => {
-    it("includes the suggested pattern in the label", () => {
-      // git arity=2, "git status" has 2 tokens → trailing wildcard.
+    it("bash label includes surface prefix and pattern", () => {
       const result = suggestSessionPattern("bash", "git status");
-      expect(result.label).toContain("git status*");
+      expect(result.label).toBe(
+        'Yes, allow bash "git status*" for this session',
+      );
     });
 
-    it("wraps the pattern in quotes in the label", () => {
+    it("mcp label includes surface prefix and pattern", () => {
       const result = suggestSessionPattern("mcp", "exa:search");
-      expect(result.label).toContain('"exa:*"');
+      expect(result.label).toBe('Yes, allow mcp tool "exa:*" for this session');
     });
 
-    it("label reads as a natural session-approval option", () => {
+    it("skill label includes surface prefix", () => {
       const result = suggestSessionPattern("skill", "librarian");
-      expect(result.label).toBe('Yes, allow "librarian" for this session');
+      expect(result.label).toBe(
+        'Yes, allow skill "librarian" for this session',
+      );
+    });
+
+    it("external_directory label includes surface prefix", () => {
+      const result = suggestSessionPattern(
+        "external_directory",
+        "/tmp/foo.txt",
+      );
+      expect(result.label).toBe(
+        'Yes, allow access to external directory "/tmp/*" for this session',
+      );
+    });
+
+    it("tool label shows tool name, not wildcard pattern", () => {
+      const result = suggestSessionPattern("edit", "*");
+      expect(result.label).toBe('Yes, allow tool "edit" for this session');
     });
   });
 });

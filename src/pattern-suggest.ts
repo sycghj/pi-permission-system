@@ -57,12 +57,21 @@ export function suggestMcpPattern(target: string): string {
   return "*";
 }
 
-function buildLabel(pattern: string, surface?: string): string {
-  // When the pattern is a bare wildcard, show the surface name instead so
-  // the user sees e.g. 'Yes, allow "find" for this session' rather than
-  // the confusing 'Yes, allow "*" for this session'.
-  const display = pattern === "*" && surface ? surface : pattern;
-  return `Yes, allow "${display}" for this session`;
+/** Surface-aware human-readable labels for the session-approval option. */
+function buildLabel(pattern: string, surface: string): string {
+  switch (surface) {
+    case "bash":
+      return `Yes, allow bash "${pattern}" for this session`;
+    case "mcp":
+      return `Yes, allow mcp tool "${pattern}" for this session`;
+    case "skill":
+      return `Yes, allow skill "${pattern}" for this session`;
+    case "external_directory":
+      return `Yes, allow access to external directory "${pattern}" for this session`;
+    default:
+      // Tool surfaces (read, write, edit, grep, find, ls, extension tools)
+      return `Yes, allow tool "${surface}" for this session`;
+  }
 }
 
 /**
