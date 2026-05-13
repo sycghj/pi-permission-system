@@ -294,6 +294,67 @@ describe("external_directory policy state — allow", () => {
   });
 });
 
+// #144: allow external reads, gate external writes
+describe("external_directory — allow external reads, gate external writes (#144)", () => {
+  it("allows read of external path when external_directory and read are both allow", async () => {
+    const { handler } = makeHandler({
+      session: { checkPermission: makeCheckPermission("allow", "allow") },
+    });
+    const event = makeToolCallEvent("read", { path: EXTERNAL_PATH });
+    const result = await handler.handleToolCall(event, makeCtx());
+    expect(result).toEqual({});
+  });
+
+  it("prompts for write to external path when external_directory allows but write is ask", async () => {
+    const prompt = vi
+      .fn()
+      .mockResolvedValue({ approved: true, state: "approved" });
+    const { handler } = makeHandler({
+      session: {
+        checkPermission: makeCheckPermission("allow", "ask"),
+        prompt,
+      },
+    });
+    const event = makeToolCallEvent("write", { path: EXTERNAL_PATH });
+    const result = await handler.handleToolCall(event, makeCtx());
+    // external_directory passes; write gate prompts and user approves
+    expect(result).toEqual({});
+    expect(prompt).toHaveBeenCalledOnce();
+  });
+
+  it("blocks write to external path when external_directory allows but write is deny", async () => {
+    const { handler } = makeHandler({
+      session: { checkPermission: makeCheckPermission("allow", "deny") },
+    });
+    const event = makeToolCallEvent("write", { path: EXTERNAL_PATH });
+    const result = await handler.handleToolCall(event, makeCtx());
+    expect(result.block).toBe(true);
+  });
+
+  it("emits separate decision events for external_directory and write surfaces", async () => {
+    const { handler, events } = makeHandler({
+      session: { checkPermission: makeCheckPermission("allow", "deny") },
+    });
+    const event = makeToolCallEvent("write", { path: EXTERNAL_PATH });
+    await handler.handleToolCall(event, makeCtx());
+    const decisions = getDecisionEvents(events);
+    const extDirDecision = decisions.find(
+      (d) => d.surface === "external_directory",
+    );
+    const writeDecision = decisions.find((d) => d.surface === "write");
+    expect(extDirDecision).toMatchObject({
+      surface: "external_directory",
+      result: "allow",
+      resolution: "policy_allow",
+    });
+    expect(writeDecision).toMatchObject({
+      surface: "write",
+      result: "deny",
+      resolution: "policy_deny",
+    });
+  });
+});
+
 describe("external_directory policy state — deny", () => {
   it("blocks with reason containing the external path", async () => {
     const { handler } = makeHandler({
