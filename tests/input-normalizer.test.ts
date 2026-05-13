@@ -71,21 +71,58 @@ describe("normalizeInput — non-MCP surfaces", () => {
     });
   });
 
-  describe("tool surfaces (read, write, edit, grep, find, ls, extension tools)", () => {
-    it("uses '*' as the lookup value for built-in tools", () => {
+  describe("path-bearing tools (read, write, edit, grep, find, ls)", () => {
+    it("uses input.path as the lookup value when path is present", () => {
       for (const tool of ["read", "write", "edit", "grep", "find", "ls"]) {
-        const result = normalizeInput(tool, {}, []);
+        const result = normalizeInput(
+          tool,
+          { path: "/project/src/main.ts" },
+          [],
+        );
         expect(result.surface).toBe(tool);
-        expect(result.values).toEqual(["*"]);
+        expect(result.values).toEqual(["/project/src/main.ts"]);
         expect(result.resultExtras).toEqual({});
       }
     });
 
+    it("falls back to '*' when input.path is missing", () => {
+      for (const tool of ["read", "write", "edit", "grep", "find", "ls"]) {
+        const result = normalizeInput(tool, {}, []);
+        expect(result.values).toEqual(["*"]);
+      }
+    });
+
+    it("falls back to '*' when input.path is empty string", () => {
+      const result = normalizeInput("read", { path: "" }, []);
+      expect(result.values).toEqual(["*"]);
+    });
+
+    it("falls back to '*' when input.path is not a string", () => {
+      const result = normalizeInput("write", { path: 42 }, []);
+      expect(result.values).toEqual(["*"]);
+    });
+
+    it("falls back to '*' when input is null", () => {
+      const result = normalizeInput("edit", null, []);
+      expect(result.values).toEqual(["*"]);
+    });
+  });
+
+  describe("extension tools (non-path-bearing)", () => {
     it("uses '*' as the lookup value for extension tools", () => {
       const result = normalizeInput("my_extension_tool", { some: "input" }, []);
       expect(result.surface).toBe("my_extension_tool");
       expect(result.values).toEqual(["*"]);
       expect(result.resultExtras).toEqual({});
+    });
+
+    it("uses '*' even when extension tool has a path field", () => {
+      const result = normalizeInput(
+        "my_extension_tool",
+        { path: "/some/path" },
+        [],
+      );
+      expect(result.values).toEqual(["*"]);
     });
   });
 });
