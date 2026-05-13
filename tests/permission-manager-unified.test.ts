@@ -980,3 +980,134 @@ describe("PermissionManager with in-memory PolicyLoader", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Per-tool path patterns (#147)
+// ---------------------------------------------------------------------------
+
+describe("checkPermission — per-tool path patterns", () => {
+  it("denies read of .env when path pattern matches", () => {
+    const { manager, cleanup } = makeManagerWithConfig({
+      read: { "*": "allow", "*.env": "deny" },
+    });
+    try {
+      const result = manager.checkPermission("read", { path: ".env" });
+      expect(result.state).toBe("deny");
+      expect(result.matchedPattern).toBe("*.env");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("allows read of non-.env file when .env is denied", () => {
+    const { manager, cleanup } = makeManagerWithConfig({
+      read: { "*": "allow", "*.env": "deny" },
+    });
+    try {
+      const result = manager.checkPermission("read", {
+        path: "src/main.ts",
+      });
+      expect(result.state).toBe("allow");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("allows write to src/ when only src/ is allowed", () => {
+    const { manager, cleanup } = makeManagerWithConfig({
+      write: { "*": "deny", "src/*": "allow" },
+    });
+    try {
+      const result = manager.checkPermission("write", {
+        path: "src/main.ts",
+      });
+      expect(result.state).toBe("allow");
+      expect(result.matchedPattern).toBe("src/*");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("denies write outside src/ when only src/ is allowed", () => {
+    const { manager, cleanup } = makeManagerWithConfig({
+      write: { "*": "deny", "src/*": "allow" },
+    });
+    try {
+      const result = manager.checkPermission("write", {
+        path: "vendor/lib.ts",
+      });
+      expect(result.state).toBe("deny");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("backward compat: 'read': 'allow' allows read of any path", () => {
+    const { manager, cleanup } = makeManagerWithConfig({
+      read: "allow",
+    });
+    try {
+      const result = manager.checkPermission("read", { path: ".env" });
+      expect(result.state).toBe("allow");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("backward compat: 'read': 'deny' denies read of any path", () => {
+    const { manager, cleanup } = makeManagerWithConfig({
+      read: "deny",
+    });
+    try {
+      const result = manager.checkPermission("read", {
+        path: "src/main.ts",
+      });
+      expect(result.state).toBe("deny");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("session rule for specific path overrides config deny", () => {
+    const { manager, cleanup } = makeManagerWithConfig({
+      read: { "*": "allow", "*.env": "deny" },
+    });
+    try {
+      const sessionRules: Ruleset = [sessionAllow("read", ".env")];
+      const result = manager.checkPermission(
+        "read",
+        { path: ".env" },
+        undefined,
+        sessionRules,
+      );
+      expect(result.state).toBe("allow");
+      expect(result.source).toBe("session");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("falls back to '*' when input.path is missing", () => {
+    const { manager, cleanup } = makeManagerWithConfig({
+      read: { "*": "allow", "*.env": "deny" },
+    });
+    try {
+      const result = manager.checkPermission("read", {});
+      expect(result.state).toBe("allow");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("getToolPermission still returns surface-level state (not path-specific)", () => {
+    const { manager, cleanup } = makeManagerWithConfig({
+      read: { "*": "allow", "*.env": "deny" },
+    });
+    try {
+      const toolState = manager.getToolPermission("read");
+      expect(toolState).toBe("allow");
+    } finally {
+      cleanup();
+    }
+  });
+});
