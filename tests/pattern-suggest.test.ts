@@ -121,25 +121,48 @@ describe("suggestSessionPattern", () => {
     });
   });
 
-  describe("tool surfaces", () => {
-    it("returns * for read surface", () => {
+  describe("path-bearing tool surfaces", () => {
+    it("returns directory-scoped pattern for read with a file path", () => {
+      const result = suggestSessionPattern("read", "/outside/project/file.ts");
+      expect(result).toMatchObject({
+        surface: "read",
+        pattern: "/outside/project/*",
+      });
+    });
+
+    it("returns directory-scoped pattern for write with a file path", () => {
+      const result = suggestSessionPattern("write", "src/main.ts");
+      expect(result).toMatchObject({
+        surface: "write",
+        pattern: "src/*",
+      });
+    });
+
+    it("returns * when value is '*' (fallback)", () => {
       const result = suggestSessionPattern("read", "*");
       expect(result).toMatchObject({ surface: "read", pattern: "*" });
     });
 
-    it("returns * for write surface", () => {
-      const result = suggestSessionPattern("write", "*");
-      expect(result).toMatchObject({ surface: "write", pattern: "*" });
+    it("label includes the path pattern for path-bearing tools", () => {
+      const result = suggestSessionPattern("read", "/tmp/data/file.txt");
+      expect(result.label).toBe(
+        'Yes, allow read "/tmp/data/*" for this session',
+      );
     });
 
-    it("returns * for edit surface", () => {
-      const result = suggestSessionPattern("edit", "*");
-      expect(result).toMatchObject({ surface: "edit", pattern: "*" });
-    });
-
-    it("label shows tool name instead of bare wildcard", () => {
+    it("label shows tool name when pattern is *", () => {
       const result = suggestSessionPattern("find", "*");
       expect(result.label).toBe('Yes, allow tool "find" for this session');
+    });
+  });
+
+  describe("non-path-bearing tool surfaces", () => {
+    it("returns * for extension tools", () => {
+      const result = suggestSessionPattern("my_extension_tool", "*");
+      expect(result).toMatchObject({
+        surface: "my_extension_tool",
+        pattern: "*",
+      });
     });
   });
 
@@ -173,7 +196,12 @@ describe("suggestSessionPattern", () => {
       );
     });
 
-    it("tool label shows tool name, not wildcard pattern", () => {
+    it("path-bearing tool label includes path pattern", () => {
+      const result = suggestSessionPattern("edit", "src/file.ts");
+      expect(result.label).toBe('Yes, allow edit "src/*" for this session');
+    });
+
+    it("tool label shows tool name when value is *", () => {
       const result = suggestSessionPattern("edit", "*");
       expect(result.label).toBe('Yes, allow tool "edit" for this session');
     });

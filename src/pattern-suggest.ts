@@ -1,4 +1,5 @@
 import { prefix } from "./bash-arity";
+import { PATH_BEARING_TOOLS } from "./path-utils";
 import { deriveApprovalPattern } from "./session-rules";
 
 /** The suggestion returned for a "Yes, for this session" dialog option. */
@@ -69,7 +70,11 @@ function buildLabel(pattern: string, surface: string): string {
     case "external_directory":
       return `Yes, allow access to external directory "${pattern}" for this session`;
     default:
-      // Tool surfaces (read, write, edit, grep, find, ls, extension tools)
+      // Path-bearing tools with a specific path pattern show the pattern.
+      if (PATH_BEARING_TOOLS.has(surface) && pattern !== "*") {
+        return `Yes, allow ${surface} "${pattern}" for this session`;
+      }
+      // Tool surfaces with catch-all or extension tools.
       return `Yes, allow tool "${surface}" for this session`;
   }
 }
@@ -100,7 +105,12 @@ export function suggestSessionPattern(
       pattern = deriveApprovalPattern(value);
       break;
     default:
-      // Tool surfaces (read, write, edit, grep, find, ls, extension tools)
+      // Path-bearing tools: derive a directory-scoped pattern from the path.
+      if (PATH_BEARING_TOOLS.has(surface) && value !== "*") {
+        pattern = deriveApprovalPattern(value);
+        break;
+      }
+      // Extension tools / fallback.
       pattern = "*";
       break;
   }

@@ -1,4 +1,4 @@
-import { PATH_BEARING_TOOLS } from "../../path-utils";
+import { getPathBearingToolPath, PATH_BEARING_TOOLS } from "../../path-utils";
 import { suggestSessionPattern } from "../../pattern-suggest";
 import {
   formatAskPrompt,
@@ -33,7 +33,7 @@ export function describeToolGate(
       ? (check.command ?? "")
       : tcc.toolName === "mcp"
         ? (check.target ?? "mcp")
-        : "*";
+        : (getPathBearingToolPath(tcc.toolName, tcc.input) ?? "*");
   const suggestion = suggestSessionPattern(tcc.toolName, suggestionValue);
 
   // Build the unavailable-reason message. Bash gets the command embedded.
