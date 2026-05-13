@@ -61,6 +61,23 @@ The `permission` object uses deep-shallow merge; scalar fields use simple replac
 - When adding an optional field to `PermissionSystemExtensionConfig`, do not include it in `DEFAULT_EXTENSION_CONFIG` with an explicit `undefined` value — tests use `deepEqual` and it breaks equality.
 - After a breaking config format change, verify the user's live global config is compatible before committing.
 
+## Cross-Extension Integration
+
+Pi's extension loader ([loader.ts](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/core/extensions/loader.ts)) creates a fresh jiti instance per extension with `moduleCache: false`.
+Module-scoped state is isolated — a variable set in this extension's module is invisible to other extensions, and vice versa.
+
+The shared communication channels are:
+
+- **`pi.events`** (the event bus) — explicitly shared by the loader across all extensions. Use for fire-and-forget broadcasts (`permissions:decision`) and RPC (`permissions:rpc:check`, `permissions:rpc:prompt`).
+- **`globalThis` + `Symbol.for()`** — process-global by spec, survives jiti isolation. Use for direct service access (#145). [tintinweb/pi-subagents](https://github.com/tintinweb/pi-subagents) established this pattern.
+
+Dynamic `import("@gotgenes/pi-permission-system")` from another extension loads a fresh module copy — it will not see this extension's runtime state unless that state is stored on `globalThis` via `Symbol.for()`.
+
+The package currently has no npm-importable entry point (`main`, `module`, or `exports` in `package.json`) — only the `pi.extensions` key for Pi's loader.
+Adding an `exports` field is tracked in #145.
+
+Do not propose module-scoped singletons or Node.js module-cache sharing as a cross-extension communication mechanism — they do not work under jiti.
+
 ## Debugging
 
 When investigating a reported bug in this extension:
@@ -102,3 +119,4 @@ Tests reveal consumption ergonomics: mock depth, irrelevant fields, cast gymnast
 When planning a refactoring that touches handler wiring or shared interfaces, load the `design-review` skill to audit for structural smells before writing the plan.
 
 When a plan depends on Node.js module resolution or filesystem layout varying by environment, verify the strategy empirically with a disposable script before committing.
+For cross-extension module sharing specifically, see the "Cross-Extension Integration" section — jiti isolates module state.
