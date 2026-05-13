@@ -26,9 +26,22 @@ describe("deriveDecisionValue", () => {
     expect(deriveDecisionValue("mcp", {})).toBe("mcp");
   });
 
-  it("returns toolName for other tools", () => {
+  it("returns toolName for non-path-bearing tools", () => {
+    expect(deriveDecisionValue("my_extension_tool", {})).toBe(
+      "my_extension_tool",
+    );
+  });
+
+  it("returns path for path-bearing tools when path is provided", () => {
+    expect(deriveDecisionValue("read", {}, "/project/src/main.ts")).toBe(
+      "/project/src/main.ts",
+    );
+    expect(deriveDecisionValue("write", {}, "src/.env")).toBe("src/.env");
+  });
+
+  it("falls back to toolName for path-bearing tools when path is missing", () => {
     expect(deriveDecisionValue("read", {})).toBe("read");
-    expect(deriveDecisionValue("write", { command: "ignored" })).toBe("write");
+    expect(deriveDecisionValue("write", {}, undefined)).toBe("write");
   });
 });
 

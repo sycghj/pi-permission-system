@@ -3,14 +3,17 @@ import type { PermissionCheckResult } from "../../types";
 
 /**
  * Derive the human-readable value for a decision event from a check result.
- * Bash → extracted command; MCP → qualified target; others → tool name.
+ * Bash → extracted command; MCP → qualified target;
+ * path-bearing tools → file path; others → tool name.
  */
 export function deriveDecisionValue(
   toolName: string,
   check: Pick<PermissionCheckResult, "command" | "target">,
+  path?: string,
 ): string {
   if (toolName === "bash") return check.command ?? toolName;
   if (toolName === "mcp") return check.target ?? toolName;
+  if (path) return path;
   return toolName;
 }
 

@@ -85,7 +85,11 @@ export function describeToolGate(
     },
     decision: {
       surface: tcc.toolName,
-      value: deriveDecisionValue(tcc.toolName, check),
+      value: deriveDecisionValue(
+        tcc.toolName,
+        check,
+        getPathBearingToolPath(tcc.toolName, tcc.input) ?? undefined,
+      ),
     },
   };
 }
