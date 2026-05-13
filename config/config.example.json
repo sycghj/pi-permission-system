@@ -9,7 +9,12 @@
 
   "permission": {
     "*": "ask",
-    "read": "allow",
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow"
+    },
     "write": "deny",
     "bash": {
       "*": "ask",

@@ -47,7 +47,12 @@ Scalar fields (`debugLog`, `permissionReviewLog`, `yoloMode`) use simple replace
   // Flat permission policy
   "permission": {
     "*": "ask",                              // universal fallback
-    "read": "allow",
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow"
+    },
     "write": "deny",
     "bash": { "git status": "allow", "git *": "ask" },
     "mcp": { "mcp_status": "allow" },
@@ -115,6 +120,38 @@ A string value is a catch-all for that surface.
 
 Unknown or absent tools are not required in the config.
 If a tool is not registered at runtime, this extension blocks it before permission checks run.
+
+#### Path Patterns for File Tools
+
+For path-bearing tools (`read`, `write`, `edit`, `find`, `grep`, `ls`), an object value maps file-path patterns to actions.
+Patterns are matched against `input.path` using the same last-match-wins wildcard semantics as bash command patterns.
+
+```jsonc
+{
+  "permission": {
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow"
+    },
+    "write": {
+      "*": "deny",
+      "src/**": "allow",
+      "tests/**": "allow"
+    },
+    "edit": {
+      "*": "ask",
+      "*.lock": "deny"
+    }
+  }
+}
+```
+
+String shorthand is still supported and behaves identically — `"read": "allow"` is equivalent to `"read": { "*": "allow" }`, which permits reads of any path.
+
+Tool injection at agent start is unaffected: a config like `"read": { "*": "allow", "*.env": "deny" }` still exposes the `read` tool to the agent.
+Only specific paths are restricted at call time.
 
 ### `bash` Surface
 
@@ -304,6 +341,26 @@ Avoid arrays, multi-line scalars, and YAML anchors.
 ---
 
 ## Common Recipes
+
+### Protect Sensitive Files
+
+```jsonc
+{
+  "permission": {
+    "*": "ask",
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow"
+    },
+    "write": {
+      "*": "ask",
+      "*.lock": "deny"
+    }
+  }
+}
+```
 
 ### Read-Only Mode
 

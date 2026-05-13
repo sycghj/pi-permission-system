@@ -263,6 +263,13 @@ The evaluation function is unchanged - MCP just calls it multiple times with dif
 MCP target derivation helpers live in `src/mcp-targets.ts`.
 Input normalization for all surfaces lives in `src/input-normalizer.ts`.
 
+### Path-bearing tool normalization
+
+For path-bearing tools (`read`, `write`, `edit`, `find`, `grep`, `ls`), `normalizeInput` returns the file path from `input.path` as the match value instead of `"*"`.
+This enables per-tool path patterns: `"read": { "*": "allow", "*.env": "deny" }` denies reads of `.env` files while allowing everything else.
+When `input.path` is missing or empty, the value falls back to `"*"` (surface-level catch-all), preserving backward compatibility.
+`getToolPermission()` is unaffected — it always evaluates with `"*"` to determine whether to inject the tool at agent start.
+
 ## Session approvals: the cache-miss model
 
 Session rules are stored as `Ruleset` and are generalized to all surfaces.

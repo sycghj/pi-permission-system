@@ -34,6 +34,12 @@ pi install npm:@gotgenes/pi-permission-system
     {
       "permission": {
         "*": "allow",
+        "read": {
+          "*": "allow",
+          "*.env": "deny",
+          "*.env.*": "deny",
+          "*.env.example": "allow"
+        },
         "bash": {
           "rm -rf *": "deny",
           "sudo *": "ask"
@@ -55,6 +61,9 @@ All permissions use one of three states:
 
 When the dialog prompts, you can approve once or approve a pattern for the rest of the session.
 See [docs/session-approvals.md](docs/session-approvals.md) for details on session-scoped rules and pattern suggestions.
+
+For path-bearing tools (`read`, `write`, `edit`, `find`, `grep`, `ls`), patterns in the permission map are matched against the file path from `input.path`.
+This lets you express rules like "allow reads but deny `.env` files" — see the example config above.
 
 ## Configuration
 

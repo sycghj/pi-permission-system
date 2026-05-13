@@ -41,7 +41,7 @@ If your OpenCode config uses these features, the equivalent works in this extens
 |Area|OpenCode|This extension|
 |---|---|---|
 |Default fallback|`"*": "allow"` (permissive)|`"*": "ask"` (least privilege)|
-|`.env` file protection|Built-in `read` rules deny/ask `.env` files|No built-in rules; user configures manually|
+|`.env` file protection|Built-in `read` rules deny/ask `.env` files|No built-in rules; user configures with per-tool path patterns (see [porting guide](#porting-an-opencode-config))|
 |OpenCode-only surfaces|`lsp`, `question`, `webfetch`, `websearch`, `todowrite`, `doom_loop`|Not applicable — Pi does not expose these tools or events|
 |File mutation surfaces|`edit` covers `edit`, `write`, `apply_patch`|Separate `write` and `edit` surfaces|
 |Search/discovery surfaces|`glob`, `grep`, `list`|`find`, `grep`, `ls` (Pi tool names)|

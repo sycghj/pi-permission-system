@@ -12,6 +12,21 @@ import { deriveDecisionValue } from "./helpers";
 import type { ToolCallContext } from "./types";
 
 /**
+ * Derive the value used for session-approval pattern suggestions.
+ *
+ * Bash → command string; MCP → qualified target;
+ * path-bearing tools → file path; others → catch-all wildcard.
+ */
+function deriveSuggestionValue(
+  tcc: ToolCallContext,
+  check: PermissionCheckResult,
+): string {
+  if (tcc.toolName === "bash") return check.command ?? "";
+  if (tcc.toolName === "mcp") return check.target ?? "mcp";
+  return getPathBearingToolPath(tcc.toolName, tcc.input) ?? "*";
+}
+
+/**
  * Build a pure descriptor for the normal tool permission gate.
  *
  * Takes a pre-computed PermissionCheckResult (from checkPermission) and
@@ -28,13 +43,10 @@ export function describeToolGate(
   );
 
   // Compute session approval suggestion for the "for this session" option.
-  const suggestionValue =
-    tcc.toolName === "bash"
-      ? (check.command ?? "")
-      : tcc.toolName === "mcp"
-        ? (check.target ?? "mcp")
-        : (getPathBearingToolPath(tcc.toolName, tcc.input) ?? "*");
-  const suggestion = suggestSessionPattern(tcc.toolName, suggestionValue);
+  const suggestion = suggestSessionPattern(
+    tcc.toolName,
+    deriveSuggestionValue(tcc, check),
+  );
 
   // Build the unavailable-reason message. Bash gets the command embedded.
   const inputCommand =
