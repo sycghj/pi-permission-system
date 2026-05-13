@@ -1,5 +1,6 @@
 import { toRecord } from "./common";
 import { createMcpPermissionTargets } from "./mcp-targets";
+import { getPathBearingToolPath, PATH_BEARING_TOOLS } from "./path-utils";
 
 /**
  * Surface-normalized representation of a tool invocation used by
@@ -85,7 +86,17 @@ export function normalizeInput(
     };
   }
 
-  // --- Tool surfaces (read, write, edit, grep, find, ls, extension tools) ---
+  // --- Path-bearing tools (read, write, edit, grep, find, ls) ---
+  if (PATH_BEARING_TOOLS.has(toolName)) {
+    const path = getPathBearingToolPath(toolName, input);
+    return {
+      surface: toolName,
+      values: [path ?? "*"],
+      resultExtras: {},
+    };
+  }
+
+  // --- Extension tools (non-path-bearing) ---
   return {
     surface: toolName,
     values: ["*"],
