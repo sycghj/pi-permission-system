@@ -8,6 +8,7 @@ export type {
 export { isGateBypass, isGateDescriptor } from "./descriptor";
 export { describeExternalDirectoryGate } from "./external-directory";
 export { deriveDecisionValue, deriveResolution } from "./helpers";
+export { describePathGate } from "./path";
 export { runGateCheck } from "./runner";
 export { describeSkillReadGate } from "./skill-read";
 export { describeToolGate } from "./tool";
