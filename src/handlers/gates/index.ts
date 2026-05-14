@@ -1,4 +1,5 @@
 export { describeBashExternalDirectoryGate } from "./bash-external-directory";
+export { describeBashPathGate } from "./bash-path";
 export type {
   GateBypass,
   GateDescriptor,
