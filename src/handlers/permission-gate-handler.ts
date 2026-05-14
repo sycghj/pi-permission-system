@@ -22,9 +22,11 @@ import {
   type ToolRegistry,
 } from "../tool-registry";
 import { describeBashExternalDirectoryGate } from "./gates/bash-external-directory";
+import { describeBashPathGate } from "./gates/bash-path";
 import type { GateRunnerDeps } from "./gates/descriptor";
 import { isGateBypass } from "./gates/descriptor";
 import { describeExternalDirectoryGate } from "./gates/external-directory";
+import { describePathGate } from "./gates/path";
 import { runGateCheck } from "./gates/runner";
 import { describeSkillReadGate } from "./gates/skill-read";
 import { describeToolGate } from "./gates/tool";
@@ -140,6 +142,26 @@ export class PermissionGateHandler {
       }
     }
 
+    // ── Path gate for tools (descriptor + runner) ────────────────────────────
+    const pathDesc = describePathGate(tcc, checkPermission);
+    if (pathDesc) {
+      if (isGateBypass(pathDesc)) {
+        if (pathDesc.log) {
+          writeReviewLog(pathDesc.log.event, pathDesc.log.details);
+        }
+      } else {
+        const pathResult = await runGateCheck(
+          pathDesc,
+          tcc.agentName,
+          tcc.toolCallId,
+          runnerDeps,
+        );
+        if (pathResult.action === "block") {
+          return { block: true, reason: pathResult.reason };
+        }
+      }
+    }
+
     // ── External-directory gate (descriptor + runner) ────────────────────────
     const infraDirs = [
       ...session.getInfrastructureDirs(),
@@ -187,6 +209,30 @@ export class PermissionGateHandler {
         );
         if (bashExtResult.action === "block") {
           return { block: true, reason: bashExtResult.reason };
+        }
+      }
+    }
+
+    // ── Bash path gate (descriptor + runner) ────────────────────────────────
+    const bashPathDesc = await describeBashPathGate(
+      tcc,
+      checkPermission,
+      getSessionRuleset,
+    );
+    if (bashPathDesc) {
+      if (isGateBypass(bashPathDesc)) {
+        if (bashPathDesc.log) {
+          writeReviewLog(bashPathDesc.log.event, bashPathDesc.log.details);
+        }
+      } else {
+        const bashPathResult = await runGateCheck(
+          bashPathDesc,
+          tcc.agentName,
+          tcc.toolCallId,
+          runnerDeps,
+        );
+        if (bashPathResult.action === "block") {
+          return { block: true, reason: bashPathResult.reason };
         }
       }
     }

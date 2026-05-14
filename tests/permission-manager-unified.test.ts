@@ -1111,3 +1111,101 @@ describe("checkPermission — per-tool path patterns", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Cross-cutting path surface (#148)
+// ---------------------------------------------------------------------------
+
+describe("cross-cutting path surface", () => {
+  it("denies .env via the path surface", () => {
+    const { manager, cleanup } = makeManagerWithConfig({
+      path: { "*": "allow", "*.env": "deny" },
+      read: "allow",
+    });
+    try {
+      const result = manager.checkPermission("path", { path: ".env" });
+      expect(result.state).toBe("deny");
+      expect(result.matchedPattern).toBe("*.env");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("allows non-matching paths via the path surface", () => {
+    const { manager, cleanup } = makeManagerWithConfig({
+      path: { "*": "allow", "*.env": "deny" },
+      read: "allow",
+    });
+    try {
+      const result = manager.checkPermission("path", { path: "README.md" });
+      expect(result.state).toBe("allow");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("path surface does not interfere with per-tool rules", () => {
+    const { manager, cleanup } = makeManagerWithConfig({
+      path: { "*": "allow" },
+      read: { "*": "allow", "*.secret": "deny" },
+    });
+    try {
+      // path surface allows, per-tool denies
+      const readResult = manager.checkPermission("read", {
+        path: "data.secret",
+      });
+      expect(readResult.state).toBe("deny");
+      // path surface also allows
+      const pathResult = manager.checkPermission("path", {
+        path: "data.secret",
+      });
+      expect(pathResult.state).toBe("allow");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("getToolPermission('path') returns catch-all action", () => {
+    const { manager, cleanup } = makeManagerWithConfig({
+      path: { "*": "allow", "*.env": "deny" },
+    });
+    try {
+      const toolState = manager.getToolPermission("path");
+      expect(toolState).toBe("allow");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("session approval on path surface overrides config deny", () => {
+    const { manager, cleanup } = makeManagerWithConfig({
+      path: { "*": "allow", "*.env": "deny" },
+    });
+    try {
+      const sessionRules: Ruleset = [sessionAllow("path", "/project/.env")];
+      const result = manager.checkPermission(
+        "path",
+        { path: "/project/.env" },
+        undefined,
+        sessionRules,
+      );
+      expect(result.state).toBe("allow");
+      expect(result.source).toBe("session");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("configs without path key behave identically (no path gate fires)", () => {
+    const { manager, cleanup } = makeManagerWithConfig({
+      read: "allow",
+    });
+    try {
+      // path surface falls through to universal default
+      const result = manager.checkPermission("path", { path: ".env" });
+      expect(result.state).toBe("ask");
+    } finally {
+      cleanup();
+    }
+  });
+});

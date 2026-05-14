@@ -297,3 +297,81 @@ describe("handleToolCall — bash external-directory gate", () => {
     expect(result).toMatchObject({ block: true });
   });
 });
+
+// ── path gate (tools) ─────────────────────────────────────────────────────
+
+describe("handleToolCall — path gate (tools)", () => {
+  it("blocks a read of .env when path surface denies *.env", async () => {
+    const checkPermission = vi
+      .fn()
+      .mockImplementation(
+        (surface: string, _input: unknown, _agentName?: string) => {
+          if (surface === "path") {
+            return makePermissionResult("deny");
+          }
+          return makePermissionResult("allow");
+        },
+      );
+    const { handler } = makeHandler({
+      session: { checkPermission },
+      toolRegistry: {
+        getAll: vi.fn().mockReturnValue([{ name: "read" }]),
+      },
+    });
+    const event = {
+      type: "tool_call",
+      toolCallId: "tc-path",
+      name: "read",
+      input: { path: ".env" },
+    };
+    const result = await handler.handleToolCall(event, makeCtx());
+    expect(result).toMatchObject({ block: true });
+  });
+
+  it("allows a read when path surface allows", async () => {
+    const { handler } = makeHandler({
+      toolRegistry: {
+        getAll: vi.fn().mockReturnValue([{ name: "read" }]),
+      },
+    });
+    const event = {
+      type: "tool_call",
+      toolCallId: "tc-path-ok",
+      name: "read",
+      input: { path: "src/index.ts" },
+    };
+    const result = await handler.handleToolCall(event, makeCtx());
+    expect(result).toEqual({});
+  });
+});
+
+// ── bash path gate ────────────────────────────────────────────────────────
+
+describe("handleToolCall — bash path gate", () => {
+  it("blocks a bash command accessing .env when path surface denies", async () => {
+    const checkPermission = vi
+      .fn()
+      .mockImplementation(
+        (surface: string, _input: unknown, _agentName?: string) => {
+          if (surface === "path") {
+            return makePermissionResult("deny");
+          }
+          return makePermissionResult("allow");
+        },
+      );
+    const { handler } = makeHandler({
+      session: { checkPermission },
+      toolRegistry: {
+        getAll: vi.fn().mockReturnValue([{ name: "bash" }]),
+      },
+    });
+    const event = {
+      type: "tool_call",
+      toolCallId: "tc-bash-path",
+      name: "bash",
+      input: { command: "cat .env" },
+    };
+    const result = await handler.handleToolCall(event, makeCtx());
+    expect(result).toMatchObject({ block: true });
+  });
+});

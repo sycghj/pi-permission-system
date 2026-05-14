@@ -47,9 +47,29 @@ function makeCheckPermission(
   return vi
     .fn()
     .mockImplementation((surface: string): PermissionCheckResult => {
-      const state =
-        surface === "external_directory" ? externalDirectoryState : toolState;
-      return { state, toolName: surface, source: "tool", origin: "builtin" };
+      if (surface === "external_directory") {
+        return {
+          state: externalDirectoryState,
+          toolName: surface,
+          source: "tool",
+          origin: "builtin",
+        };
+      }
+      // The cross-cutting path gate runs before ext-dir; keep it transparent.
+      if (surface === "path") {
+        return {
+          state: "allow",
+          toolName: surface,
+          source: "special",
+          origin: "builtin",
+        };
+      }
+      return {
+        state: toolState,
+        toolName: surface,
+        source: "tool",
+        origin: "builtin",
+      };
     });
 }
 
