@@ -30,7 +30,7 @@ const BUILT_IN_TOOL_PERMISSION_NAMES = new Set([
   "find",
   "ls",
 ]);
-const SPECIAL_PERMISSION_KEYS = new Set(["external_directory"]);
+const SPECIAL_PERMISSION_KEYS = new Set(["external_directory", "path"]);
 
 /** Universal fallback when permission["*"] is absent from all scopes. */
 const DEFAULT_UNIVERSAL_FALLBACK: PermissionState = "ask";

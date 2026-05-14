@@ -22,7 +22,7 @@ export interface NormalizedInput {
   resultExtras: Record<string, unknown>;
 }
 
-const SPECIAL_PERMISSION_KEYS = new Set(["external_directory"]);
+const SPECIAL_PERMISSION_KEYS = new Set(["external_directory", "path"]);
 
 /**
  * Map a raw tool invocation to the surface/values/extras triple needed by

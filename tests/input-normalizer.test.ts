@@ -3,6 +3,30 @@ import { normalizeInput } from "../src/input-normalizer";
 import { createMcpPermissionTargets } from "../src/mcp-targets";
 
 describe("normalizeInput — non-MCP surfaces", () => {
+  describe("special / path", () => {
+    it("uses path from input as the lookup value", () => {
+      const result = normalizeInput("path", { path: ".env" }, []);
+      expect(result.surface).toBe("path");
+      expect(result.values).toEqual([".env"]);
+      expect(result.resultExtras).toEqual({});
+    });
+
+    it("falls back to '*' when path is missing", () => {
+      const result = normalizeInput("path", {}, []);
+      expect(result.values).toEqual(["*"]);
+    });
+
+    it("falls back to '*' when path is not a string", () => {
+      const result = normalizeInput("path", { path: 42 }, []);
+      expect(result.values).toEqual(["*"]);
+    });
+
+    it("handles null input", () => {
+      const result = normalizeInput("path", null, []);
+      expect(result.values).toEqual(["*"]);
+    });
+  });
+
   describe("special / external_directory", () => {
     it("uses path from input as the lookup value", () => {
       const result = normalizeInput(
