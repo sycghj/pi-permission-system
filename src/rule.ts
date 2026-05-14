@@ -79,6 +79,33 @@ export function evaluate(
  * evaluating the first candidate so the caller always receives a concrete
  * result.
  */
+/**
+ * Evaluate a surface against multiple values, returning the most restrictive
+ * non-allow result (deny > ask > allow).
+ *
+ * Used by the cross-cutting `path` surface to aggregate permission decisions
+ * across multiple file paths extracted from a single tool call or bash command.
+ *
+ * Returns `null` when all values evaluate to `allow` (no restriction).
+ * Returns the first `deny` immediately (short-circuit).
+ * Returns the first `ask` if no `deny` is found.
+ */
+export function evaluateMostRestrictive(
+  surface: string,
+  values: string[],
+  rules: Ruleset,
+): { rule: Rule; value: string } | null {
+  let worst: { rule: Rule; value: string } | null = null;
+  for (const value of values) {
+    const rule = evaluate(surface, value, rules);
+    if (rule.action === "deny") return { rule, value };
+    if (rule.action === "ask" && worst?.rule.action !== "ask") {
+      worst = { rule, value };
+    }
+  }
+  return worst;
+}
+
 export function evaluateFirst(
   surface: string,
   values: string[],

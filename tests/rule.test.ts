@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Rule, RuleOrigin, Ruleset } from "../src/rule";
-import { evaluate, evaluateFirst } from "../src/rule";
+import { evaluate, evaluateFirst, evaluateMostRestrictive } from "../src/rule";
 
 describe("evaluate", () => {
   const allowBashGit: Rule = {
@@ -315,5 +315,81 @@ describe("evaluateFirst", () => {
     const rules: Ruleset = [defaultRule];
     const result = evaluateFirst("bash", [], rules);
     expect(result.value).toBe("*");
+  });
+});
+
+describe("evaluateMostRestrictive", () => {
+  const denyEnv: Rule = {
+    surface: "path",
+    pattern: "*.env",
+    action: "deny",
+    layer: "config",
+    origin: "global",
+  };
+  const askSsh: Rule = {
+    surface: "path",
+    pattern: "/home/user/.ssh/*",
+    action: "ask",
+    layer: "config",
+    origin: "global",
+  };
+  const allowAll: Rule = {
+    surface: "path",
+    pattern: "*",
+    action: "allow",
+    layer: "config",
+    origin: "global",
+  };
+
+  test("deny short-circuits: returns immediately without evaluating remaining values", () => {
+    const rules: Ruleset = [allowAll, denyEnv];
+    const result = evaluateMostRestrictive(
+      "path",
+      [".env", "README.md"],
+      rules,
+    );
+    expect(result).not.toBeNull();
+    expect(result!.rule.action).toBe("deny");
+    expect(result!.value).toBe(".env");
+  });
+
+  test("ask accumulates: returns first ask when no deny found", () => {
+    const rules: Ruleset = [allowAll, askSsh];
+    const result = evaluateMostRestrictive(
+      "path",
+      ["/home/user/.ssh/id_rsa", "README.md"],
+      rules,
+    );
+    expect(result).not.toBeNull();
+    expect(result!.rule.action).toBe("ask");
+    expect(result!.value).toBe("/home/user/.ssh/id_rsa");
+  });
+
+  test("all allow: returns null", () => {
+    const rules: Ruleset = [allowAll];
+    const result = evaluateMostRestrictive(
+      "path",
+      ["README.md", "src/index.ts"],
+      rules,
+    );
+    expect(result).toBeNull();
+  });
+
+  test("empty values: returns null", () => {
+    const rules: Ruleset = [allowAll, denyEnv];
+    const result = evaluateMostRestrictive("path", [], rules);
+    expect(result).toBeNull();
+  });
+
+  test("deny wins over ask", () => {
+    const rules: Ruleset = [allowAll, askSsh, denyEnv];
+    const result = evaluateMostRestrictive(
+      "path",
+      ["/home/user/.ssh/id_rsa", ".env"],
+      rules,
+    );
+    expect(result).not.toBeNull();
+    expect(result!.rule.action).toBe("deny");
+    expect(result!.value).toBe(".env");
   });
 });
