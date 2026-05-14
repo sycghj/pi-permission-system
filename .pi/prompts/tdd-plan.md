@@ -60,8 +60,9 @@ If a step uncovers a problem the plan didn't anticipate (e.g. a downstream test 
 1. Run the full suite: `pnpm vitest run`. Must be all green.
 2. Run the type check: `pnpm run build` (`tsc -p tsconfig.json`). Must succeed — Vitest does not typecheck.
 3. Run the linters: `pnpm run lint:all` (Biome + markdownlint). If it fails, run `pnpm run lint:fix` and re-check. Commit any fixup as part of the most recent feat commit (amend) only if you haven't pushed; otherwise as a `style:` commit. The fixup must NOT land in a `docs:` commit.
-4. Update docs the plan flags: `README.md`, `schemas/permissions.schema.json`, `config/config.example.json`, etc. Commit as `docs: <summary>`.
-5. **Do not edit `CHANGELOG.md`** — release-please owns it and will generate entries from your Conventional Commit messages on the next release.
+4. Cross-check the plan's "Module-Level Changes" table against actually-changed files. If a listed file was not touched, update it now or note the deviation.
+5. Commit doc updates as `docs: <summary>`.
+6. **Do not edit `CHANGELOG.md`** — release-please owns it and will generate entries from your Conventional Commit messages on the next release.
 
 ## Summarize
 
