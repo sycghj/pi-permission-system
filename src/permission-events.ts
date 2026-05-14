@@ -30,7 +30,19 @@ export const PERMISSIONS_READY_CHANNEL = "permissions:ready";
 /** Emitted after every permission gate resolution. */
 export const PERMISSIONS_DECISION_CHANNEL = "permissions:decision";
 
-/** RPC request channel — query the permission policy (no prompting). */
+/**
+ * RPC request channel — query the permission policy (no prompting).
+ *
+ * @deprecated Use the `Symbol.for()`-backed service accessor instead:
+ * ```typescript
+ * const { getPermissionsService } = await import("@gotgenes/pi-permission-system");
+ * const service = getPermissionsService();
+ * if (service) {
+ *   const result = service.checkPermission("bash", "git push");
+ * }
+ * ```
+ * The event-bus RPC remains available as a zero-dependency fallback.
+ */
 export const PERMISSIONS_RPC_CHECK_CHANNEL = "permissions:rpc:check";
 
 /** RPC request channel — forward a permission prompt to the parent UI. */
@@ -88,7 +100,12 @@ export interface PermissionDecisionEvent {
 
 // ── permissions:rpc:check ──────────────────────────────────────────────────
 
-/** Request payload for `permissions:rpc:check`. */
+/**
+ * Request payload for `permissions:rpc:check`.
+ *
+ * @deprecated Prefer `getPermissionsService().checkPermission()` from the
+ * service accessor module. See `PERMISSIONS_RPC_CHECK_CHANNEL` for details.
+ */
 export interface PermissionsCheckRequest {
   requestId: string;
   /** Permission surface to evaluate. */
@@ -99,7 +116,12 @@ export interface PermissionsCheckRequest {
   agentName?: string;
 }
 
-/** Data field in a successful `permissions:rpc:check` reply. */
+/**
+ * Data field in a successful `permissions:rpc:check` reply.
+ *
+ * @deprecated Prefer `getPermissionsService().checkPermission()` from the
+ * service accessor module. See `PERMISSIONS_RPC_CHECK_CHANNEL` for details.
+ */
 export interface PermissionsCheckReplyData {
   result: "allow" | "deny" | "ask";
   matchedPattern: string | null;
