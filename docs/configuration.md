@@ -54,6 +54,7 @@ Scalar fields (`debugLog`, `permissionReviewLog`, `yoloMode`) use simple replace
       "*.env.example": "allow"
     },
     "write": "deny",
+    "edit": "deny",
     "bash": { "git status": "allow", "git *": "ask" },
     "mcp": { "mcp_status": "allow" },
     "skill": { "*": "ask" },

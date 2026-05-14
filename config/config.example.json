@@ -16,6 +16,7 @@
       "*.env.example": "allow"
     },
     "write": "deny",
+    "edit": "deny",
     "bash": {
       "*": "ask",
       "git status": "allow",
