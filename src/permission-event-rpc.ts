@@ -6,6 +6,7 @@
  * permission prompts without importing this package.
  */
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { buildInputForSurface } from "./input-normalizer";
 import type {
   PermissionPromptDecision,
   RequestPermissionOptions,
@@ -77,26 +78,6 @@ function errorReply(error: string): PermissionsRpcReply {
     protocolVersion: PERMISSIONS_PROTOCOL_VERSION,
     error,
   };
-}
-
-/**
- * Construct a surface-appropriate input object from a raw value string.
- *
- * Note: MCP inputs are complex (server name + tool name derivation). Callers
- * providing an MCP surface receive a best-effort policy evaluation using the
- * value as a pre-qualified target string. Pass the fully-qualified target
- * (e.g. "exa:search" or "exa") directly.
- */
-function buildInputForSurface(
-  surface: string,
-  value: string | undefined,
-): unknown {
-  const v = value ?? "";
-  if (surface === "bash") return { command: v };
-  if (surface === "skill") return { name: v };
-  if (surface === "external_directory") return { path: v };
-  // MCP and tool surfaces: normalizeInput handles them from the surface alone.
-  return {};
 }
 
 // ── RPC handler: permissions:rpc:check ────────────────────────────────────
