@@ -434,6 +434,43 @@ const URL_PATTERN = /^[a-z][a-z0-9+.-]*:\/\//i;
 const REGEX_METACHAR_PATTERN = /\.\*|\.\+|\\\||\\\(|\\\)|\[.*?\]|\^\//;
 
 /**
+ * Broader token classification for cross-cutting `path` rules.
+ *
+ * Accepts the same rejections as `classifyTokenAsPathCandidate` (empty, flags,
+ * env assignments, URLs, @scope/package, bare-slash, regex metacharacters),
+ * but also accepts:
+ * - Tokens starting with `.` (dot-files: `.env`, `./src`)
+ * - Tokens containing `/` (relative paths: `src/foo.ts`)
+ *
+ * Does NOT require the strict "must start with `/` or `~/` or contain `..`"
+ * gate that the external-directory classifier uses.
+ */
+function classifyTokenAsRuleCandidate(token: string): string | null {
+  if (!token) return null;
+  if (token.startsWith("-")) return null;
+
+  const eqIndex = token.indexOf("=");
+  const slashIndex = token.indexOf("/");
+  if (eqIndex !== -1 && (slashIndex === -1 || eqIndex < slashIndex)) {
+    return null;
+  }
+
+  if (URL_PATTERN.test(token)) return null;
+  if (token.startsWith("@") && !token.startsWith("@/")) return null;
+  if (/^\/+$/.test(token)) return null;
+  if (REGEX_METACHAR_PATTERN.test(token)) return null;
+
+  // Accept: starts with . (dot-files, ./ relative), contains / (paths),
+  // starts with / or ~/ (absolute/home), or contains .. (parent traversal).
+  if (token.startsWith(".")) return token;
+  if (token.includes("/")) return token;
+  if (token.startsWith("~/")) return token;
+  if (token.includes("..")) return token;
+
+  return null;
+}
+
+/**
  * Determines whether a token looks like a path candidate worth resolving.
  * Returns the raw token string if it's a candidate, or null to skip.
  */
@@ -515,4 +552,42 @@ export async function extractExternalPathsFromBashCommand(
   }
 
   return externalPaths;
+}
+
+/**
+ * Extract tokens from a bash command that may be file paths, using a broader
+ * filter suitable for cross-cutting `path` permission rules.
+ *
+ * Unlike `extractExternalPathsFromBashCommand`, this function:
+ * - Accepts relative paths (`.env`, `src/foo.ts`, `./build`)
+ * - Does NOT filter by CWD — returns raw tokens for rule evaluation
+ * - Returns deduplicated tokens
+ */
+export async function extractTokensForPathRules(
+  command: string,
+): Promise<string[]> {
+  const parser = await getParser();
+  const tree = parser.parse(command);
+  if (!tree) return [];
+
+  const tokens: string[] = [];
+  try {
+    collectPathCandidateTokens(tree.rootNode, tokens);
+  } finally {
+    tree.delete();
+  }
+
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const token of tokens) {
+    const candidate = classifyTokenAsRuleCandidate(token);
+    if (!candidate) continue;
+    if (!seen.has(candidate)) {
+      seen.add(candidate);
+      result.push(candidate);
+    }
+  }
+
+  return result;
 }
