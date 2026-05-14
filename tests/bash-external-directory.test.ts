@@ -949,4 +949,21 @@ describe("extractTokensForPathRules", () => {
     const tokens = await extractTokensForPathRules("ls /");
     expect(tokens).not.toContain("/");
   });
+
+  test("extracts redirect targets: echo test > .env", async () => {
+    const tokens = await extractTokensForPathRules("echo test > .env");
+    expect(tokens).toContain(".env");
+  });
+
+  test("extracts multiple path tokens: cp .env .env.backup", async () => {
+    const tokens = await extractTokensForPathRules("cp .env .env.backup");
+    expect(tokens).toContain(".env");
+    expect(tokens).toContain(".env.backup");
+  });
+
+  test("deduplicates repeated tokens", async () => {
+    const tokens = await extractTokensForPathRules("cat .env && rm .env");
+    const envCount = tokens.filter((t) => t === ".env").length;
+    expect(envCount).toBe(1);
+  });
 });

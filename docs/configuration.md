@@ -279,6 +279,47 @@ Four orthogonal layers compose with most-restrictive-wins:
 |`bash` command patterns|Is this command ok?|Bash only|
 
 Configs without a `path` key behave identically to before — the gate does not fire.
+When no `path` key is present, the universal fallback (`permission["*"]`) applies: `"*": "allow"` keeps the gate transparent, while `"*": "deny"` would deny all file access via every surface including `path`.
+
+> **Ordering matters.** Rules use last-match-wins.
+> `{ "*.env": "deny", "*": "allow" }` allows `.env` because `"*"` is last and matches everything.
+> Put the catch-all first: `{ "*": "allow", "*.env": "deny" }`.
+
+#### `.env` recipe
+
+Deny all env files but allow the example template:
+
+```jsonc
+{
+  "permission": {
+    "path": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow"
+    }
+  }
+}
+```
+
+This denies `.env`, `.env.local`, `.env.production`, and `src/.env`, but allows `.env.example`.
+Bash commands like `cat .env`, `cp .env .env.backup`, and `echo secret > .env` (redirect targets) are all caught.
+
+#### Composition with per-tool rules
+
+A per-tool allow does not override a `path` deny — the path gate runs first.
+Conversely, a per-tool deny still blocks even when the `path` surface allows:
+
+```jsonc
+{
+  "permission": {
+    "path": { "*": "allow" },
+    "read": "deny"
+  }
+}
+```
+
+Here `read` calls pass the `path` gate but are blocked by the `read` tool gate.
 
 ### `external_directory` Surface
 

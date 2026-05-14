@@ -213,4 +213,48 @@ describe("describeBashPathGate", () => {
     expect(isGateDescriptor(result)).toBe(true);
     expect((result as GateDescriptor).preCheck?.state).toBe("deny");
   });
+
+  it("deny wins in multi-token: cp .env README.md", async () => {
+    const checkPermission = vi
+      .fn<CheckPermissionFn>()
+      .mockImplementation((_surface, input) => {
+        const record = input as Record<string, unknown>;
+        if (record.path === ".env") {
+          return makeCheckResult({ state: "deny", matchedPattern: "*.env" });
+        }
+        return makeCheckResult({ state: "allow" });
+      });
+    const getSessionRuleset = vi.fn<() => Rule[]>().mockReturnValue([]);
+    const result = await describeBashPathGate(
+      makeTcc({ input: { command: "cp .env README.md" } }),
+      checkPermission,
+      getSessionRuleset,
+    );
+    expect(result).not.toBeNull();
+    expect(isGateDescriptor(result)).toBe(true);
+    const desc = result as GateDescriptor;
+    expect(desc.preCheck?.state).toBe("deny");
+    expect(desc.decision.value).toBe(".env");
+  });
+
+  it("extracts redirect target: echo test > .env triggers deny", async () => {
+    const checkPermission = vi
+      .fn<CheckPermissionFn>()
+      .mockImplementation((_surface, input) => {
+        const record = input as Record<string, unknown>;
+        if (record.path === ".env") {
+          return makeCheckResult({ state: "deny", matchedPattern: "*.env" });
+        }
+        return makeCheckResult({ state: "allow" });
+      });
+    const getSessionRuleset = vi.fn<() => Rule[]>().mockReturnValue([]);
+    const result = await describeBashPathGate(
+      makeTcc({ input: { command: "echo test > .env" } }),
+      checkPermission,
+      getSessionRuleset,
+    );
+    expect(result).not.toBeNull();
+    expect(isGateDescriptor(result)).toBe(true);
+    expect((result as GateDescriptor).preCheck?.state).toBe("deny");
+  });
 });

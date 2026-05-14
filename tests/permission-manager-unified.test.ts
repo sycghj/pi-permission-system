@@ -1208,4 +1208,116 @@ describe("cross-cutting path surface", () => {
       cleanup();
     }
   });
+
+  // ── Last-match-wins ordering ────────────────────────────────────────────
+
+  it("last-match-wins: catch-all after deny overrides the deny", () => {
+    // Classic misconfiguration: deny is before allow, so allow wins.
+    const { manager, cleanup } = makeManagerWithConfig({
+      path: { "*.env": "deny", "*": "allow" },
+    });
+    try {
+      const result = manager.checkPermission("path", { path: ".env" });
+      // "*" is last and matches .env → allow (the deny is shadowed)
+      expect(result.state).toBe("allow");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("last-match-wins: deny after catch-all blocks the path", () => {
+    // Correct ordering: catch-all first, specific deny after.
+    const { manager, cleanup } = makeManagerWithConfig({
+      path: { "*": "allow", "*.env": "deny" },
+    });
+    try {
+      const result = manager.checkPermission("path", { path: ".env" });
+      expect(result.state).toBe("deny");
+    } finally {
+      cleanup();
+    }
+  });
+
+  // ── .env.example override recipe ────────────────────────────────────────
+
+  it(".env.example override: denies .env and .env.local, allows .env.example", () => {
+    const { manager, cleanup } = makeManagerWithConfig({
+      path: {
+        "*": "allow",
+        "*.env": "deny",
+        "*.env.*": "deny",
+        "*.env.example": "allow",
+      },
+    });
+    try {
+      expect(manager.checkPermission("path", { path: ".env" }).state).toBe(
+        "deny",
+      );
+      expect(
+        manager.checkPermission("path", { path: ".env.local" }).state,
+      ).toBe("deny");
+      expect(
+        manager.checkPermission("path", { path: ".env.production" }).state,
+      ).toBe("deny");
+      expect(manager.checkPermission("path", { path: "src/.env" }).state).toBe(
+        "deny",
+      );
+      expect(
+        manager.checkPermission("path", { path: ".env.example" }).state,
+      ).toBe("allow");
+      expect(manager.checkPermission("path", { path: "README.md" }).state).toBe(
+        "allow",
+      );
+    } finally {
+      cleanup();
+    }
+  });
+
+  // ── Universal fallback interaction ──────────────────────────────────────
+
+  it("universal '*': 'allow' with no path key makes the path gate transparent", () => {
+    const { manager, cleanup } = makeManagerWithConfig({
+      "*": "allow",
+    });
+    try {
+      const result = manager.checkPermission("path", { path: ".env" });
+      expect(result.state).toBe("allow");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("universal '*': 'deny' with no path key denies via path surface too", () => {
+    const { manager, cleanup } = makeManagerWithConfig({
+      "*": "deny",
+    });
+    try {
+      const result = manager.checkPermission("path", { path: ".env" });
+      expect(result.state).toBe("deny");
+    } finally {
+      cleanup();
+    }
+  });
+
+  // ── Composition: path allows, per-tool denies ──────────────────────────
+
+  it("per-tool deny still blocks even when path surface allows", () => {
+    const { manager, cleanup } = makeManagerWithConfig({
+      path: { "*": "allow" },
+      read: "deny",
+    });
+    try {
+      // path gate passes (allow), but tool gate denies
+      const pathResult = manager.checkPermission("path", {
+        path: "secret.txt",
+      });
+      expect(pathResult.state).toBe("allow");
+      const readResult = manager.checkPermission("read", {
+        path: "secret.txt",
+      });
+      expect(readResult.state).toBe("deny");
+    } finally {
+      cleanup();
+    }
+  });
 });
