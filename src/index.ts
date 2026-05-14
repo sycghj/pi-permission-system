@@ -8,6 +8,7 @@ import {
   PermissionGateHandler,
   SessionLifecycleHandler,
 } from "./handlers";
+import { buildInputForSurface } from "./input-normalizer";
 import { requestPermissionDecisionFromUi } from "./permission-dialog";
 import { registerPermissionRpcHandlers } from "./permission-event-rpc";
 import { emitReadyEvent } from "./permission-events";
@@ -19,6 +20,11 @@ import {
   refreshExtensionConfig,
   saveExtensionConfig,
 } from "./runtime";
+import type { PermissionsService } from "./service";
+import {
+  publishPermissionsService,
+  unpublishPermissionsService,
+} from "./service";
 import { createSessionLogger } from "./session-logger";
 import { isSubagentExecutionContext } from "./subagent-context";
 import {
@@ -91,6 +97,20 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
     writeReviewLog: runtime.writeReviewLog.bind(runtime),
   });
 
+  const permissionsService: PermissionsService = {
+    checkPermission(surface, value, agentName) {
+      const input = buildInputForSurface(surface, value);
+      const sessionRules = runtime.sessionRules.getRuleset();
+      return runtime.permissionManager.checkPermission(
+        surface,
+        input,
+        agentName,
+        sessionRules,
+      );
+    },
+  };
+  publishPermissionsService(permissionsService);
+
   emitReadyEvent(pi.events);
 
   const toolRegistry = {
@@ -101,6 +121,7 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
   const lifecycle = new SessionLifecycleHandler(session, () => {
     rpcHandles.unsubCheck();
     rpcHandles.unsubPrompt();
+    unpublishPermissionsService();
   });
   const agentPrep = new AgentPrepHandler(session, toolRegistry);
   const gates = new PermissionGateHandler(session, pi.events, toolRegistry);
