@@ -182,7 +182,7 @@ pi.events.emit("permissions:rpc:prompt", {
 If `pi-permission-system` is not installed, no reply arrives.
 Implement a timeout and treat no-reply as `deny` for graceful degradation.
 
-For full API documentation, see [Event API](../event-api.md).
+For full API documentation, see [Cross-extension API](../cross-extension-api.md).
 
 ## Benefits for Your Users
 
@@ -195,6 +195,6 @@ For full API documentation, see [Event API](../event-api.md).
 ## Further Reading
 
 - [Subagent Integration](../subagent-integration.md) — full coexistence documentation and interaction rules
-- [Event API](../event-api.md) — complete event bus reference (decision broadcasts, RPC check, RPC prompt)
+- [Cross-extension API](../cross-extension-api.md) — service accessor, event bus reference (decision broadcasts, RPC check, RPC prompt)
 - [Configuration](../configuration.md) — full policy reference including merge precedence
 - [Schema](../../schemas/permissions.schema.json) — canonical JSON Schema for the flat permission format

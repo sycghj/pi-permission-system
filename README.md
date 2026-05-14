@@ -91,7 +91,7 @@ For the full reference — all surfaces, runtime knobs, per-agent overrides, mer
 |---|---|
 |[docs/configuration.md](docs/configuration.md)|Full policy reference, runtime knobs, per-agent overrides, recipes|
 |[docs/session-approvals.md](docs/session-approvals.md)|Session-scoped rules, pattern suggestions, bash arity table|
-|[docs/event-api.md](docs/event-api.md)|Event bus integration, decision broadcasts, RPC check/prompt|
+|[docs/cross-extension-api.md](docs/cross-extension-api.md)|Cross-extension service accessor, event bus integration, decision broadcasts|
 |[docs/subagent-integration.md](docs/subagent-integration.md)|Permission forwarding, coexistence with subagent extensions|
 |[docs/guides/permission-frontmatter-for-subagent-extensions.md](docs/guides/permission-frontmatter-for-subagent-extensions.md)|Convention guide for subagent extension authors|
 |[docs/opencode-compatibility.md](docs/opencode-compatibility.md)|OpenCode compatibility — shared concepts, divergences, porting guide|

@@ -427,6 +427,22 @@ A [permission frontmatter convention guide](../guides/permission-frontmatter-for
 This is a documentation-only proposal — no code dependency is required.
 The guide covers the two-layer model, flat format reference, composition examples, and the optional event bus runtime integration.
 
+## Cross-extension service accessor
+
+The primary cross-extension API is a `Symbol.for()`-backed service object on `globalThis`.
+
+Pi's extension loader creates a fresh jiti instance per extension with `moduleCache: false`, isolating module-scoped state.
+`Symbol.for()` and `globalThis` are process-global by spec, so they survive this isolation.
+
+The extension factory publishes a `PermissionsService` object via `publishPermissionsService()` during startup.
+Other extensions retrieve it with `getPermissionsService()` from `import("@gotgenes/pi-permission-system")`.
+The `package.json` `exports` field points to `src/service.ts`, which contains only the interface, the accessor functions, and the `Symbol.for()` key — no extension machinery.
+
+The event-bus RPC (`permissions:rpc:check`) remains as a zero-dependency fallback for consumers who do not want to add an optional peer dep.
+It is deprecated in favor of the service accessor.
+
+`permissions:decision` broadcasts and `permissions:rpc:prompt` remain on the event bus — fire-and-forget observation and async prompt forwarding are the right abstractions for those channels.
+
 ## Module structure
 
 ```text
@@ -468,9 +484,10 @@ src/
 │       ├── tool.ts           describeToolGate — pure descriptor factory
 │       └── index.ts          Barrel re-exports
 │
-├── index.ts                  Extension factory - event wiring
+├── index.ts                  Extension factory - event wiring, service publish
+├── service.ts                PermissionsService interface, Symbol.for() accessor (cross-extension API)
 ├── permission-events.ts      Event channel constants, payload types, emit helpers
-├── permission-event-rpc.ts   permissions:rpc:check and permissions:rpc:prompt handlers
+├── permission-event-rpc.ts   permissions:rpc:check (deprecated) and permissions:rpc:prompt handlers
 ├── runtime.ts                ExtensionRuntime context object, config refresh/save
 ├── config-loader.ts          File I/O, format detection
 ├── config-paths.ts           Path derivation

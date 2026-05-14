@@ -1,6 +1,83 @@
 # Event API
 
-The extension emits events on Pi's `pi.events` bus so other extensions can observe permission decisions and integrate with the policy system without importing this package.
+The extension provides two cross-extension integration surfaces:
+
+1. **Service accessor** (preferred) — a `Symbol.for()`-backed synchronous API on `globalThis` for direct policy queries.
+2. **Event bus** — broadcasts and RPC on `pi.events` for observation and prompt forwarding.
+
+---
+
+## Service Accessor
+
+The preferred way for other extensions to query the permission policy is the `Symbol.for()`-backed service accessor.
+It provides direct, synchronous, type-safe function calls — no async RPC envelope needed.
+
+### Quick Start
+
+```typescript
+try {
+  const { getPermissionsService } = await import(
+    "@gotgenes/pi-permission-system"
+  );
+  const permissions = getPermissionsService();
+  if (permissions) {
+    const result = permissions.checkPermission("bash", "git push");
+    console.log(result.state); // "allow" | "deny" | "ask"
+  }
+} catch {
+  // Not installed — graceful degradation
+}
+```
+
+### How It Works
+
+Pi's extension loader creates a fresh [jiti](https://github.com/nicolo-ribaudo/jiti) instance per extension with `moduleCache: false`, which isolates module-level state.
+`Symbol.for()` and `globalThis` are process-global by spec, so they survive this isolation.
+
+The permission-system extension publishes a service object on `globalThis` via `Symbol.for("@gotgenes/pi-permission-system:service")` during startup.
+Consumers call `getPermissionsService()` to retrieve it — even though their `import()` loads a fresh module copy, the accessor reads from the shared `globalThis` slot.
+
+### API
+
+The `PermissionsService` interface exposes a single method:
+
+```typescript
+interface PermissionsService {
+  checkPermission(
+    surface: string,
+    value?: string,
+    agentName?: string,
+  ): PermissionCheckResult;
+}
+```
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `surface` | Yes | Permission surface: `"bash"`, `"read"`, `"mcp"`, `"skill"`, `"external_directory"`, etc. |
+| `value` | No | Value to evaluate (command, name, path); defaults to `""` |
+| `agentName` | No | Agent name for per-agent policy resolution |
+
+The return type is `PermissionCheckResult` with fields `state`, `matchedPattern`, `source`, `origin`, etc.
+
+### Reload Safety
+
+During `/reload`, all extensions re-initialize.
+The permission-system clears the slot on shutdown and publishes a fresh service on re-initialization.
+Consumers that re-initialize during reload naturally get the new instance.
+
+Best practice: call `getPermissionsService()` per use rather than caching the reference.
+
+### Graceful Degradation
+
+`getPermissionsService()` returns `undefined` when the permission-system extension has not loaded (or has been unloaded).
+The `import()` throws if the package is not installed.
+Wrap both in `try/catch` + `if` guard as shown in the Quick Start example.
+
+---
+
+## Event Bus
+
+The extension also emits events on Pi's `pi.events` bus so other extensions can observe permission decisions and integrate with the policy system without importing this package.
 
 ## Stability Guarantee
 
@@ -61,7 +138,10 @@ pi.events.on("permissions:decision", (raw) => {
 
 ---
 
-## Policy Query RPC
+## Policy Query RPC (deprecated)
+
+> **Deprecated**: prefer the [Service Accessor](#service-accessor) above.
+> The event-bus RPC remains available as a zero-dependency fallback.
 
 Other extensions can evaluate the current permission policy without importing this package.
 The call is synchronous-style: emit a request, listen on a scoped reply channel.

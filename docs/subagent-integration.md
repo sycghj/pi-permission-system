@@ -7,7 +7,7 @@ The main interactive session polls for forwarded requests, shows the confirmatio
 
 This keeps `ask` policies usable even when the original permission check happens inside a non-UI execution context.
 
-For in-process child sessions (e.g. tintinweb/pi-subagents running via `createAgentSession()`), the [Prompt Forwarding RPC](event-api.md#prompt-forwarding-rpc) is used instead of file-based forwarding.
+For in-process child sessions (e.g. tintinweb/pi-subagents running via `createAgentSession()`), the [Prompt Forwarding RPC](cross-extension-api.md#prompt-forwarding-rpc) is used instead of file-based forwarding.
 
 ---
 

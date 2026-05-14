@@ -76,7 +76,7 @@ No code changes, no new dependency, no schema enforcement.
 
 - [Convention guide](https://github.com/gotgenes/pi-permission-system/blob/main/docs/guides/permission-frontmatter-for-subagent-extensions.md)
 - [Subagent integration docs](https://github.com/gotgenes/pi-permission-system/blob/main/docs/subagent-integration.md)
-- [Event API docs](https://github.com/gotgenes/pi-permission-system/blob/main/docs/event-api.md)
+- [Cross-extension API docs](https://github.com/gotgenes/pi-permission-system/blob/main/docs/cross-extension-api.md)
 ````
 
 ---
@@ -99,7 +99,7 @@ No code changes, no new dependency, no schema enforcement.
 |`{{your-key}}`|`disallowed_tools`|
 |`{{example-value}}`|`write_file,bash`|
 
-Additional note for tintinweb: since this extension runs subagents in-process via `createAgentSession()`, mention the [Event Bus RPC](https://github.com/gotgenes/pi-permission-system/blob/main/docs/event-api.md#policy-query-rpc) as an optional runtime integration path for querying or forwarding permission prompts without spawning a subprocess.
+Additional note for tintinweb: since this extension runs subagents in-process via `createAgentSession()`, mention the [Event Bus RPC](https://github.com/gotgenes/pi-permission-system/blob/main/docs/cross-extension-api.md#policy-query-rpc-deprecated) as an optional runtime integration path for querying or forwarding permission prompts without spawning a subprocess.
 
 ### HazAT/pi-interactive-subagents
 

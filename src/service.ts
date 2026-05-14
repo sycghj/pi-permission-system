@@ -71,6 +71,5 @@ export function getPermissionsService(): PermissionsService | undefined {
  * extension is torn down.
  */
 export function unpublishPermissionsService(): void {
-  // biome-ignore lint/performance/noDelete: Symbol-keyed globalThis slot cleanup requires delete
   delete (globalThis as Record<symbol, unknown>)[SERVICE_KEY];
 }
