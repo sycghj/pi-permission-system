@@ -49,4 +49,4 @@ This makes it easy to verify which files the extension actually loaded:
 **Limitations:**
 
 - If a dangerous action is possible via an allowed tool, policy must explicitly restrict it
-- This is a permission decision layer, not a sandbox
+- This is a permission decision layer, not a sandbox — for true isolation see [Agent Sandboxes](https://engine.build/lab/agent-sandboxes)
