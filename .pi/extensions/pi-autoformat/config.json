@@ -3,7 +3,8 @@
   "formatters": {
     "biome": {
       "command": [
-        "npx",
+        "pnpm",
+        "exec",
         "biome",
         "check",
         "--write",
@@ -11,7 +12,7 @@
       ]
     },
     "markdownlint-cli2": {
-      "command": ["npx", "markdownlint-cli2", "--fix"]
+      "command": ["pnpm", "exec", "markdownlint-cli2", "--fix"]
     }
   },
   "chains": {
