@@ -1,3 +1,6 @@
+> **⚠️ This repository has moved to [gotgenes/pi-packages](https://github.com/gotgenes/pi-packages) (pi-permission-system).**
+> Please file issues and PRs there.
+
 <p align="center">
   <img src="docs/assets/logo.png" alt="pi-permission-system logo">
 </p>
