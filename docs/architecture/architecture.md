@@ -1075,78 +1075,11 @@ Each phase's findings, numbered plan, dependency graph, and health metrics are p
 | 10    | Decide-once dispatch and bash-surface hardening | [phase-10-decide-once-dispatch-bash-surface-hardening.md](history/phase-10-decide-once-dispatch-bash-surface-hardening.md) |
 | 11    | Shell-tool aliasing and elicitation UX          | [phase-11-shell-tool-aliasing-elicitation-ux.md](history/phase-11-shell-tool-aliasing-elicitation-ux.md)                   |
 
-### Phase 1 — Preview formatter extension seam (complete)
-
-Made [#266] (configurable preview limits plus the formatter extension seam) tractable by extracting `ToolPreviewFormatter` ([#282]) from the flat `tool-input-preview.ts` bag, threading it through the gate descriptor chain, and adding numeric config normalization.
-Four steps, all closed.
-
-### Phase 2 — Complexity and duplication paydown (complete)
-
-Eliminated the five `fallow` refactoring targets — `handleToolCall`, `resolvePermissions`, `runGateCheck`, `bash-path-extractor.ts`, and `stripJsonComments` — and cut test-tree duplication from 9.1% to 7.1% by extracting shared fixtures.
-Six steps ([#285]–[#290]), all closed.
-
-### Phase 3 — State-owning collaborators (complete)
-
-Converted the package's remaining bags-of-state-and-closures into class-based collaborators that own their state and expose behavior (Tell-Don't-Ask): the forwarding subsystem (`PermissionForwarder`), the `McpTargetList` value object, the gate-runner rework (`PermissionResolver` → `DecisionReporter` → `GateRunner` → `ToolCallGatePipeline` / `SkillInputGatePipeline` → narrow handler role interfaces), and the `index.ts` composition root (`LocalPermissionsService`, `PermissionServiceLifecycle`).
-Sixteen steps ([#314]–[#331]), all closed.
-
-### Phase 4 — Constructibility and god-object decomposition (complete)
-
-Made the core collaborators independently constructable, then split the two god objects they hid behind: injected a single `PermissionManager` into `PermissionSession` (configured once at `session_start`), extracted a `ConfigStore` and an injectable `SessionLogger`, dissolved the `ExtensionRuntime` god object, collapsed the `index.ts` closure bags, and split `PermissionSession`'s fig-leaf role interfaces into distinct collaborators (`PromptingGateway`, `PermissionResolver`) before slimming it to a state/lifecycle owner; the tail retired the 2,785-line `permission-system.test.ts` catch-all into co-located files.
-Nine steps ([#334]–[#342]), all closed.
-
-### Phase 5 — Tell-Don't-Ask and decoupling sweep (complete)
-
-Cleared the residual state-encapsulation and decoupling smells Phase 4 left behind — `fallow`-invisible structural debt: made the session logger a state-owning `SessionLogger` class, added `PermissionSession.notify()` to dissolve the `index.ts` forward-reference cycle (and its sole production `as unknown as` cast), dropped the relay-only `logger` field, encapsulated the agent-start cache keys in a `CacheKeyGate` (collapsing the handler's ask-then-tell pairs), narrowed `LocalPermissionsService` and `PermissionForwarder` to local interfaces to drop forced test casts, and removed the `config-modal` controller reach-through.
-Seven steps ([#362]–[#368]), all closed.
-
-### Phase 6 — Access-intent extraction (complete)
-
-Extracted the access-intent domain: decomposed the 1,143-line `bash-program.ts` god file into `src/access-intent/bash/` (parser, node-text, token-collection, command-enumeration, cwd-projection, program facade), introduced the `AccessPath` value object eliminating the [#418] lexical/canonical conflation, collapsed the two external-directory gates onto a single shared policy check, narrowed `ScopedPermissionResolver` to one `resolve(intent)` (killing the [#393] false-green class), dissolved `common.ts` into `value-guards.ts` + `yaml-frontmatter.ts`, and extracted the external-directory test fixture.
-Eight steps ([#473]–[#480]), all closed.
-
-### Phase 7 — AccessPath as the universal internal path representation (complete)
-
-Made `AccessPath` the universal internal path representation: migrated the per-tool path-bearing gate and the service/RPC policy queries onto `AccessPath` (closing the symlink-evadability asymmetry), retired the dead lexical-only normalization, dissolved the `path-utils.ts` grab-bag into six cohesive modules, and formalized the resolver-internal `path-values` string boundary in a decision record with a lint guard.
-Five steps ([#502]–[#506]), all closed, plus the `PathNormalizer` platform-seam precursor and residual-threading follow-ups.
-
-### Phase 8 — Tidy first for the authority spine (complete)
-
-Prepared the [authority model](#target-the-authority-model) spine for Phase 9 without building it: moved yolo out of the prompt path into a composition-stage ruleset rewrite, split the dual-role `PermissionForwarder` into `ApprovalEscalator` and `ForwardedRequestServer` under a new `src/authority/` domain, extracted a single `SubagentDetection` collaborator, removed the deprecated event-bus RPC channel (breaking), and cut test-tree duplication from 6.7% to 0.2%.
-Eight steps ([#525]–[#532]), all closed.
-
-### Phase 9 — The Authorizer spine (complete)
-
-Built the [authority model](#target-the-authority-model) spine: the `Authorizer` interface and its three implementations (`LocalUserAuthorizer`, `ParentAuthorizer`, `DenyingAuthorizer`) selected once per session, `canConfirm()` dissolved so the ask path always escalates, `ForwardedRequestServer` rebuilt onto `evaluate()` plus the serving session's own `Authorizer` so parent `allow`/`deny` rules now govern a child's escalation, human-selectable grant-scope on forwarded approvals, and the mechanical completion of the `authority/` directory migration.
-Five steps ([#555]–[#559]), all closed.
-
-### Phase 10 — Decide-once dispatch and bash-surface hardening (complete)
-
-Collapsed two repeated-discriminator families to a single dispatch point: `toolName === "bash"`/`"mcp"` re-derivation onto a `ToolKind` classification (`access-intent/tool-kind.ts`), and the win32 path-interpretation mapping onto an injected `PathFlavor` collaborator (`src/path/path-flavor.ts`, the package's sole remaining `=== "win32"` comparison).
-Also closed the advisory bash-decomposition fidelity gap, floored indirection wrappers (`sudo`/`env`/`xargs`/`time`/`nohup`/`timeout`/`nice`, plus exec-flagged `find`/`fd`) to `ask`, and documented a read-only bash command allowlist recipe.
-Six steps ([#568], [#569], [#562], [#309], [#490], [#521]), all closed.
-
-### Phase 11 — Shell-tool aliasing and elicitation UX (complete)
-
-Closed the access-intent boundary's OCP gap against foreign shell-shaped tools: a `shellTools` config model plus dispatch-point routing gates an aliased tool (e.g. `exec_command`) through the same bash enforcement stack as native `bash` (decomposition, wrapper flooring, path/external-directory token gates, `bash:` rules).
-Also shipped the inline keybind permission dialog, unified subagent-context containment onto `PathFlavor.isWithin`, extended indirection-wrapper flooring with eight surveyed exec-capable rewrites, folded the remaining access-intent stragglers into `src/access-intent/`, and landed ADR 0007 (the `Authorizer`-chain design for a case-by-case model judge).
-Seven steps ([#579], [#580], [#574], [#573], [#571], [#575], [#581] → [#591]), all closed.
-
 [#261]: https://github.com/gotgenes/pi-packages/issues/261
-[#266]: https://github.com/gotgenes/pi-packages/issues/266
 [#267]: https://github.com/gotgenes/pi-packages/issues/267
-[#282]: https://github.com/gotgenes/pi-packages/issues/282
-[#285]: https://github.com/gotgenes/pi-packages/issues/285
-[#290]: https://github.com/gotgenes/pi-packages/issues/290
 [#296]: https://github.com/gotgenes/pi-packages/issues/296
 [#298]: https://github.com/gotgenes/pi-packages/issues/298
 [#302]: https://github.com/gotgenes/pi-packages/issues/302
-[#314]: https://github.com/gotgenes/pi-packages/issues/314
-[#331]: https://github.com/gotgenes/pi-packages/issues/331
-[#334]: https://github.com/gotgenes/pi-packages/issues/334
-[#342]: https://github.com/gotgenes/pi-packages/issues/342
-[#362]: https://github.com/gotgenes/pi-packages/issues/362
-[#368]: https://github.com/gotgenes/pi-packages/issues/368
 [#595]: https://github.com/gotgenes/pi-packages/issues/595
 [#596]: https://github.com/gotgenes/pi-packages/issues/596
 [#597]: https://github.com/gotgenes/pi-packages/issues/597
@@ -1167,10 +1100,8 @@ Seven steps ([#579], [#580], [#574], [#573], [#571], [#575], [#581] → [#591]),
 [#530]: https://github.com/gotgenes/pi-packages/issues/530
 [#531]: https://github.com/gotgenes/pi-packages/issues/531
 [#532]: https://github.com/gotgenes/pi-packages/issues/532
-[#473]: https://github.com/gotgenes/pi-packages/issues/473
 [#476]: https://github.com/gotgenes/pi-packages/issues/476
 [#478]: https://github.com/gotgenes/pi-packages/issues/478
-[#480]: https://github.com/gotgenes/pi-packages/issues/480
 [#486]: https://github.com/gotgenes/pi-packages/issues/486
 [#487]: https://github.com/gotgenes/pi-packages/issues/487
 [#502]: https://github.com/gotgenes/pi-packages/issues/502
