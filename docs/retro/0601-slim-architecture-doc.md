@@ -25,3 +25,22 @@ A mid-planning question about *ongoing* architecture-doc maintenance — and tha
   Frozen records (`history/`, old plans) keep their stale anchor deliberately — rewriting history is a Non-Goal.
 - **Kept #601 tight:** deliberately did not balloon it to include pi-subagents or the `/finish-phase` change; those are #605/#606/#607, cross-referenced in the plan's Non-Goals and Open Questions.
 - **Soft 750-line target:** treated as the issue's rough goal, not a gate; the real gates are zero information loss, a lint-clean link graph (MD053 both directions), and the preserved `## Improvement roadmap — Phase N (complete)` chain the `/plan-improvements` hard gate greps for.
+
+## Stage: Implementation — Build (2026-07-16T15:40:00Z)
+
+### Session summary
+
+Executed all six build steps as `docs:` commits: dropped the duplicated `### Phase 1–11` refactoring-history prose, folded `Target: the authority model` → `The authority model` (cutting the shipped-narrated-as-pending parts, keeping every open-direction subsection), stripped issue-provenance trails from the ~130-entry module tree (keeping the ADR 0002 string-boundary and sole-`win32`-comparison active constraints), replaced the `normalizeFlatConfig()`/two-phase snippets with sentence-plus-pointer, and added the package-skill regrowth guard.
+`architecture.md` went 1213 → 1063 lines and dropped 22.5KB (17%) — the module tree alone got 24% narrower — directly cutting the read cost the issue cited.
+Pre-completion reviewer returned WARN (one finding), fixed inline; final full `pnpm run lint` clean.
+
+### Observations
+
+- **Two planned deviations, both justified and documented in commit bodies.** (1) The plan deferred all orphaned-link pruning to a separate step-6 commit, but per-step `pnpm run lint` (MD053) forces each commit to be valid, so orphan pruning was folded into the step that created it — step 6 became a no-op verification (bijective 65↔65 ref/def check). (2) The plan's Non-Goal to leave frozen-record anchors stale was untenable: renaming the heading breaks live in-repo link fragments, and rumdl MD051 validates them (flagged `0555`), so the anchor token was fixed in `0555` + the three `history/` files (prose byte-identical otherwise).
+- **Line-count target missed honestly (1063 vs ~750), but the plan disclaimed it as soft.**
+  The remaining bulk is content the issue's keep-list explicitly preserves (the authority-model open-direction subsections) plus the one-line-per-module tree floor; the real signal metric (bytes) dropped 17%.
+- **Reviewer WARN was a rename side-effect, not a defect:** `.pi/skills/improvement-discovery/SKILL.md` cited the old heading name as its canonical first-principles-target example.
+  Grepped exhaustively; the only other live reference was that skill (the `architecture.md` `**Target:**` hits are unrelated roadmap step-fields; the two retro hits are frozen).
+  Fixed the skill in a 7th `docs:` commit.
+- **Pre-completion reviewer: WARN → resolved.**
+  Deterministic gates (check/lint/test/dead-code), Mermaid validation (7 diagrams), commit hygiene, and link-graph integrity all PASS.
