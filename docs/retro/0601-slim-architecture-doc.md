@@ -44,3 +44,54 @@ Pre-completion reviewer returned WARN (one finding), fixed inline; final full `p
   Fixed the skill in a 7th `docs:` commit.
 - **Pre-completion reviewer: WARN → resolved.**
   Deterministic gates (check/lint/test/dead-code), Mermaid validation (7 diagrams), commit hygiene, and link-graph integrity all PASS.
+
+## Stage: Final Retrospective (2026-07-16T16:54:44Z)
+
+### Session summary
+
+One continuous session carried #601 from `/plan-issue` through `/ship-issue`: an operator-authored docs-only cleanup that slimmed `architecture.md` 1213 → 1063 lines (−17% bytes), across seven `docs:` commits plus retro breadcrumbs.
+The plan was sound and the build executed it cleanly, but two plan-authored Non-Goals turned out untenable at build time (both handled as documented deviations, no rework), and the pre-completion reviewer caught one stale reference the plan's grep scope missed.
+Execution quality was high: incremental `lint:md` after every step, a clean temp-file+splice for the 130-line module tree, and a well-scoped mid-planning `ask_user` that spun off three follow-ups (#605/#606/#607) without ballooning #601.
+
+### Observations
+
+#### What went well
+
+1. **Incremental verification, not end-of-run.** `pnpm run lint:md` ran after every content step (steps 1–5), so each of the seven commits was independently lint-valid — the feedback-loop-gap lens found no gap.
+2. **Large mechanical replacement done safely.**
+   The ~130-entry module tree was rewritten by authoring the trimmed block to `/tmp/module-tree.txt` (`Write`) and splicing with a marker-keyed `python3` script, avoiding a fragile multi-KB `Edit` `oldText` — then verified block boundaries and a bijective ref/def check.
+3. **Mid-planning `ask_user` as a scope gate.**
+   When the operator raised the broader "how do we maintain these docs" question, the response grounded itself in reading the actual `/finish-phase` and `/plan-improvements` templates before recommending, then filed three scoped follow-ups rather than ballooning #601.
+4. **The pre-completion reviewer earned its keep** — it caught a real, specific stale reference (`improvement-discovery` skill) that the plan's grep scope missed.
+
+#### What caused friction (agent side)
+
+1. `missing-context` — the plan's anchor-rename impact analysis grepped `.pi/skills/package-pi-permission-system/` but not the broader `.pi/skills/` tree, so it missed `.pi/skills/improvement-discovery/SKILL.md`, which cited the renamed `Target: the authority model` heading as its canonical first-principles-target example.
+   Impact: one extra fix commit (`ae6d7bb5`), caught by the pre-completion reviewer rather than the plan.
+   Self-identified via the reviewer (not the operator).
+2. `missing-context` — two plan Non-Goals asserted lint-tool behavior that proved false: (a) orphan-link pruning as a separate step-6 commit (MD053 makes each commit invalid until its own orphans are pruned), and (b) frozen-record anchors staying stale (rumdl MD051 validates in-repo link fragments).
+   Impact: two documented build-time deviations plus ~4 investigation tool calls (steps 57–60) to understand the rumdl glob/config; no rework of committed content — folding the cleanup into each causing commit was the correct resolution.
+
+#### What caused friction (user side)
+
+- None.
+  The operator's mid-planning maintenance question (turn 17) was well-timed strategic input that improved the outcome (the three follow-ups), not a correction.
+
+### Diagnostic details
+
+- **Model-performance correlation** — planning, build, and retro ran on `anthropic/claude-opus-4-8` (appropriate for judgment-heavy planning/editing/review-handling).
+  The entire ship stage (turns 99–118) ran on `opencode-go/deepseek-v4-flash`, a reasoning-weak model, on the ship's one judgment-heavy step — the release-trigger / `exclude-paths` analysis.
+  It reached the correct answer (nothing releases) but fumbled the path: wrong tag name `v20.7.3` (turn 109) then corrected to `pi-permission-system-v20.7.3` (110), and looked for package-level `exclude-paths` (111–112) before reading the top-level array in the config (113) — ~6 turns for a 2–3-turn conclusion.
+  Self-corrected, no rework.
+  Mild model/task mismatch; ship is mostly procedural so a flash model is largely fine, but the `exclude-paths` reasoning is the part that wants either a stronger model or a more deterministic recipe.
+  The pre-completion-reviewer subagent ran on its own configured model and performed well (a specific, correct WARN).
+- **Escalation-delay tracking** — no sequence exceeded the 5-consecutive-calls threshold.
+  The rumdl MD051 investigation (turns 57–60) was 4 calls, each making progress; the deepseek `exclude-paths` fumble (108–114) was ~6 turns but each advanced toward the answer rather than repeating one error.
+- **Feedback-loop gap analysis** — no gap: `lint:md` ran incrementally after every content step, and the full `lint` (biome + eslint + rumdl) plus `fallow dead-code` ran at build-end and again at ship pre-push.
+
+### Changes made
+
+1. `.pi/prompts/plan-issue.md` — added a Module-Level-Changes grep-scope rule: when a step renames a heading, anchor, or named concept another doc may cite as an example, widen the skill grep from `.pi/skills/package-*/SKILL.md` to the whole `.pi/skills/` tree (a shared skill like `improvement-discovery`/`code-design` can cite a package doc's section by heading).
+   Would have caught the `improvement-discovery` stale reference at plan time instead of at the pre-completion review.
+
+Considered but not applied (operator declined / self-rejected): a `/build-plan` note on deferred-cleanup-vs-per-commit-lint-validity (the build handled it unaided), and a more deterministic `exclude-paths` recipe in `/ship-issue` step 4b (a model-selection artifact, not a prompt defect).
