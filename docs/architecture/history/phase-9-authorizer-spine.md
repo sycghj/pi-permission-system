@@ -1,6 +1,6 @@
 # Phase 9: The Authorizer spine
 
-Phase 9 builds the [authority model](../architecture.md#target-the-authority-model) spine that Phase 8 tidied for: the `Authorizer` interface and its three implementations, `canConfirm()` dissolution, serving-as-resolution, human-selectable grant-scope, and the mechanical completion of the `authority/` directory migration.
+Phase 9 builds the [authority model](../architecture.md#the-authority-model) spine that Phase 8 tidied for: the `Authorizer` interface and its three implementations, `canConfirm()` dissolution, serving-as-resolution, human-selectable grant-scope, and the mechanical completion of the `authority/` directory migration.
 
 ## Findings
 

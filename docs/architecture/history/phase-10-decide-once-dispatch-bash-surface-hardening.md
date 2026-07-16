@@ -1,10 +1,10 @@
 # Phase 10: Decide-once dispatch and bash-surface hardening
 
-Phase 10 cleared the two repeated-discriminator families filed as planning input against the [target architecture](../architecture.md#target-the-authority-model) — tool-kind dispatch and the win32 path flavor — plus scheduled bash-surface work (advisory decomposition parity, indirection-wrapper flooring) and a documentation recipe.
+Phase 10 cleared the two repeated-discriminator families filed as planning input against the [target architecture](../architecture.md#the-authority-model) — tool-kind dispatch and the win32 path flavor — plus scheduled bash-surface work (advisory decomposition parity, indirection-wrapper flooring) and a documentation recipe.
 
 ## Findings (planned 2026-07-10)
 
-Phase 9 completed the declared [authority model](../architecture.md#target-the-authority-model) target, so Phase 10 planning started from the doc's one remaining first-principles gap: the cross-session access intent ([remaining design work](../architecture.md#remaining-design-work) — principal identity and path portability across cwds).
+Phase 9 completed the declared [authority model](../architecture.md#the-authority-model) target, so Phase 10 planning started from the doc's one remaining first-principles gap: the cross-session access intent ([remaining design work](../architecture.md#remaining-design-work) — principal identity and path portability across cwds).
 Deep-tracing corroborated that gap as live code, not theory: `ForwardedPermissionRequest` is a stringly `(surface?, value?)` payload, the serving node's `ServingPolicy` normalizes a child's forwarded value against the **parent's** `PathNormalizer`/cwd, and pi-subagents' `WorkspaceProvider` seam makes cross-cwd children real.
 The owner chose to defer that spine to a later phase (it remains the leading Phase 11 candidate) and focus Phase 10 on the two repeated-discriminator families filed as planning input ([#561], [#562]) plus scheduled bash-surface work ([#309], [#490]) and a docs recipe ([#521]).
 

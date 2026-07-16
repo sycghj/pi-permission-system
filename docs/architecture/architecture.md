@@ -491,32 +491,11 @@ The `PermissionsService` interface exposes three methods:
 
 `permissions:decision` and `permissions:ui_prompt` broadcasts remain on the event bus - fire-and-forget observation is the right abstraction for those channels ([#531] removed the event-bus RPC channel; the service accessor is now the sole cross-extension policy/prompt surface).
 
-## Target: the authority model
+## The authority model
 
-The sections above describe the current implementation.
-This section records the organizing concept the package is built around — the spine the elicitation, forwarding, and yolo machinery collapse into.
-It is now current state, not merely a target: the `Authorizer` interface, its three implementations, and once-per-activation selection landed in Phase 9 Step 1 ([#555]); `canConfirm()` was dissolved in Phase 9 Step 2 ([#556]) — the ask path now always escalates to the selected `Authorizer`; serving (`ForwardedRequestServer`) was rebuilt onto `evaluate()` + the serving `Authorizer` in Phase 9 Step 3 ([#557]); human-selectable grant-scope landed in Phase 9 Step 4 ([#558]); and the mechanical `authority/` directory migration completed in Phase 9 Step 5 ([#559]) — the yolo, elicitation, and forwarding machinery now collapse onto the spine as built.
+This section records the organizing concept the package is built around — the spine the elicitation, forwarding, and yolo machinery collapse into — plus the still-open directions that extend it.
+It is current state, not a target: the `Authorizer` interface, its three implementations, once-per-activation selection, `canConfirm()`'s dissolution, serving-as-resolution, human-selectable grant-scope, and the `authority/` directory migration all shipped in Phase 9 (see [history/phase-9-authorizer-spine.md](history/phase-9-authorizer-spine.md) for why the spine is the correct model of the `@gotgenes/pi-subagents` integration — the anonymous cross-session-authority recursion behind the [#296]/[#298]/[#302] bug history — and not merely an internal tidy).
 Of the ["beyond the target"](#beyond-the-target-a-non-deterministic-access-intent-classifier) extension points below, the model-triage `Authorizer` chain is now designed ([ADR 0007](../decisions/0007-model-judge-authorizer-chain-adr.md), pending [#472]) and its named-link registration subsumes the pluggable escalation seam; a non-deterministic access-intent classifier remains aspirational.
-
-### Why this is worth doing
-
-The consolidation below ("what it consolidates") justifies the spine on internal grounds — dissolving `canConfirm()`, collapsing the elicitation thicket, moving yolo into the ruleset.
-Those are real but deferrable: the tangle is survivable and only the maintainers see it.
-The stronger reason is external — the spine is the correct model of a real, already-painful relationship: the integration with `@gotgenes/pi-subagents`.
-
-That integration is a genuine cross-package contract ([ADR-0002], the inverted dependency, the process-global `SubagentSessionRegistry`), and it is awkward precisely because it implements the authority recursion *anonymously*.
-It forwards a child's `ask` up to the parent without ever naming the thing it is doing: authority is delegated down the session tree, and escalation is the edge back up.
-The bug history reads like the symptoms of that missing model — each a cross-session-authority question answered ad hoc in a different module:
-
-- [#296] — the per-session event-bus split meant a child never saw its own registration (a cross-session-identity bug).
-- [#298] — a sibling's `disposed` event evicted another sibling's registry entry (a whose-child-is-whose bug).
-- [#302] — the service publish had to be child-gated so a subagent did not clobber the parent's service (a who-holds-authority bug).
-
-None is *caused* by the absence of the spine — they are transport-level (jiti isolation, bus mechanics).
-But all three are cross-session-authority questions with no single owner, because nothing models "which session is whose parent, and who may decide for whom."
-The spine gives that a home and localizes where cross-session correctness must hold.
-And it is what makes the [Resolved direction](#resolved-direction) capabilities — grant-scope selection (approve for root vs. parent vs. requesting subagent), the one-hop canary, yolo inheritance down the tree — expressible at all: each is a subagent-relationship feature that falls out of the model and is barely buildable without it.
-The directory sketch reflects the same conclusion: there is no peer `subagent/` domain, because the subagent machinery *is* the cross-session edge of `authority/`.
 
 ### The spine
 
@@ -574,16 +553,6 @@ Authority is delegated **down** the session tree: the human drives the root, whi
 So an `ask` a subagent cannot answer **escalates up** to where authority resides.
 Permission-system instances form a tree mirroring the session tree, and `ParentAuthorizer` is the edge that routes a child's escalation toward the human at the root.
 This is the same recursion pi-subagents describes (a subagent is a child Pi), viewed from the permission system's side: the package is itself one of the hooks on that child, and it recurses by forwarding.
-
-### What it consolidates
-
-The model collapses scattered machinery into the spine:
-
-- **`canConfirm()`** disappears — every `Authorizer` answers.
-- **`ApprovalEscalator`'s three named branches become the three `Authorizer` implementations.**
-  ([#530] already split the dual-role `PermissionForwarder` by direction of authority flow: `ApprovalEscalator.requestApproval` escalation *up* — it is the `ParentAuthorizer` — and `ForwardedRequestServer.processInbox` serving escalations from *below* — a distinct role (the session acting as authority, or relaying toward it), not an `Authorizer`.)
-- **The elicitation thicket** (`GatePrompter`, `PromptingGateway`, `PermissionPrompter`, `ApprovalRequester`) becomes the `Authorizer` interface and its three implementations.
-- **yolo** leaves the decision path entirely (below).
 
 ### yolo is recorded authority
 
@@ -643,25 +612,16 @@ The two compose cleanly because a promoted token emits the same structured descr
 
 ### Resolved direction
 
-These were the open decisions; they are now settled.
+These were the open decisions; they are now settled and shipped (full rationale in [history/phase-9-authorizer-spine.md](history/phase-9-authorizer-spine.md)).
 
 1. **Serving is resolution.**
-   Serving an escalation from below is identical to resolving an action locally: the serving node runs `evaluate()` against its recorded authority, then escalates to its own `Authorizer` on `ask`.
-   `requestApproval` already encodes the three-way `Authorizer` selection; `processInbox` is refactored onto the same pipeline, so the `hasUI` guards and the bespoke serve-time yolo check (`shouldAutoApprovePermissionState`) dissolve into `evaluate()` + selection rather than being separate logic.
-   Identical in policy, not anonymous in presentation: a forwarded ask carries its provenance (requester agent/session, original `source`/`surface`/`value`) as part of the question — data on the escalated ask's details, not a separate emission path — so the `permissions:ui_prompt` broadcast observers receive stays non-degraded (`forwarding` populated, the [#292] contract hardening).
-   Provenance-as-data is the live-authority echo of the principal identity the [access-intent direction](#remaining-design-work) requires, and it rides a future multi-hop escalation chain with no per-hop special-casing.
+   A serving node runs `evaluate()` against its recorded authority then escalates to its own `Authorizer` on `ask`, carrying the forwarded ask's provenance as data so the `permissions:ui_prompt` broadcast stays non-degraded.
 2. **Multi-level escalation: admitted, not shipped.**
-   The model is recursive — a middle node's chain terminates in a `ParentAuthorizer`, so an unanswerable `ask` re-escalates up with no special-casing.
-   In practice the tree is depth-2: pi-subagents' recursion guard removes the subagent tool from children, so there are no grandchildren to escalate.
-   The one-hop ceiling is therefore the *shadow* of that guard, external to this package — not a permission-model choice — and if pi-subagents ever allows nesting, no change is needed here.
-   A cheap **one-hop canary** (assert/log if a forwarded request arrives from a node that is itself a non-root subagent) turns a future invariant break into a loud failure instead of silent mishandling.
+   A middle node's chain terminates in a `ParentAuthorizer`, so re-escalation needs no special-casing; the tree is depth-2 today (pi-subagents' recursion guard), and a one-hop canary flags any future break.
 3. **Full delegation of authority down the tree.**
-   A subagent inherits its ancestors' authority: parent `allow` and `deny` rules govern a child's escalation, and **yolo inherits** too. yolo is the blunt "accept the risk" instrument by design — per-principal yolo is not a meaningful grant — so enabling it on the root deliberately lets delegates run unprompted on `ask`.
-   Because yolo is deny-preserving, the protection for a less-trusted, cheaper delegate is an explicit `deny` in its per-agent frontmatter (which survives the yolo rewrite); an `ask` is *not* a safeguard under inherited yolo.
-   This is what makes "parent yolo dissolves for free" true: serving evaluates the parent's composed (yolo-rewritten) ruleset directly, with no separate yolo branch.
+   A subagent inherits its ancestors' `allow`/`deny` rules and yolo; because yolo is deny-preserving, the safeguard for a cheaper delegate is an explicit `deny` in its per-agent frontmatter, not an `ask`.
 4. **Grant scope is human-selectable.**
-   When a human approves a forwarded request "for this session," the dialog offers a scope: the **entire session (root)**, the **parent**, or the **requesting subagent** — with the requesting subagent pre-selected (the narrowest, least-privilege default).
-   In the current depth-2 tree "parent" and "root" coincide; the three-way choice separates only once trees deepen (the same admitted-not-shipped shape as the escalation chain).
+   Approving a forwarded request "for this session" offers root / parent / requesting-subagent scope (requesting subagent pre-selected); "parent" and "root" coincide until trees deepen.
 
 ### Remaining design work
 
@@ -1029,7 +989,7 @@ Full findings, step details, dependency diagram, and release batches: [history/p
 
 ## Improvement roadmap — Phase 9: The Authorizer spine (complete)
 
-Phase 9 built the [authority model](#target-the-authority-model) spine that Phase 8 tidied for: the `Authorizer` interface and its three implementations (`LocalUserAuthorizer`, `ParentAuthorizer`, `DenyingAuthorizer`) selected once per session, `canConfirm()` dissolved so the ask path always escalates, `ForwardedRequestServer` rebuilt onto `evaluate()` plus the serving session's own `Authorizer` so parent `allow`/`deny` rules now govern a child's escalation, human-selectable grant-scope on forwarded approvals, and the mechanical completion of the `authority/` directory migration (flat `src/` root: ~67 → 62 modules).
+Phase 9 built the [authority model](#the-authority-model) spine that Phase 8 tidied for: the `Authorizer` interface and its three implementations (`LocalUserAuthorizer`, `ParentAuthorizer`, `DenyingAuthorizer`) selected once per session, `canConfirm()` dissolved so the ask path always escalates, `ForwardedRequestServer` rebuilt onto `evaluate()` plus the serving session's own `Authorizer` so parent `allow`/`deny` rules now govern a child's escalation, human-selectable grant-scope on forwarded approvals, and the mechanical completion of the `authority/` directory migration (flat `src/` root: ~67 → 62 modules).
 
 All 5 steps are closed: [#555], [#556], [#557], [#558], [#559].
 Open issues swept and confirmed out of scope during planning: [#309], [#490], [#520], [#521], [#519], [#23].
@@ -1040,7 +1000,7 @@ Full findings, step details, dependency diagram, and release batches: [history/p
 
 ## Improvement roadmap — Phase 8: Tidy first for the authority spine (complete)
 
-Phase 8 made the [authority model](#target-the-authority-model) spine change easy without building it: it moved yolo out of the prompt path into a composition-stage ruleset rewrite (`origin: "yolo"`), split the dual-role `PermissionForwarder` into `ApprovalEscalator` (escalation up) and `ForwardedRequestServer` (serving down) under a new `src/authority/` domain, extracted a single `SubagentDetection` collaborator replacing a three-constructor dep triple, removed the deprecated `permissions:rpc:check`/`permissions:rpc:prompt` event-bus channel (breaking), and paid down test-tree duplication (6.7% to 0.2%) plus the `value-guards.ts` domain-guard split.
+Phase 8 made the [authority model](#the-authority-model) spine change easy without building it: it moved yolo out of the prompt path into a composition-stage ruleset rewrite (`origin: "yolo"`), split the dual-role `PermissionForwarder` into `ApprovalEscalator` (escalation up) and `ForwardedRequestServer` (serving down) under a new `src/authority/` domain, extracted a single `SubagentDetection` collaborator replacing a three-constructor dep triple, removed the deprecated `permissions:rpc:check`/`permissions:rpc:prompt` event-bus channel (breaking), and paid down test-tree duplication (6.7% to 0.2%) plus the `value-guards.ts` domain-guard split.
 
 All 8 steps are closed: [#525], [#526], [#527], [#528], [#529], [#530], [#531], [#532].
 
@@ -1121,7 +1081,6 @@ Each phase's findings, numbered plan, dependency graph, and health metrics are p
 [#519]: https://github.com/gotgenes/pi-packages/issues/519
 [#520]: https://github.com/gotgenes/pi-packages/issues/520
 [#521]: https://github.com/gotgenes/pi-packages/issues/521
-[#292]: https://github.com/gotgenes/pi-packages/issues/292
 [#555]: https://github.com/gotgenes/pi-packages/issues/555
 [#556]: https://github.com/gotgenes/pi-packages/issues/556
 [#557]: https://github.com/gotgenes/pi-packages/issues/557

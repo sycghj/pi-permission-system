@@ -27,7 +27,7 @@ It is answered by an accretion of collaborators, each re-deriving the same two c
 - `ApprovalEscalator.requestApproval(ctx, …)` re-branches on the same predicates a third time: `hasUI` → direct dialog, `!isSubagent` → deny, else → forward.
 
 The result is a relay chain of four role interfaces (`GatePrompter`, `PermissionPrompterApi`, `ApprovalRequester`, plus the gateway lifecycle) to reach one dialog, with `hasUI`/`isSubagent` evaluated 3+ times per prompt and "no authority reachable" represented twice.
-The architecture doc's [authority model](../architecture/architecture.md#target-the-authority-model) names the missing concept: authority, held by an **`Authorizer`** selected once per session.
+The architecture doc's [authority model](../architecture/architecture.md#the-authority-model) names the missing concept: authority, held by an **`Authorizer`** selected once per session.
 Phase 8 tidied the ground for exactly this change (yolo into the ruleset, the escalator/server split, the single `SubagentDetection` collaborator).
 
 ## Goals
@@ -367,7 +367,7 @@ Two implementation steps, using a short-lived transitional wrapper so each commi
 ## Open Questions
 
 - None.
-  The direction is fully settled in the architecture doc's [authority model](../architecture/architecture.md#target-the-authority-model) and the Phase 9 roadmap; no follow-up issues are named by this plan beyond the already-filed Phase 9 steps ([#556]–[#559]).
+  The direction is fully settled in the architecture doc's [authority model](../architecture/architecture.md#the-authority-model) and the Phase 9 roadmap; no follow-up issues are named by this plan beyond the already-filed Phase 9 steps ([#556]–[#559]).
 
 [#292]: https://github.com/gotgenes/pi-packages/issues/292
 [#296]: https://github.com/gotgenes/pi-packages/issues/296
