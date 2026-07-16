@@ -248,25 +248,7 @@ An object value maps patterns to actions.
 
 ### Normalization to Rule[]
 
-```typescript
-function normalizeFlatConfig(permission: FlatPermissionConfig): Ruleset {
-  const rules: Ruleset = [];
-
-  for (const [surface, value] of Object.entries(permission)) {
-    if (typeof value === "string") {
-      // Shorthand: "read": "allow" → { surface: "read", pattern: "*", action: "allow" }
-      rules.push({ surface, pattern: "*", action: value as PermissionState });
-    } else {
-      // Object: "bash": { "*": "ask", "git *": "allow" }
-      for (const [pattern, action] of Object.entries(value)) {
-        rules.push({ surface, pattern, action: action as PermissionState });
-      }
-    }
-  }
-
-  return rules;
-}
-```
+`normalizeFlatConfig` (`src/normalize.ts`) flattens each `permission` entry into `Rule`s: a string value expands to a single surface catch-all (`{ surface, pattern: "*", action }`), and an object value expands each `pattern → action` pair to one `Rule`.
 
 ## MCP pre-processing
 
@@ -382,33 +364,11 @@ sequenceDiagram
 
 ### Phase 1: Tool filtering (`before_agent_start`)
 
-```typescript
-function shouldExposeTool(toolName: string, rules: Ruleset): boolean {
-  const rule = evaluate(toolName, "*", rules);
-  return rule.action !== "deny";
-}
-```
-
-Uses `evaluate()` with pattern `"*"` - "is this tool denied at the surface level, regardless of specific input?"
+`shouldExposeTool` (`src/handlers/before-agent-start.ts`) calls `evaluate(toolName, "*", rules)` and exposes the tool unless the surface-level result is `deny` — "is this tool denied regardless of specific input?"
 
 ### Phase 2: Invocation gating (`tool_call`)
 
-```typescript
-// Surface-specific input normalization (what to query)
-const { surface, value } = normalizeInput(toolName, input);
-
-// Single evaluation against the composed ruleset (how to decide)
-const rule = evaluate(surface, value, composedRules);
-
-if (rule.action === "allow") return proceed;
-if (rule.action === "deny") return block;
-// rule.action === "ask" - elicit from oracle
-const decision = await elicitRule(surface, value, suggestPattern(surface, value));
-if (decision.persistence === "session") {
-  sessionRules.approve(surface, decision.pattern);
-}
-return decision.action === "allow" ? proceed : block;
-```
+The gate pipeline (`src/handlers/gates/`) normalizes the input to `(surface, value)`, evaluates it against the composed ruleset, and acts on the result: `allow` proceeds, `deny` blocks, and `ask` elicits from the session's `Authorizer` — a persisted "session" decision appends a `Rule` to `sessionRules` so the next similar call is a cache hit.
 
 Same `evaluate()`, same ruleset.
 The only surface-specific logic is input normalization (what `surface` and `value` to look up) and pattern suggestion (what glob to offer for "session" approval).
