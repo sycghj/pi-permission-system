@@ -927,55 +927,6 @@ The tracks are independent and can proceed in parallel; both touch `src/authorit
 - **Batch "authorizer-chain":** Steps 4, 5 (ship together; tail = Step 5).
 - Independently releasable: Step 6 (a new package with its own release component; it lands after Step 5).
 
-## Improvement roadmap — Phase 11: Shell-tool aliasing and elicitation UX (complete)
-
-Phase 11 closed the access-intent boundary's OCP gap against foreign shell-shaped tools: a `shellTools` config model records that a non-`bash` tool (e.g. `@howaboua/pi-codex-conversion`'s `exec_command`) carries shell semantics, and the dispatch point routes an aliased invocation through the same bash enforcement stack as native `bash` (command decomposition, wrapper flooring, path/external-directory token gates, `bash:` rules).
-It also shipped the inline keybind permission dialog (TUI-gated, `select`/`input` fallback preserved), unified subagent-context containment onto `PathFlavor.isWithin`, extended the indirection-wrapper floor with eight surveyed exec-capable rewrites, folded the four remaining access-intent stragglers into `src/access-intent/`, and landed ADR 0007 (the `Authorizer`-chain design for a case-by-case model judge), superseding the reverted [#581] decorator ADR and making [#472] schedulable on its own merits.
-
-All 7 steps are closed: [#579], [#580], [#574], [#573], [#571], [#575], [#581] → [#591].
-Open issues swept and confirmed non-gating during planning: [#565] (stays open — post-ship observation feeding the Phase 12 cross-session intent spine), [#519] (stays open — blocked on Pi SDK `UIContext` evolution).
-
-Full findings, step details, dependency diagram, and release batches: [history/phase-11-shell-tool-aliasing-elicitation-ux.md](history/phase-11-shell-tool-aliasing-elicitation-ux.md).
-
-## Improvement roadmap — Phase 10: Decide-once dispatch and bash-surface hardening (complete)
-
-Phase 10 cleared the two repeated-discriminator families filed as planning input — tool-kind dispatch (`toolName === "bash"`/`"mcp"` re-derivation) and the win32 path flavor (`platform === "win32"` re-derivation) — collapsing both to a single dispatch point (`ToolKind` classification and `PathFlavor`, respectively), plus closed the bash advisory-fidelity gap ([#309]), floored indirection wrappers (`sudo`/`env`/`xargs`/…) to `ask` ([#490]), and documented a read-only bash allowlist recipe ([#521]).
-
-All 6 steps are closed: [#568], [#569], [#562], [#309], [#490], [#521].
-Follow-on issues filed during the phase — [#571] (unify `subagent-context` containment onto `PathFlavor.isWithin`) and [#575] (survey other exec-capable CLI rewrites for indirection-wrapper flooring) — were carried into Phase 11 as Steps 5 and 6 respectively; [#571] is now closed.
-Open issues swept and confirmed out of scope during planning: [#561] (superseded by Steps 1–2), [#564] (mislabeled for this package), [#519] (deferred — SDK `UIContext` evolution), [#472] (deferred — `ModelTriageAuthorizer`), [#565] (stays open — non-gating Phase 9 post-ship observation), [#23] (closed as resolved-by-events).
-
-Full findings, step details, dependency diagram, and release batches: [history/phase-10-decide-once-dispatch-bash-surface-hardening.md](history/phase-10-decide-once-dispatch-bash-surface-hardening.md).
-
-## Improvement roadmap — Phase 9: The Authorizer spine (complete)
-
-Phase 9 built the [authority model](#the-authority-model) spine that Phase 8 tidied for: the `Authorizer` interface and its three implementations (`LocalUserAuthorizer`, `ParentAuthorizer`, `DenyingAuthorizer`) selected once per session, `canConfirm()` dissolved so the ask path always escalates, `ForwardedRequestServer` rebuilt onto `evaluate()` plus the serving session's own `Authorizer` so parent `allow`/`deny` rules now govern a child's escalation, human-selectable grant-scope on forwarded approvals, and the mechanical completion of the `authority/` directory migration (flat `src/` root: ~67 → 62 modules).
-
-All 5 steps are closed: [#555], [#556], [#557], [#558], [#559].
-Open issues swept and confirmed out of scope during planning: [#309], [#490], [#520], [#521], [#519], [#23].
-The `ModelTriageAuthorizer` ([#472]) was deferred past Phase 9; its design later landed as ADR 0007 in Phase 11 Step 7 ([#591]).
-Follow-on issue [#565] (validate serving-is-resolution decisions post-ship) remains open, tracking live observation of the new parent-governs-child-escalation behavior; it is non-gating.
-
-Full findings, step details, dependency diagram, and release batches: [history/phase-9-authorizer-spine.md](history/phase-9-authorizer-spine.md).
-
-## Improvement roadmap — Phase 8: Tidy first for the authority spine (complete)
-
-Phase 8 made the [authority model](#the-authority-model) spine change easy without building it: it moved yolo out of the prompt path into a composition-stage ruleset rewrite (`origin: "yolo"`), split the dual-role `PermissionForwarder` into `ApprovalEscalator` (escalation up) and `ForwardedRequestServer` (serving down) under a new `src/authority/` domain, extracted a single `SubagentDetection` collaborator replacing a three-constructor dep triple, removed the deprecated `permissions:rpc:check`/`permissions:rpc:prompt` event-bus channel (breaking), and paid down test-tree duplication (6.7% to 0.2%) plus the `value-guards.ts` domain-guard split.
-
-All 8 steps are closed: [#525], [#526], [#527], [#528], [#529], [#530], [#531], [#532].
-
-Full findings, step details, dependency diagram, and release batches: [history/phase-8-tidy-first-authority-spine.md](history/phase-8-tidy-first-authority-spine.md).
-
-## Improvement roadmap — Phase 7: AccessPath as the universal internal path representation (complete)
-
-Phase 7 finished the direction opened by [#487]: `AccessPath` became the one internal representation for every concrete path the system handles.
-Steps 1–2 ([#502], [#503]) brought the per-tool path-bearing gate and the service/RPC policy queries to lexical ∪ canonical parity (breaking, mechanically parallel to [#486]), Step 3 ([#504]) retired `input-normalizer`'s dead path normalization, Step 4 ([#505]) dissolved the `path-utils.ts` grab-bag into six cohesive modules, and Step 5 ([#506]) formalized `path-values` as the manager's deliberate string boundary (`docs/decisions/0002-path-values-string-boundary.md`).
-A precursor refactor ([#510]) threaded the injected `PathNormalizer` platform seam behind the recurring Windows-path bugs ([#345], [#382], [#508]), and follow-ups [#511] / [#513] retired the residual `getPlatform()` threading.
-
-All 5 steps are closed: [#502], [#503], [#504], [#505], [#506].
-
-Full findings, step details, dependency diagram, and release batches: [history/phase-7-accesspath-universal-representation.md](history/phase-7-accesspath-universal-representation.md).
-
 ## Refactoring history
 
 The architecture above is the product of eleven completed improvement phases.
@@ -1007,57 +958,20 @@ Each phase's findings, numbered plan, dependency graph, and health metrics are p
 [#599]: https://github.com/gotgenes/pi-packages/issues/599
 [#600]: https://github.com/gotgenes/pi-packages/issues/600
 [#332]: https://github.com/gotgenes/pi-packages/issues/332
-[#345]: https://github.com/gotgenes/pi-packages/issues/345
 [#347]: https://github.com/gotgenes/pi-packages/issues/347
-[#382]: https://github.com/gotgenes/pi-packages/issues/382
 [#393]: https://github.com/gotgenes/pi-packages/issues/393
 [#418]: https://github.com/gotgenes/pi-packages/issues/418
-[#525]: https://github.com/gotgenes/pi-packages/issues/525
-[#526]: https://github.com/gotgenes/pi-packages/issues/526
-[#527]: https://github.com/gotgenes/pi-packages/issues/527
-[#528]: https://github.com/gotgenes/pi-packages/issues/528
 [#529]: https://github.com/gotgenes/pi-packages/issues/529
 [#530]: https://github.com/gotgenes/pi-packages/issues/530
 [#531]: https://github.com/gotgenes/pi-packages/issues/531
-[#532]: https://github.com/gotgenes/pi-packages/issues/532
 [#476]: https://github.com/gotgenes/pi-packages/issues/476
 [#478]: https://github.com/gotgenes/pi-packages/issues/478
 [#486]: https://github.com/gotgenes/pi-packages/issues/486
-[#487]: https://github.com/gotgenes/pi-packages/issues/487
 [#502]: https://github.com/gotgenes/pi-packages/issues/502
-[#503]: https://github.com/gotgenes/pi-packages/issues/503
-[#504]: https://github.com/gotgenes/pi-packages/issues/504
-[#505]: https://github.com/gotgenes/pi-packages/issues/505
-[#506]: https://github.com/gotgenes/pi-packages/issues/506
-[#508]: https://github.com/gotgenes/pi-packages/issues/508
 [#509]: https://github.com/gotgenes/pi-packages/issues/509
-[#510]: https://github.com/gotgenes/pi-packages/issues/510
-[#511]: https://github.com/gotgenes/pi-packages/issues/511
-[#513]: https://github.com/gotgenes/pi-packages/issues/513
-[#23]: https://github.com/gotgenes/pi-packages/issues/23
-[#309]: https://github.com/gotgenes/pi-packages/issues/309
 [#472]: https://github.com/gotgenes/pi-packages/issues/472
-[#490]: https://github.com/gotgenes/pi-packages/issues/490
 [#519]: https://github.com/gotgenes/pi-packages/issues/519
-[#520]: https://github.com/gotgenes/pi-packages/issues/520
-[#521]: https://github.com/gotgenes/pi-packages/issues/521
 [#555]: https://github.com/gotgenes/pi-packages/issues/555
-[#556]: https://github.com/gotgenes/pi-packages/issues/556
 [#557]: https://github.com/gotgenes/pi-packages/issues/557
-[#558]: https://github.com/gotgenes/pi-packages/issues/558
-[#559]: https://github.com/gotgenes/pi-packages/issues/559
 [#565]: https://github.com/gotgenes/pi-packages/issues/565
-[#561]: https://github.com/gotgenes/pi-packages/issues/561
-[#562]: https://github.com/gotgenes/pi-packages/issues/562
-[#564]: https://github.com/gotgenes/pi-packages/issues/564
-[#568]: https://github.com/gotgenes/pi-packages/issues/568
-[#569]: https://github.com/gotgenes/pi-packages/issues/569
-[#571]: https://github.com/gotgenes/pi-packages/issues/571
-[#573]: https://github.com/gotgenes/pi-packages/issues/573
-[#574]: https://github.com/gotgenes/pi-packages/issues/574
-[#575]: https://github.com/gotgenes/pi-packages/issues/575
-[#579]: https://github.com/gotgenes/pi-packages/issues/579
-[#580]: https://github.com/gotgenes/pi-packages/issues/580
-[#581]: https://github.com/gotgenes/pi-packages/issues/581
-[#591]: https://github.com/gotgenes/pi-packages/issues/591
 [ADR-0002]: https://github.com/gotgenes/pi-packages/blob/main/packages/pi-subagents/docs/decisions/0002-extensions-on-a-minimal-core.md
