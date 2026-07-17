@@ -930,7 +930,7 @@ The tracks are independent and can proceed in parallel; both touch `src/authorit
 ## Refactoring history
 
 The architecture above is the product of eleven completed improvement phases.
-Each phase's findings, numbered plan, dependency graph, and health metrics are preserved in a per-phase history file under [`history/`](history/).
+Each phase's findings, numbered plan, dependency diagram, and health metrics are preserved in a per-phase history file under [`history/`](history/).
 
 | Phase | Theme                                           | History                                                                                                                    |
 | ----- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
