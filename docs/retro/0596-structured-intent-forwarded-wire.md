@@ -40,3 +40,29 @@ Skipped the `ask_user` gate: the issue is the operator's own and its proposed ch
 ### Diagnostic details
 
 - **Feedback-loop gap analysis** — grounded every design claim in source before writing: read all target files (`permission-forwarding.ts`, `forwarding-io.ts`, `approval-escalator.ts`, `permission-prompter.ts`, the six gate factories, `forwarder-context.ts`, `access-path.ts`) and confirmed `ForwarderContext` lacks `cwd` while `ExtensionContext.cwd` exists (`permission-gate-handler.ts:73`), which is what made the edge-sourced `requesterCwd` viable.
+
+## Stage: Implementation — TDD (2026-07-18T16:12:28Z)
+
+### Session summary
+
+Executed all seven plan steps plus two Tidy-First preparatory refactors: threaded a structured `ForwardedAccessIntent` from each permission gate, through the escalation edge, onto the forwarded wire.
+Nine plan-execution commits (1 wire type + tolerant read, 1 edge serialization, 4 gate-emission steps, 1 docs) landed green; two extra commits resolved the pre-completion reviewer's WARN.
+Test count 2472 → 2491 (+19); pre-completion reviewer returned WARN, both findings addressed.
+
+### Observations
+
+- **Tidy-First paid off exactly as scoped.**
+  The `tidy-first-assessor` recommended two dependency-free prep refactors — bundling `approval-escalator.ts`'s three relayed optionals (`message`/`display`/`sessionApproval`) into one `ForwardedRequestFacts` object (the parameter-relay smell), and hoisting `describeToolGate`'s `decisionValue` into a local.
+  Both landed first, so Step 2 added one field to an existing bundle instead of extending two method signatures, and Step 5 reused the local for the single-value fact form.
+  The assessor also correctly declined the `ForwarderContext`/`cwd` fixture audit as near-zero blast radius — confirmed when `pnpm run check` passed after the `cwd` widening with only `makeForwarderContext` touched (all inline fakes already set `cwd` or use the factory).
+- **Fact/identity split held.**
+  The gate emits `{ surface, matchValues, boundaryValue }` (what's accessed, the only facts unreconstructable downstream); `ParentAuthorizer` stamps `requesterCwd` (via the new `ForwarderContext.cwd`/`getCwd`) and `principal`.
+  `requesterCwd` sourced at the edge from `ctx.cwd` — the assessor's audit made this cleaner than per-gate threading (skill-input has no `tcc`).
+- **`descriptor.ts` needed no change** (a plan-predicted simplification): facts ride on `promptDetails` via the `Omit<PromptPermissionDetails, "requestId">`, and the runner already spreads `promptDetails` into `escalate(...)`.
+- **Fact-construction helpers folded into Step 1** per the assessor (they return the Step-1 wire type): `accessFactsFromPath`/`accessFactsFromValue` in `handlers/gates/helpers.ts`, so Steps 3–6 are one-line calls.
+  ADR-0002 honored — gates convert `AccessPath` → strings at emit.
+- **Two eslint frictions, both self-caught.** (1) `Partial<ForwardedAccessIntent>` types nested fields as non-null, so the tolerant reader's runtime `=== null` checks tripped `no-unnecessary-condition`; fixed by typing the candidate fields as `unknown` (the correct tolerant-read shape). (2) `boundaryValue()` returns `string`, so `|| null` is *not* flagged by `prefer-nullish-coalescing` — the pre-commit auto-fix silently stripped my speculative `eslint-disable` directive (leaving a blank line), which the reviewer flagged; removing the directive entirely was correct.
+- **Pre-completion reviewer: WARN** — two non-blocking findings, both resolved before finishing: (1) stray blank line in `helpers.ts` (removed); (2) the plan's own "Invariants at risk" section asked for a test co-asserting display fields + `accessIntent` on one request, which was missing — strengthened the `approval-escalator` stamp test to assert `source`/`surface`/`value` alongside `accessIntent`, and added `helpers.test.ts` unit tests for both fact helpers including the empty-boundary→`null` edge case.
+- **Reviewer note (non-issue):** a full-monorepo `pnpm run test` showed 2 pre-existing pi-autoformat acceptance flakes (real-`pi`-CLI RPC timeouts under concurrent load); zero pi-autoformat files touched, standalone re-run green.
+- **Release**: mid-batch — defer (batch "cross-session-intent", tail = Step 3 / #597).
+  Next step is `/ship-issue`.
