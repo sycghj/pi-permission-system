@@ -75,6 +75,12 @@ export function describeToolGate(
     formatter,
   );
 
+  const decisionValue = deriveDecisionValue(
+    gateSurface,
+    check,
+    getPathBearingToolPath(tcc.toolName, tcc.input) ?? undefined,
+  );
+
   return {
     surface: gateSurface,
     input: tcc.input,
@@ -106,11 +112,7 @@ export function describeToolGate(
     },
     decision: {
       surface: gateSurface,
-      value: deriveDecisionValue(
-        gateSurface,
-        check,
-        getPathBearingToolPath(tcc.toolName, tcc.input) ?? undefined,
-      ),
+      value: decisionValue,
     },
   };
 }
