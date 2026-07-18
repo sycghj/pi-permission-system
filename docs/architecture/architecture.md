@@ -764,16 +764,16 @@ src/
 │   ├── permission-prompt-component.ts Inline `ctx.ui.custom<PermissionPromptDecision>` keybind dialog (TUI) driven by the decision model + the `requestPermissionDecision` mode dispatcher (tui → inline, else fallback)
 │   ├── denying-authorizer.ts  `DenyingAuthorizer` class - least-privilege Authorizer for a session with no reachable authority; denies with the `confirmationUnavailable` marker so the ask path derives the `confirmation_unavailable` resolution
 │   ├── authorizer-selection.ts `AuthorizerSelection` class - context-owning `AskEscalator` implementation (`escalate(details)`); selects the `Authorizer` once per activation and delegates to it via `PermissionPrompter`
-│   ├── permission-prompter.ts `PermissionPrompter` class (`PermissionPrompterApi`) - review-log bracketing (waiting → approved/denied) around `authorizer.authorize(details)`; `PromptPermissionDetails` type
+│   ├── permission-prompter.ts `PermissionPrompter` class (`PermissionPrompterApi`) - review-log bracketing (waiting → approved/denied) around `authorizer.authorize(details)`; `PromptPermissionDetails` type (carries the child-fixed `accessIntent` facts a forwarded ask relays)
 │   ├── subagent-detection.ts  SubagentDetection class - single owner of subagent detection (SubagentDetector.isSubagent + RegisteredChildDetector.isRegisteredChild); delegates to subagent-context
 │   ├── subagent-context.ts    Pure subagent execution context detection (registry + env vars + filesystem)
 │   ├── subagent-registry.ts   SubagentSessionRegistry class + getSubagentSessionRegistry() process-global accessor - in-process subagent session tracking
 │   ├── subagent-lifecycle-events.ts subscribeSubagentLifecycle() - subscribes to @gotgenes/pi-subagents child lifecycle events; registers/unregisters child sessions in SubagentSessionRegistry (ADR 0002)
-│   ├── forwarder-context.ts   `ForwarderContext` read-interface + `getSessionId` - shared by the escalation and serving roles
-│   ├── permission-forwarding.ts Constants for cross-session forwarding (registry + env var resolution)
-│   ├── approval-escalator.ts  `ParentAuthorizer` class - Authorizer for a subagent session: escalates the ask up the tree via the request-write/poll machinery, `ctx` bound at construction
+│   ├── forwarder-context.ts   `ForwarderContext` read-interface + `getSessionId`/`getCwd` - shared by the escalation and serving roles
+│   ├── permission-forwarding.ts Cross-session forwarding wire types (`ForwardedPermissionRequest`, the `ForwardedAccessFacts`/`ForwardedAccessIntent` intent schema per ADR 0008) + registry/env-var target resolution
+│   ├── approval-escalator.ts  `ParentAuthorizer` class - Authorizer for a subagent session: escalates the ask up the tree via the request-write/poll machinery, completing the child-fixed facts into a `ForwardedAccessIntent` (stamps `requesterCwd`/`principal`), `ctx` bound at construction
 │   ├── forwarded-request-server.ts `ForwardedRequestServer` class (`InboxProcessor`) - serving-down role: `processInbox()` drains forwarded requests and resolves each like a local action - `ServingPolicy` (recorded authority) then `AskEscalator` on `ask`; `ServingPolicy` seam + one-hop canary
-│   ├── forwarding-io.ts       Forwarding filesystem helpers - request/response read-write, location derivation, atomic JSON writes
+│   ├── forwarding-io.ts       Forwarding filesystem helpers - request/response read-write (tolerant read of the optional `accessIntent` field), location derivation, atomic JSON writes
 │   └── forwarding-manager.ts  `ForwardingController` interface + `ForwardingManager` class - drives the forwarded-permission inbox polling lifecycle; tells `ForwardedRequestServer.processInbox`
 ├── session-logger.ts          `SessionLogger` interface + `PermissionSessionLogger` class; owns JSONL-writer composition, IO-failure warning dedup, and notify sink
 ├── logging.ts                 JSONL review/debug log writer
@@ -849,7 +849,7 @@ Recompute commands (run from the repo root):
 
 Release: batch "cross-session-intent"
 
-#### Step 2: Carry the structured intent to the escalation edge and onto the forwarded wire ([#596])
+#### Step 2: Carry the structured intent to the escalation edge and onto the forwarded wire ([#596]) ✅
 
 **Cause:** the gate computes a full `AccessIntent` (with the `AccessPath` alias set) and then discards it — `PromptPermissionDetails` and `ForwardedPermissionRequest` carry only display strings, so the intent the parent needs is unrecoverable downstream (the display-field floor in `hasDisplayFields` is the symptom).
 
@@ -858,6 +858,9 @@ Release: batch "cross-session-intent"
 - **Outcome:** every forwarded ask carries an evaluable intent — path-shaped asks carry the child-fixed alias set and requester cwd; non-path surfaces (bash command, MCP target, skill name) carry their already-portable `(surface, value)`; an older child's request still reads (version-skew tolerant) and floors to `ask` as today.
   `grep -c ForwardedAccessIntent src/authority/permission-forwarding.ts` goes 0 → ≥ 1.
 - **Impact 4 / Risk 3 / Priority 12.**
+- **Landed:** the wire schema (`ForwardedAccessFacts`/`ForwardedAccessIntent`) lives in `permission-forwarding.ts`; each gate emits the child-fixed facts onto `PromptPermissionDetails.accessIntent` through the shared `accessFactsFromPath`/`accessFactsFromValue` helpers (`handlers/gates/helpers.ts`), so `descriptor.ts` needed no change — the facts ride on the descriptor's `promptDetails`.
+  `ParentAuthorizer` completes them into a `ForwardedAccessIntent`, stamping `requesterCwd` (from `ctx.cwd`, exposed via the new `getCwd`) and `principal`; `forwarding-io.ts` reads the field tolerantly (absent/malformed → `undefined`, floored to `ask` in Step 3).
+  Serving still re-derives from display strings until Step 3, so the forwarded-wire metric now reads ≥ 1 while the serving-read metric stays 0.
 
 Release: batch "cross-session-intent"
 
@@ -911,7 +914,7 @@ Release: independent
 
 ```mermaid
 flowchart TD
-    S1["✅ Step 1 (#595): ADR 0008 — forwarded-intent portability + principal identity"] --> S2["Step 2 (#596): structured intent on the forwarded wire"]
+    S1["✅ Step 1 (#595): ADR 0008 — forwarded-intent portability + principal identity"] --> S2["✅ Step 2 (#596): structured intent on the forwarded wire"]
     S2 --> S3["Step 3 (#597): serving resolves the forwarded intent"]
     S4["Step 4 (#598): Authorizer chain infrastructure"] --> S5["Step 5 (#599): registerAuthorizer seam + authorizerChain config"]
     S5 --> S6["Step 6 (#600): pi-permission-model-judge dogfood package"]
