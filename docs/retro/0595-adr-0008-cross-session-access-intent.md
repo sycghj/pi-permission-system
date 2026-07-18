@@ -69,3 +69,58 @@ Pre-completion reviewer returned PASS.
 - **Release**: mid-batch — defer (batch "cross-session-intent", tail = Step 3 / #597).
   Both commits are `docs:` (hidden), so this step cuts no release on its own; the batch ships when #597 lands.
 - Next step is `/ship-issue`.
+
+## Stage: Final Retrospective (2026-07-18T15:03:31Z)
+
+### Session summary
+
+Shipped issue #595 end to end in one continuous session: planned the ADR, ran two `ask_user` rounds to settle three parameters, then — prompted by the operator's meta-doubt — held an advisory dialogue that surfaced a unifying principle (*the child owns the facts; the parent owns the judgment*), restructured the plan and ADR around it, built the two `docs:` commits, and shipped with the release deferred to the batch tail (#597).
+The issue closed on `main`; no release cut (docs-only on `exclude-paths`).
+A clean session whose standout event was the reframe dialogue that changed the deliverable's structure, not its decisions.
+
+### Observations
+
+#### What went well
+
+- **Advisory reframe that grounded doubt in code, then generalized (novel win).**
+  The operator said the decisions "feel difficult… I can't tell if it's a comprehension gap or a missing reframe."
+  Rather than push forward, each open parameter was grounded in the actual source first: the worktree portability worry dissolved on finding that `AccessPath.matchValues()` already carries a **cwd-relative alias** (via `getCwdRelativePathPolicyValues` in `path-normalization.ts`), so relative parent rules stay portable across cwds without re-derivation.
+  That grounding then generalized into the principle *child owns the facts; parent owns the judgment*, validated against `authorizer.ts`/`authorizer-selection.ts` — it retro-explained ADR 0005 (serving-is-resolution) and ADR 0007 (the chain) and derived all three confirmed parameters.
+  The reframe reshaped the ADR (principle-first + a composition section) without changing a single decision.
+- **Two-round `ask_user` gate for an ADR issue.**
+  Round 1 surfaced the three deliberative parameters; round 2 tightened them after grounding in the code (e.g. reframing version-skew from "tolerant read" to "required field + `ask` floor").
+  The pattern fit the ADR-issue rule in `/plan-issue` exactly and produced decisions the operator could stand behind.
+- **Guards against over-application, baked into the artifact.**
+  When a unifying model is attractive there is a real risk of stretching it; the ADR's composition section was kept descriptive-only (cites ADR 0007 by path, decides nothing new) and a deferred-edges section named exactly where the model is incomplete (single-surface fact set #565 item 3; multi-hop principal identity).
+  The pre-completion reviewer confirmed no scope creep into re-deciding ADR 0007.
+- **Clean incremental verification.**
+  `rumdl check` ran after each doc write (not just at the end); the green baseline (`check` + `lint`) was confirmed before any edit; pre-completion returned PASS.
+
+#### What caused friction (agent side)
+
+- `other` (self-caught, no rework) — the plan-restructure `Edit` call carried a stray `"newText2": null` key on its first entry (the `oldText2`/`newText2` anti-pattern AGENTS.md documents).
+  The tool reported "12 block(s)" for 11 intended edits; caught immediately by counting reported blocks against intended edits and re-reading the regions — the exact mitigation AGENTS.md prescribes (Refs #605).
+  Impact: none — the value was `null` (harmless) and the existing guard worked; evidence the rule is doing its job, not a gap.
+- `other` (minor accuracy) — the Build stage note used a rounded placeholder timestamp (`2026-07-18T01:00:00Z`) instead of a real `date -u` value.
+  Impact: cosmetic; the breadcrumb ordering is still correct, but a real timestamp is trivially better for the cross-session trail.
+
+#### What caused friction (user side)
+
+- **None — the meta-doubt intervention was the session's highest-leverage moment.**
+  The operator committed the plan, then reopened it with "these decisions feel difficult."
+  That redirect (a question, not a correction) is exactly the strategic-judgment intervention the workflow wants: it arrived before the ADR was written, when restructuring was cheap, and it produced a materially better artifact.
+  Nothing to change; recorded as a model of good bidirectional feedback.
+
+### Diagnostic details
+
+- **Model-performance correlation** — the session switched models frequently (operator-driven), with `claude-opus-4-8` and `claude-sonnet-5` present for the heavy reasoning stretches and lighter models (`claude-haiku-4-5`, `claude-fable-5`, `deepseek-v4-flash`) elsewhere.
+  The one subagent dispatch (`pre-completion-reviewer`) ran on its configured model — judgment-appropriate.
+  No mismatch to flag: the judgment-heavy reframe work had strong models available.
+- **Escalation-delay tracking** — no `rabbit-hole` friction; longest same-target streak was benign (verifying the multi-edit block count).
+- **Unused-tool detection** — no `missing-context` gaps; `grep`/`sed`/`Read` grounded every claim in source (the cwd-relative alias finding came from reading `path-normalization.ts` directly).
+- **Feedback-loop gap analysis** — verification was incremental: baseline `check`+`lint` before edits, `rumdl check` after each doc write, `lint` + `fallow dead-code` at pre-push, CI watched to green.
+
+### Changes made
+
+1. `packages/pi-permission-system/docs/retro/0595-adr-0008-cross-session-access-intent.md` — appended this Final Retrospective stage entry.
+   No `AGENTS.md` or prompt changes: the operator confirmed landing the retro file only, since the session's friction was already covered by existing rules (the `newText2` block-count guard, Refs #605) or too trivial to encode (a placeholder timestamp).
