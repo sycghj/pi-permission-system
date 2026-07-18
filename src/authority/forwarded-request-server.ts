@@ -62,7 +62,7 @@ export interface ServingPolicy {
 export interface ForwardedRequestServerDeps {
   forwardingDir: string;
   logger: DebugReviewLogger;
-  /** Recorded-authority resolution for `(surface, value)` requests. */
+  /** Recorded-authority resolution for a forwarded `ForwardedAccessIntent`. */
   policy: ServingPolicy;
   /** Escalation seam to the serving session's selected `Authorizer` on `ask`. */
   escalator: AskEscalator;
