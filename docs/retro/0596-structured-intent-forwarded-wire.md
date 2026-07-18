@@ -66,3 +66,55 @@ Test count 2472 → 2491 (+19); pre-completion reviewer returned WARN, both find
 - **Reviewer note (non-issue):** a full-monorepo `pnpm run test` showed 2 pre-existing pi-autoformat acceptance flakes (real-`pi`-CLI RPC timeouts under concurrent load); zero pi-autoformat files touched, standalone re-run green.
 - **Release**: mid-batch — defer (batch "cross-session-intent", tail = Step 3 / #597).
   Next step is `/ship-issue`.
+
+## Stage: Final Retrospective (2026-07-18T17:20:47Z)
+
+### Session summary
+
+Shipped issue #596 end to end in one continuous session: planned Phase 12 Track A Step 2, executed six TDD cycles bracketed by two Tidy-First prep refactors, handled the pre-completion reviewer's WARN, then pushed, verified CI green, closed the issue, and deferred the release per the operator's ship-time confirmation.
+The change threads a structured `ForwardedAccessIntent` from every permission gate through the escalation edge onto the forwarded wire (ADR 0008), non-breaking, test count 2472 → 2491.
+An exceptionally low-friction session — the only user input across all four stages was the one release-defer decision at ship time.
+
+### Observations
+
+#### What went well
+
+- **The `tidy-first-assessor`'s rejection list was as valuable as its recommendations (novel win).**
+  Beyond the two prep refactors it recommended, it *pre-verified* the `ForwarderContext`/`cwd` widening's fixture blast radius as near-zero and told me not to hunt inline fakes — confirmed empirically when `pnpm run check` passed after the widening with only `makeForwarderContext` touched.
+  The "Rejected as scope creep" analysis saved a speculative grep-and-edit pass across five test files the plan had flagged as candidates.
+- **The pre-completion reviewer caught a plan-named invariant gap.**
+  The plan's own "Invariants at risk" section asked for a test co-asserting display fields + `accessIntent` on one request; I built all the gates but never wrote that combined assertion.
+  The reviewer flagged exactly that gap (WARN), and closing it strengthened the `approval-escalator` stamp test plus added `helpers.test.ts` edge-case coverage — the reviewer doing precisely its job on a self-inflicted omission.
+- **Incremental verification throughout.**
+  Green baseline (`check` + root `lint` + `test`) before any edit; `pnpm run check` after every shared-type change; the target test file after each red→green; full suite + root lint + `fallow dead-code` after the last step and again pre-push.
+  No end-of-session verification pile-up.
+- **Deferred-release path exercised cleanly.**
+  `/ship-issue` read the plan's `**Release:** mid-batch — defer` marker up front, asked once, closed the issue, and skipped the release-please merge — decoupling "work is on `main`" (close) from "cut a version" (batch tail) exactly as designed.
+
+#### What caused friction (agent side)
+
+- `other` (speculative lint suppression) — in Step 1 I wrote `boundaryValue: path.boundaryValue() || null` with a preemptive `// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing`.
+  `boundaryValue()` returns a non-nullable `string`, so the rule never fired; the pre-commit auto-fix stripped the unused directive and left a stray blank line inside the object literal, which the reviewer flagged (WARN).
+  Impact: one cosmetic reviewer WARN + a small remediation cycle (re-added the disable → eslint unused-directive error → removed it entirely).
+  Self-caught by the auto-fix and reviewer; no behavior rework.
+- `other` (staging/autoformat interaction) — the first Step-1 commit attempt did not finalize: pi-autoformat reflowed `helpers.ts` after it was staged (an `MM` state), and the commit ended without a log line.
+  Impact: one extra `git add` + re-commit; no rework.
+  Already covered by the AGENTS.md note that autoformat reflows after `Edit`/`Write`.
+
+#### What caused friction (user side)
+
+- **None — the session was a model of minimal, well-placed oversight.**
+  The operator's single intervention (the release-defer `ask_user` at ship time) was exactly the strategic-judgment call the workflow reserves for a human; everything else ran unattended from a plan the operator had already reviewed.
+
+### Diagnostic details
+
+- **Model-performance correlation** — the parent session alternated `anthropic/claude-opus-4-8` and `anthropic/claude-sonnet-5` (operator-driven) across the heavy-reasoning stretches.
+  The two subagent dispatches (`tidy-first-assessor`, `pre-completion-reviewer`) ran on their configured models for judgment-heavy tasks (preparatory-refactor assessment; quality review) — appropriate, no mismatch.
+- **Escalation-delay tracking** — no `rabbit-hole` friction; both eslint frictions resolved within 1–2 tool calls, no sequence approached the 5-call threshold.
+- **Unused-tool detection** — no `missing-context` gaps; the planning stage had already grounded every design claim in source (the `ForwarderContext` cwd finding), so implementation needed no exploratory search.
+- **Feedback-loop gap analysis** — verification was incremental at every stage (see "What went well"); no lens found a deferred-verification gap.
+
+### Changes made
+
+1. `.pi/skills/code-design/SKILL.md` — added a `### Speculative eslint-disable directives` subsection under "Biome / ESLint linter conflicts": add a disable only after the linter reports the rule (the pre-commit auto-fix strips an unused directive and leaves a stray blank line), and a `||`-default on a non-nullable primitive does not trip `prefer-nullish-coalescing`.
+2. `packages/pi-permission-system/docs/retro/0596-structured-intent-forwarded-wire.md` — appended this Final Retrospective stage entry.
