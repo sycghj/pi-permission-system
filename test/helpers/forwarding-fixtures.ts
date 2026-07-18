@@ -124,6 +124,7 @@ export function makeForwarderContext(
   overrides: {
     hasUI?: boolean;
     ui?: ForwarderContext["ui"];
+    cwd?: string;
     sessionId?: string;
     sessionManager?: Partial<ForwarderContext["sessionManager"]>;
   } = {},
@@ -131,6 +132,7 @@ export function makeForwarderContext(
   return {
     hasUI: overrides.hasUI ?? false,
     ui: overrides.ui ?? { select: vi.fn(), input: vi.fn() },
+    cwd: overrides.cwd ?? "/repo",
     sessionManager: {
       getSessionId: vi.fn(() => overrides.sessionId ?? ""),
       getSessionDir: vi.fn(() => ""),

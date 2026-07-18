@@ -6,6 +6,7 @@ import {
 } from "#src/active-agent";
 import {
   type ForwarderContext,
+  getCwd,
   getSessionId,
 } from "#src/authority/forwarder-context";
 import {
@@ -20,6 +21,7 @@ import {
 } from "#src/authority/forwarding-io";
 import type { PermissionPromptDecision } from "#src/authority/permission-dialog";
 import {
+  type ForwardedAccessFacts,
   type ForwardedPermissionRequest,
   type ForwardedPromptDisplay,
   type ForwardedSessionApproval,
@@ -74,6 +76,8 @@ interface ForwardedRequestFacts {
   message: string;
   display?: ForwardedPromptDisplay;
   sessionApproval?: ForwardedSessionApproval;
+  /** The child-fixed access facts; the edge completes them into a `ForwardedAccessIntent`. */
+  accessIntent?: ForwardedAccessFacts;
 }
 
 /** Constructor config for {@link ParentAuthorizer}. */
@@ -122,6 +126,7 @@ export class ParentAuthorizer implements Authorizer {
         value: uiPrompt.value,
       },
       sessionApproval: details.sessionApproval,
+      accessIntent: details.accessIntent,
     });
   }
 
@@ -217,6 +222,20 @@ export class ParentAuthorizer implements Authorizer {
       getActiveAgentName(ctx) ??
       getActiveAgentNameFromSystemPrompt(getContextSystemPrompt(ctx)) ??
       "unknown";
+    // Complete the child-fixed facts into a full ForwardedAccessIntent: the
+    // gate fixed the access facts; the edge stamps the requester identity it
+    // alone knows (cwd + principal). The parent resolves against this intent
+    // and never re-derives the match set (ADR 0008).
+    const accessIntent = facts.accessIntent
+      ? {
+          ...facts.accessIntent,
+          requesterCwd: getCwd(ctx),
+          principal: {
+            sessionId: requesterSessionId,
+            agentName: requesterAgentName,
+          },
+        }
+      : undefined;
     return {
       id: requestId,
       createdAt: Date.now(),
@@ -234,6 +253,7 @@ export class ParentAuthorizer implements Authorizer {
       ...(facts.sessionApproval
         ? { sessionApproval: facts.sessionApproval }
         : {}),
+      ...(accessIntent ? { accessIntent } : {}),
     };
   }
 

@@ -1,5 +1,8 @@
 import type { PermissionPromptDecision } from "#src/authority/permission-dialog";
-import type { ForwardedSessionApproval } from "#src/authority/permission-forwarding";
+import type {
+  ForwardedAccessFacts,
+  ForwardedSessionApproval,
+} from "#src/authority/permission-forwarding";
 import type { ReviewLogger } from "#src/session-logger";
 import type { Authorizer } from "./authorizer";
 
@@ -46,6 +49,14 @@ export interface PromptPermissionDetails {
    * suggestion.
    */
   sessionApproval?: ForwardedSessionApproval;
+  /**
+   * The child-fixed access facts the raising gate computed (surface + match
+   * set). Rides through the runner to the escalation edge, which completes
+   * them into a `ForwardedAccessIntent` by stamping `requesterCwd` and
+   * `principal`. Absent for a serving-node local prompt reconstructed from a
+   * forwarded request.
+   */
+  accessIntent?: ForwardedAccessFacts;
 }
 
 /**
