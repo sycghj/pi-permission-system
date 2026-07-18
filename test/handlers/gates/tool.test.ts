@@ -247,6 +247,43 @@ describe("describeToolGate", () => {
     expect(desc.promptDetails.sessionLabel).toBeDefined();
   });
 
+  it("carries the AccessPath's facts on promptDetails for a path-bearing tool", () => {
+    const check = makeCheckResult("ask", { toolName: "edit" });
+    const accessPath = normalizer.forPath("src/foo.ts");
+    const desc = describeToolGate(
+      makeTcc({
+        toolName: "edit",
+        input: { path: "src/foo.ts" },
+        cwd: "/test/project",
+      }),
+      check,
+      makeFormatter(),
+      accessPath,
+    );
+    expect(desc.promptDetails.accessIntent).toEqual({
+      surface: "edit",
+      matchValues: accessPath.matchValues(),
+      boundaryValue: accessPath.boundaryValue(),
+    });
+  });
+
+  it("carries the single decision value on promptDetails for a non-path tool (bash)", () => {
+    const check = makeCheckResult("ask", {
+      toolName: "bash",
+      command: "git status",
+    });
+    const desc = describeToolGate(
+      makeTcc({ toolName: "bash", input: { command: "git status" } }),
+      check,
+      makeFormatter(),
+    );
+    expect(desc.promptDetails.accessIntent).toEqual({
+      surface: "bash",
+      matchValues: ["git status"],
+      boundaryValue: null,
+    });
+  });
+
   it("populates logContext with tool input preview fields", () => {
     const check = makeCheckResult("ask", { toolName: "bash", command: "ls" });
     const desc = describeToolGate(

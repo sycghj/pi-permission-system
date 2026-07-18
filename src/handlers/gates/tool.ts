@@ -11,7 +11,11 @@ import { SessionApproval } from "#src/session-approval";
 import type { ToolPreviewFormatter } from "#src/tool-preview-formatter";
 import type { PermissionCheckResult } from "#src/types";
 import type { GateDescriptor } from "./descriptor";
-import { deriveDecisionValue } from "./helpers";
+import {
+  accessFactsFromPath,
+  accessFactsFromValue,
+  deriveDecisionValue,
+} from "./helpers";
 import type { ToolCallContext } from "./types";
 
 /**
@@ -81,6 +85,12 @@ export function describeToolGate(
     getPathBearingToolPath(tcc.toolName, tcc.input) ?? undefined,
   );
 
+  // A path-bearing tool carries the AccessPath's alias set; every other surface
+  // (bash command, MCP target, plain tool) carries its already-portable value.
+  const accessIntent = accessPath
+    ? accessFactsFromPath(gateSurface, accessPath)
+    : accessFactsFromValue(gateSurface, decisionValue);
+
   return {
     surface: gateSurface,
     input: tcc.input,
@@ -101,6 +111,7 @@ export function describeToolGate(
       toolCallId: tcc.toolCallId,
       toolName: tcc.toolName,
       sessionLabel: suggestion.label,
+      accessIntent,
       ...permissionLogContext,
     },
     logContext: {
