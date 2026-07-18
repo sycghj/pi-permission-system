@@ -22,6 +22,7 @@ import type { ForwardedRequestServerDeps } from "#src/authority/forwarded-reques
 import type { ForwarderContext } from "#src/authority/forwarder-context";
 import {
   createPermissionForwardingLocation,
+  type ForwardedAccessIntent,
   type ForwardedPermissionRequest,
   type PermissionForwardingLocation,
 } from "#src/authority/permission-forwarding";
@@ -94,7 +95,7 @@ export function createForwardingTempDir(
  * (`ask`) and an approving escalator.
  *
  * Override `policy` / `escalator` with captured `vi.fn()` mocks to assert the
- * resolve-then-escalate flow (e.g. `policy: { check }` returning
+ * resolve-then-escalate flow (e.g. `policy: { resolve }` returning
  * `makeCheckResult({ state: "allow" })`, `escalator: { escalate }`).
  */
 export function makeServerDeps(
@@ -103,13 +104,32 @@ export function makeServerDeps(
   return {
     forwardingDir: "/tmp/forwarding",
     logger: { review: vi.fn(), debug: vi.fn() },
-    policy: { check: vi.fn(() => makeCheckResult({ state: "ask" })) },
+    policy: { resolve: vi.fn(() => makeCheckResult({ state: "ask" })) },
     escalator: {
       escalate: vi
         .fn()
         .mockResolvedValue({ approved: true, state: "approved" }),
     },
     recorder: { recordSessionApproval: vi.fn() },
+    ...overrides,
+  };
+}
+
+/**
+ * Builds a well-formed `ForwardedAccessIntent` (ADR 0008 §2) for request /
+ * policy fixtures. Defaults model a child in a worktree: a cwd-relative alias
+ * alongside the absolute one, so a relative parent rule stays relevant across
+ * cwds.
+ */
+export function makeForwardedAccessIntent(
+  overrides: Partial<ForwardedAccessIntent> = {},
+): ForwardedAccessIntent {
+  return {
+    surface: "bash",
+    matchValues: ["git status"],
+    boundaryValue: null,
+    requesterCwd: "/worktree/issue-42",
+    principal: { sessionId: "child-session", agentName: "Explore" },
     ...overrides,
   };
 }

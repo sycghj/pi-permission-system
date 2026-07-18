@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getAgentDir, getPackageDir } from "@earendil-works/pi-coding-agent";
 import { warmBashParser } from "./access-intent/bash/parser";
-import { buildAccessIntentForSurface } from "./access-intent/input-normalizer";
+import { buildResolvedIntentFromMatchValues } from "./access-intent/input-normalizer";
 import { AuthorizerSelection } from "./authority/authorizer-selection";
 import {
   ForwardedRequestServer,
@@ -116,20 +116,18 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
   // service and gates below share this one instance.
   const resolver = new PermissionResolver(permissionManager, sessionRules);
 
-  // Serving a forwarded request is resolution: evaluate (surface, value)
-  // against the serving node's composed base ruleset (agentName undefined —
-  // the child already applied its own per-agent overrides before forwarding).
-  // The session.getPathNormalizer() read is deferred behind the closure: inbox
-  // polling starts at session_start, after `session` is assigned — the same
-  // deferred-binding precedent as the logger notify sink below.
+  // Serving a forwarded request is resolution: resolve the child-fixed
+  // ForwardedAccessIntent (ADR 0008) directly against the serving node's
+  // composed ruleset, agent-scoped to the requester (§3) — the match values
+  // are used as fixed by the child, never re-derived through this session's
+  // PathNormalizer/cwd (#597).
   const servingPolicy: ServingPolicy = {
-    check: (surface, value) =>
+    resolve: (intent) =>
       resolver.resolve(
-        buildAccessIntentForSurface(
-          surface,
-          value ?? undefined,
-          session.getPathNormalizer(),
-          undefined,
+        buildResolvedIntentFromMatchValues(
+          intent.surface,
+          intent.matchValues,
+          intent.principal.agentName,
         ),
       ),
   };

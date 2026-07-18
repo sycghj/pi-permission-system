@@ -5,6 +5,7 @@ import {
 } from "#src/authority/forwarder-context";
 import type { PermissionPromptDecision } from "#src/authority/permission-dialog";
 import {
+  type ForwardedAccessIntent,
   type ForwardedPermissionRequest,
   type ForwardedPermissionResponse,
   isForwardedPermissionRequestForSession,
@@ -43,16 +44,18 @@ export interface InboxProcessor {
 
 /**
  * Recorded-authority view the serving node resolves a forwarded request
- * against: answer one `(surface, value)` query on the serving session's
- * composed base ruleset (agent-neutral — the child already applied its own
- * per-agent overrides before forwarding).
+ * against: answer one {@link ForwardedAccessIntent} query on the serving
+ * session's composed ruleset, agent-scoped to the requester
+ * (`principal.agentName`, ADR 0008 §3) — the child-fixed `matchValues` are
+ * used as-is, never re-derived through this session's `PathNormalizer`/cwd.
  *
  * Narrow by design (ISP): the server needs one decision, not the whole
- * resolver. The composition root satisfies it with an access-intent build plus
- * `resolver.resolve`, the same primitives `LocalPermissionsService` composes.
+ * resolver. The composition root satisfies it with
+ * `buildResolvedIntentFromMatchValues` plus `resolver.resolve`, the same
+ * `resolve` entry point `LocalPermissionsService` composes.
  */
 export interface ServingPolicy {
-  check(surface: string, value: string | null): PermissionCheckResult;
+  resolve(intent: ForwardedAccessIntent): PermissionCheckResult;
 }
 
 /** Constructor config for `ForwardedRequestServer`. */
@@ -88,22 +91,6 @@ function formatForwardedPermissionPrompt(
 }
 
 /**
- * A request is resolvable against the ruleset only when it carries a concrete
- * `(surface, value)` display projection. A legacy/version-skew request without
- * them floors to `ask` (escalate), never a silent grant.
- */
-function hasDisplayFields(
-  request: ForwardedPermissionRequest,
-): request is ForwardedPermissionRequest & { surface: string; value: string } {
-  return (
-    typeof request.surface === "string" &&
-    request.surface.length > 0 &&
-    typeof request.value === "string" &&
-    request.value.length > 0
-  );
-}
-
-/**
  * Map a forwarded request onto the escalated ask's details, carrying the
  * forwarded provenance (requester agent/session + the child's original display
  * projection) so `LocalUserAuthorizer` emits a non-degraded broadcast (#292).
@@ -135,9 +122,10 @@ function buildForwardedAskDetails(
 /**
  * Owner of the serving-down role of the forwarded-permission behavior:
  * draining this session's forwarded-permission inbox and answering each
- * request the same way the session resolves a local action — `evaluate()`
- * against its recorded authority (`ServingPolicy`), then escalation to its
- * selected `Authorizer` (`AskEscalator`) on `ask`.
+ * request the same way the session resolves a local action — resolving its
+ * `ForwardedAccessIntent` against recorded authority (`ServingPolicy`), then
+ * escalation to its selected `Authorizer` (`AskEscalator`) on `ask` (ADR
+ * 0008).
  */
 export class ForwardedRequestServer implements InboxProcessor {
   private readonly forwardingDir: string;
@@ -343,17 +331,19 @@ export class ForwardedRequestServer implements InboxProcessor {
 
   /**
    * Resolve the request the same way the session resolves a local action:
-   * recorded authority first (a request carrying `(surface, value)` resolves
-   * against the serving node's composed ruleset — `allow`, including
-   * yolo-rewritten, auto-approves; `deny` auto-denies), then escalate `ask`
-   * (or a request without display fields) to the selected `Authorizer`.
+   * recorded authority first (a request carrying an `accessIntent` — the
+   * child-fixed facts, ADR 0008 §2 — resolves against the serving node's
+   * composed ruleset — `allow`, including yolo-rewritten, auto-approves;
+   * `deny` auto-denies), then escalate `ask` (or a request missing
+   * `accessIntent`, the version-skew floor, ADR 0008 §4) to the selected
+   * `Authorizer`.
    */
   private async resolveDecision(
     request: ForwardedPermissionRequest,
     logDetails: Record<string, unknown>,
   ): Promise<PermissionPromptDecision> {
-    const state = hasDisplayFields(request)
-      ? this.policy.check(request.surface, request.value).state
+    const state = request.accessIntent
+      ? this.policy.resolve(request.accessIntent).state
       : "ask";
 
     if (state === "allow") {

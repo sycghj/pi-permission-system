@@ -6,6 +6,7 @@ import type { ForwardedPermissionResponse } from "#src/authority/permission-forw
 import {
   createForwardingTempDir,
   type ForwardingTempDir,
+  makeForwardedAccessIntent,
   makeForwarderContext,
   makeServerDeps,
   makeSubagentRegistry,
@@ -34,14 +35,18 @@ function readResponse(
 describe("processInbox — recorded-authority resolution", () => {
   test("auto-approves and writes an approved response when the serving policy allows", async () => {
     temp = createForwardingTempDir("parent-session");
+    const accessIntent = makeForwardedAccessIntent({
+      matchValues: ["git status"],
+    });
     temp.writeRequest({
       id: "req-allow",
       source: "tool_call",
       surface: "bash",
       value: "git status",
+      accessIntent,
     });
 
-    const check = vi.fn(() => makeCheckResult({ state: "allow" }));
+    const resolve = vi.fn(() => makeCheckResult({ state: "allow" }));
     const escalate = vi.fn();
     const logger = { review: vi.fn(), debug: vi.fn() };
 
@@ -49,7 +54,7 @@ describe("processInbox — recorded-authority resolution", () => {
       makeServerDeps({
         forwardingDir: temp.forwardingDir,
         logger,
-        policy: { check },
+        policy: { resolve },
         escalator: { escalate },
       }),
     );
@@ -58,7 +63,7 @@ describe("processInbox — recorded-authority resolution", () => {
       makeForwarderContext({ hasUI: true, sessionId: "parent-session" }),
     );
 
-    expect(check).toHaveBeenCalledWith("bash", "git status");
+    expect(resolve).toHaveBeenCalledWith(accessIntent);
     expect(escalate).not.toHaveBeenCalled();
     expect(readResponse(temp, "req-allow")).toMatchObject({
       approved: true,
@@ -72,14 +77,18 @@ describe("processInbox — recorded-authority resolution", () => {
 
   test("auto-denies and writes a denied response when the serving policy denies", async () => {
     temp = createForwardingTempDir("parent-session");
+    const accessIntent = makeForwardedAccessIntent({
+      matchValues: ["rm -rf /"],
+    });
     temp.writeRequest({
       id: "req-deny",
       source: "tool_call",
       surface: "bash",
       value: "rm -rf /",
+      accessIntent,
     });
 
-    const check = vi.fn(() => makeCheckResult({ state: "deny" }));
+    const resolve = vi.fn(() => makeCheckResult({ state: "deny" }));
     const escalate = vi.fn();
     const logger = { review: vi.fn(), debug: vi.fn() };
 
@@ -87,7 +96,7 @@ describe("processInbox — recorded-authority resolution", () => {
       makeServerDeps({
         forwardingDir: temp.forwardingDir,
         logger,
-        policy: { check },
+        policy: { resolve },
         escalator: { escalate },
       }),
     );
@@ -96,6 +105,7 @@ describe("processInbox — recorded-authority resolution", () => {
       makeForwarderContext({ hasUI: true, sessionId: "parent-session" }),
     );
 
+    expect(resolve).toHaveBeenCalledWith(accessIntent);
     expect(escalate).not.toHaveBeenCalled();
     expect(readResponse(temp, "req-deny")).toMatchObject({
       approved: false,
@@ -109,14 +119,18 @@ describe("processInbox — recorded-authority resolution", () => {
 
   test("escalates an ask through the AskEscalator with the forwarded provenance details", async () => {
     temp = createForwardingTempDir("parent-session");
+    const accessIntent = makeForwardedAccessIntent({
+      matchValues: ["git push"],
+    });
     temp.writeRequest({
       id: "req-ask",
       source: "tool_call",
       surface: "bash",
       value: "git push",
+      accessIntent,
     });
 
-    const check = vi.fn(() => makeCheckResult({ state: "ask" }));
+    const resolve = vi.fn(() => makeCheckResult({ state: "ask" }));
     const escalate = vi
       .fn()
       .mockResolvedValue({ approved: true, state: "approved" });
@@ -124,7 +138,7 @@ describe("processInbox — recorded-authority resolution", () => {
     const server = new ForwardedRequestServer(
       makeServerDeps({
         forwardingDir: temp.forwardingDir,
-        policy: { check },
+        policy: { resolve },
         escalator: { escalate },
       }),
     );
@@ -133,6 +147,7 @@ describe("processInbox — recorded-authority resolution", () => {
       makeForwarderContext({ hasUI: true, sessionId: "parent-session" }),
     );
 
+    expect(resolve).toHaveBeenCalledWith(accessIntent);
     expect(escalate).toHaveBeenCalledWith({
       requestId: "req-ask",
       source: "tool_call",
@@ -152,12 +167,12 @@ describe("processInbox — recorded-authority resolution", () => {
     });
   });
 
-  test("floors a request without display fields to escalation without consulting the policy", async () => {
+  test("floors a request with no fields at all (fully legacy) to escalation without consulting the policy", async () => {
     temp = createForwardingTempDir("parent-session");
-    // Legacy / version-skew request: no source/surface/value.
+    // Legacy / version-skew request: no source/surface/value/accessIntent.
     temp.writeRequest({ id: "req-legacy" });
 
-    const check = vi.fn(() => makeCheckResult({ state: "allow" }));
+    const resolve = vi.fn(() => makeCheckResult({ state: "allow" }));
     const escalate = vi
       .fn()
       .mockResolvedValue({ approved: true, state: "approved" });
@@ -165,7 +180,7 @@ describe("processInbox — recorded-authority resolution", () => {
     const server = new ForwardedRequestServer(
       makeServerDeps({
         forwardingDir: temp.forwardingDir,
-        policy: { check },
+        policy: { resolve },
         escalator: { escalate },
       }),
     );
@@ -174,7 +189,7 @@ describe("processInbox — recorded-authority resolution", () => {
       makeForwarderContext({ hasUI: true, sessionId: "parent-session" }),
     );
 
-    expect(check).not.toHaveBeenCalled();
+    expect(resolve).not.toHaveBeenCalled();
     expect(escalate).toHaveBeenCalledWith(
       expect.objectContaining({
         requestId: "req-legacy",
@@ -185,11 +200,55 @@ describe("processInbox — recorded-authority resolution", () => {
     );
   });
 
+  test("floors a version-skew request with display fields but no accessIntent to escalation without consulting the policy", async () => {
+    temp = createForwardingTempDir("parent-session");
+    // An older child populated the display fields but never computed the
+    // structured intent (ADR 0008 §4: accessIntent is the sole resolution
+    // path — a request missing it floors to `ask`, never a silent grant).
+    temp.writeRequest({
+      id: "req-skew",
+      source: "tool_call",
+      surface: "bash",
+      value: "git push",
+    });
+
+    const resolve = vi.fn(() => makeCheckResult({ state: "allow" }));
+    const escalate = vi
+      .fn()
+      .mockResolvedValue({ approved: true, state: "approved" });
+
+    const server = new ForwardedRequestServer(
+      makeServerDeps({
+        forwardingDir: temp.forwardingDir,
+        policy: { resolve },
+        escalator: { escalate },
+      }),
+    );
+
+    await server.processInbox(
+      makeForwarderContext({ hasUI: true, sessionId: "parent-session" }),
+    );
+
+    expect(resolve).not.toHaveBeenCalled();
+    expect(escalate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestId: "req-skew",
+        surface: "bash",
+        value: "git push",
+      }),
+    );
+  });
+
   test("denies when the escalator rejects", async () => {
     temp = createForwardingTempDir("parent-session");
-    temp.writeRequest({ id: "req-throw", surface: "bash", value: "git push" });
+    temp.writeRequest({
+      id: "req-throw",
+      surface: "bash",
+      value: "git push",
+      accessIntent: makeForwardedAccessIntent({ matchValues: ["git push"] }),
+    });
 
-    const check = vi.fn(() => makeCheckResult({ state: "ask" }));
+    const resolve = vi.fn(() => makeCheckResult({ state: "ask" }));
     const escalate = vi.fn().mockRejectedValue(new Error("ui gone"));
     const logger = { review: vi.fn(), debug: vi.fn() };
 
@@ -197,7 +256,7 @@ describe("processInbox — recorded-authority resolution", () => {
       makeServerDeps({
         forwardingDir: temp.forwardingDir,
         logger,
-        policy: { check },
+        policy: { resolve },
         escalator: { escalate },
       }),
     );
@@ -227,10 +286,11 @@ describe("processInbox — grant-scope selection", () => {
       source: "tool_call",
       surface: "bash",
       value: "git push",
+      accessIntent: makeForwardedAccessIntent({ matchValues: ["git push"] }),
       sessionApproval: { surface: "bash", patterns: ["git *"] },
     });
 
-    const check = vi.fn(() => makeCheckResult({ state: "ask" }));
+    const resolve = vi.fn(() => makeCheckResult({ state: "ask" }));
     const escalate = vi.fn().mockResolvedValue({
       approved: true,
       state: "approved_for_serving_session",
@@ -240,7 +300,7 @@ describe("processInbox — grant-scope selection", () => {
     const server = new ForwardedRequestServer(
       makeServerDeps({
         forwardingDir: temp.forwardingDir,
-        policy: { check },
+        policy: { resolve },
         escalator: { escalate },
         recorder: { recordSessionApproval },
       }),
@@ -267,10 +327,11 @@ describe("processInbox — grant-scope selection", () => {
       source: "tool_call",
       surface: "bash",
       value: "git push",
+      accessIntent: makeForwardedAccessIntent({ matchValues: ["git push"] }),
       sessionApproval: { surface: "bash", patterns: ["git *"] },
     });
 
-    const check = vi.fn(() => makeCheckResult({ state: "ask" }));
+    const resolve = vi.fn(() => makeCheckResult({ state: "ask" }));
     const escalate = vi
       .fn()
       .mockResolvedValue({ approved: true, state: "approved" });
@@ -278,7 +339,7 @@ describe("processInbox — grant-scope selection", () => {
     const server = new ForwardedRequestServer(
       makeServerDeps({
         forwardingDir: temp.forwardingDir,
-        policy: { check },
+        policy: { resolve },
         escalator: { escalate },
       }),
     );
@@ -301,10 +362,11 @@ describe("processInbox — grant-scope selection", () => {
       source: "tool_call",
       surface: "bash",
       value: "git push",
+      accessIntent: makeForwardedAccessIntent({ matchValues: ["git push"] }),
       sessionApproval: { surface: "bash", patterns: ["git *"] },
     });
 
-    const check = vi.fn(() => makeCheckResult({ state: "ask" }));
+    const resolve = vi.fn(() => makeCheckResult({ state: "ask" }));
     const escalate = vi
       .fn()
       .mockResolvedValue({ approved: true, state: "approved_for_session" });
@@ -313,7 +375,7 @@ describe("processInbox — grant-scope selection", () => {
     const server = new ForwardedRequestServer(
       makeServerDeps({
         forwardingDir: temp.forwardingDir,
-        policy: { check },
+        policy: { resolve },
         escalator: { escalate },
         recorder: { recordSessionApproval },
       }),
@@ -410,14 +472,19 @@ describe("processInbox — inbox mechanics", () => {
     temp = createForwardingTempDir("parent-session", {
       createResponsesDir: false,
     });
-    temp.writeRequest({ id: "req-race", surface: "bash", value: "cat x" });
+    temp.writeRequest({
+      id: "req-race",
+      surface: "bash",
+      value: "cat x",
+      accessIntent: makeForwardedAccessIntent({ matchValues: ["cat x"] }),
+    });
 
     const logger = { review: vi.fn(), debug: vi.fn() };
     const server = new ForwardedRequestServer(
       makeServerDeps({
         forwardingDir: temp.forwardingDir,
         logger,
-        policy: { check: vi.fn(() => makeCheckResult({ state: "allow" })) },
+        policy: { resolve: vi.fn(() => makeCheckResult({ state: "allow" })) },
       }),
     );
 
@@ -442,13 +509,14 @@ describe("processInbox — inbox mechanics", () => {
       targetSessionId: "other-session",
       surface: "bash",
       value: "git push",
+      accessIntent: makeForwardedAccessIntent({ matchValues: ["git push"] }),
     });
 
-    const check = vi.fn(() => makeCheckResult({ state: "allow" }));
+    const resolve = vi.fn(() => makeCheckResult({ state: "allow" }));
     const server = new ForwardedRequestServer(
       makeServerDeps({
         forwardingDir: temp.forwardingDir,
-        policy: { check },
+        policy: { resolve },
       }),
     );
 
@@ -456,6 +524,6 @@ describe("processInbox — inbox mechanics", () => {
       makeForwarderContext({ hasUI: true, sessionId: "parent-session" }),
     );
 
-    expect(check).not.toHaveBeenCalled();
+    expect(resolve).not.toHaveBeenCalled();
   });
 });
