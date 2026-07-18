@@ -1,9 +1,43 @@
+import type { AccessPath } from "#src/access-intent/access-path";
 import { classifyToolKind } from "#src/access-intent/tool-kind";
+import type { ForwardedAccessFacts } from "#src/authority/permission-forwarding";
 import type {
   PermissionDecisionEvent,
   PermissionDecisionResolution,
 } from "#src/permission-events";
 import type { PermissionCheckResult } from "#src/types";
+
+/**
+ * Build the child-fixed access facts for a path-shaped gate from its
+ * `AccessPath`.
+ *
+ * Converts the `AccessPath` to strings at the point of emission (ADR-0002: an
+ * `AccessPath` never crosses onto the wire), carrying the lexical ∪ canonical
+ * match set. An empty `boundaryValue()` (a literal-only path) becomes `null`,
+ * so the wire distinguishes "no canonical form" cleanly.
+ */
+export function accessFactsFromPath(
+  surface: string,
+  path: AccessPath,
+): ForwardedAccessFacts {
+  return {
+    surface,
+    matchValues: path.matchValues(),
+
+    boundaryValue: path.boundaryValue() || null,
+  };
+}
+
+/**
+ * Build the child-fixed access facts for a non-path gate (bash command, MCP
+ * target, skill name, plain tool) from its already-portable single value.
+ */
+export function accessFactsFromValue(
+  surface: string,
+  value: string,
+): ForwardedAccessFacts {
+  return { surface, matchValues: [value], boundaryValue: null };
+}
 
 /**
  * Derive the human-readable value for a decision event from a check result.

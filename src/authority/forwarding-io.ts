@@ -12,6 +12,7 @@ import {
 import { isPermissionDecisionState } from "#src/authority/permission-dialog";
 import {
   createPermissionForwardingLocation,
+  type ForwardedAccessIntent,
   type ForwardedPermissionRequest,
   type ForwardedPermissionResponse,
   type ForwardedSessionApproval,
@@ -65,6 +66,65 @@ function asForwardedSessionApproval(
     return undefined;
   }
   return { surface: candidate.surface, patterns: [...candidate.patterns] };
+}
+
+/**
+ * Narrow an unknown value to a `ForwardedAccessIntent`, or `undefined`.
+ *
+ * Tolerant read: the child-fixed access intent is optional (absent on an older
+ * child) and only accepted when fully well-formed — a string `surface`, an
+ * all-string `matchValues` array, a `string | null` `boundaryValue`, a string
+ * `requesterCwd`, and a `principal` with string `sessionId`/`agentName`. Any
+ * malformed shape → `undefined`, so the serving node floors to `ask` (Step 3)
+ * rather than resolving against corrupt facts.
+ */
+function asForwardedAccessIntent(
+  value: unknown,
+): ForwardedAccessIntent | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  const candidate = value as {
+    surface?: unknown;
+    matchValues?: unknown;
+    boundaryValue?: unknown;
+    requesterCwd?: unknown;
+    principal?: unknown;
+  };
+  if (
+    typeof candidate.surface !== "string" ||
+    !Array.isArray(candidate.matchValues) ||
+    !candidate.matchValues.every((entry) => typeof entry === "string") ||
+    !(
+      candidate.boundaryValue === null ||
+      typeof candidate.boundaryValue === "string"
+    ) ||
+    typeof candidate.requesterCwd !== "string" ||
+    typeof candidate.principal !== "object" ||
+    candidate.principal === null
+  ) {
+    return undefined;
+  }
+  const principal = candidate.principal as {
+    sessionId?: unknown;
+    agentName?: unknown;
+  };
+  if (
+    typeof principal.sessionId !== "string" ||
+    typeof principal.agentName !== "string"
+  ) {
+    return undefined;
+  }
+  return {
+    surface: candidate.surface,
+    matchValues: [...candidate.matchValues],
+    boundaryValue: candidate.boundaryValue,
+    requesterCwd: candidate.requesterCwd,
+    principal: {
+      sessionId: principal.sessionId,
+      agentName: principal.agentName,
+    },
+  };
 }
 
 export function formatUnknownErrorMessage(error: unknown): string {
@@ -350,6 +410,7 @@ export function readForwardedPermissionRequest(
       surface: asNullableDisplayString(parsed.surface),
       value: asNullableDisplayString(parsed.value),
       sessionApproval: asForwardedSessionApproval(parsed.sessionApproval),
+      accessIntent: asForwardedAccessIntent(parsed.accessIntent),
     };
   } catch (error) {
     logPermissionForwardingWarning(

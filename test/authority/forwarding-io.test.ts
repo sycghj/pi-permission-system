@@ -16,9 +16,15 @@ import {
   isErrnoCode,
   logPermissionForwardingError,
   logPermissionForwardingWarning,
+  readForwardedPermissionRequest,
   tryRemoveDirectoryIfEmpty,
+  writeJsonFileAtomic,
 } from "#src/authority/forwarding-io";
-import { createPermissionForwardingLocation } from "#src/authority/permission-forwarding";
+import {
+  createPermissionForwardingLocation,
+  type ForwardedAccessIntent,
+  type ForwardedPermissionRequest,
+} from "#src/authority/permission-forwarding";
 import type { DebugReviewLogger } from "#src/session-logger";
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -141,6 +147,111 @@ describe("logPermissionForwardingError", () => {
 
   it("does not throw when logger is null", () => {
     expect(() => logPermissionForwardingError(null, "ignored")).not.toThrow();
+  });
+});
+
+// ── readForwardedPermissionRequest ─────────────────────────────────────────
+
+describe("readForwardedPermissionRequest — accessIntent field", () => {
+  let root: string;
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  function baseRequest(): ForwardedPermissionRequest {
+    return {
+      id: "req-1",
+      createdAt: 1000,
+      requesterSessionId: "child-session",
+      targetSessionId: "parent-session",
+      requesterAgentName: "researcher",
+      message: "Allow this path access?",
+    };
+  }
+
+  function writeAndRead(raw: unknown): ForwardedPermissionRequest | null {
+    root = mkdtempSync(join(tmpdir(), "io-read-"));
+    const filePath = join(root, "req.json");
+    writeJsonFileAtomic(null, filePath, raw);
+    return readForwardedPermissionRequest(null, filePath);
+  }
+
+  it("round-trips a well-formed access intent (path surface)", () => {
+    const accessIntent: ForwardedAccessIntent = {
+      surface: "path",
+      matchValues: ["/worktree/issue-42/src/foo.ts", "src/foo.ts"],
+      boundaryValue: "/worktree/issue-42/src/foo.ts",
+      requesterCwd: "/worktree/issue-42",
+      principal: { sessionId: "child-session", agentName: "researcher" },
+    };
+    const parsed = writeAndRead({ ...baseRequest(), accessIntent });
+    expect(parsed?.accessIntent).toEqual(accessIntent);
+  });
+
+  it("round-trips a non-path access intent (skill surface, null boundary)", () => {
+    const accessIntent: ForwardedAccessIntent = {
+      surface: "skill",
+      matchValues: ["deep-research"],
+      boundaryValue: null,
+      requesterCwd: "/repo",
+      principal: { sessionId: "child-session", agentName: "unknown" },
+    };
+    const parsed = writeAndRead({ ...baseRequest(), accessIntent });
+    expect(parsed?.accessIntent).toEqual(accessIntent);
+  });
+
+  it("carries only strings on matchValues (the ADR-0002 wire boundary)", () => {
+    const accessIntent: ForwardedAccessIntent = {
+      surface: "external_directory",
+      matchValues: ["/etc/hosts", "/private/etc/hosts"],
+      boundaryValue: "/private/etc/hosts",
+      requesterCwd: "/repo",
+      principal: { sessionId: "child-session", agentName: "researcher" },
+    };
+    const parsed = writeAndRead({ ...baseRequest(), accessIntent });
+    expect(
+      parsed?.accessIntent?.matchValues.every((v) => typeof v === "string"),
+    ).toBe(true);
+    expect(
+      parsed?.accessIntent?.boundaryValue === null ||
+        typeof parsed?.accessIntent?.boundaryValue === "string",
+    ).toBe(true);
+  });
+
+  it("reads a request with no access intent as undefined (version skew)", () => {
+    const parsed = writeAndRead(baseRequest());
+    expect(parsed?.accessIntent).toBeUndefined();
+    // Display/routing fields still reconstruct.
+    expect(parsed?.message).toBe("Allow this path access?");
+    expect(parsed?.requesterAgentName).toBe("researcher");
+  });
+
+  it("drops a malformed access intent to undefined (non-string match value)", () => {
+    const parsed = writeAndRead({
+      ...baseRequest(),
+      accessIntent: {
+        surface: "path",
+        matchValues: ["/ok", 42],
+        boundaryValue: null,
+        requesterCwd: "/repo",
+        principal: { sessionId: "child-session", agentName: "researcher" },
+      },
+    });
+    expect(parsed?.accessIntent).toBeUndefined();
+  });
+
+  it("drops a malformed access intent to undefined (missing principal)", () => {
+    const parsed = writeAndRead({
+      ...baseRequest(),
+      accessIntent: {
+        surface: "path",
+        matchValues: ["/ok"],
+        boundaryValue: null,
+        requesterCwd: "/repo",
+      },
+    });
+    expect(parsed?.accessIntent).toBeUndefined();
   });
 });
 
