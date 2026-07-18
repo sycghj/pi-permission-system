@@ -139,6 +139,23 @@ describe("describeBashPathGate", () => {
     expect(result.decision.surface).toBe("path");
   });
 
+  it("carries the deciding token's access facts on promptDetails (bash path surface)", async () => {
+    const resolver = makeResolver(
+      makeCheckResult({ state: "deny", matchedPattern: "*.env" }),
+    );
+    const result = (await describeGate(makeTcc(), resolver)) as GateDescriptor;
+    // The facts are the string projection of the same AccessPath the gate
+    // resolved for the deciding token.
+    const intent = resolver.resolve.mock.calls.at(-1)?.[0];
+    const path = intent?.kind === "access-path" ? intent.path : undefined;
+    expect(path).toBeDefined();
+    expect(result.promptDetails.accessIntent).toEqual({
+      surface: "path",
+      matchValues: path?.matchValues(),
+      boundaryValue: path?.boundaryValue(),
+    });
+  });
+
   it("returns GateBypass when session rule covers the path", async () => {
     const result = await describeGate(
       makeTcc(),

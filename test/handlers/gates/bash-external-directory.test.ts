@@ -103,6 +103,22 @@ describe("describeBashExternalDirectoryGate", () => {
     expect(intentValues(intent)).toEqual(["/outside/a.ts"]);
   });
 
+  it("carries the deciding path's access facts on promptDetails (bash external_directory surface)", async () => {
+    const resolver = makeResolver(makeCheckResult("ask"));
+    const result = (await describeGate(
+      makeTcc({ input: { command: "cat /outside/a.ts" } }),
+      resolver,
+    )) as GateDescriptor;
+    const intent = resolver.resolve.mock.calls[0][0];
+    const path = intent.kind === "access-path" ? intent.path : undefined;
+    expect(path).toBeDefined();
+    expect(result.promptDetails.accessIntent).toEqual({
+      surface: "external_directory",
+      matchValues: path?.matchValues(),
+      boundaryValue: path?.boundaryValue(),
+    });
+  });
+
   it("returns GateBypass when all external paths are session-covered", async () => {
     const resolver = makeResolver(
       makeCheckResult("allow", { source: "session" }),

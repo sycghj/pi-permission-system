@@ -6,6 +6,7 @@ import { deriveApprovalPattern } from "#src/session-rules";
 import type { PermissionCheckResult } from "#src/types";
 import { pickMostRestrictive } from "./candidate-check";
 import type { GateResult } from "./descriptor";
+import { accessFactsFromPath } from "./helpers";
 import { formatPathAskPrompt } from "./path";
 import type { ToolCallContext } from "./types";
 
@@ -135,6 +136,7 @@ export function describeBashPathGate(
       toolCallId: tcc.toolCallId,
       toolName: tcc.toolName,
       command,
+      accessIntent: accessFactsFromPath("path", worstEntry.path),
     },
     logContext: {
       source: "tool_call",

@@ -5,6 +5,7 @@ import { deriveApprovalPattern } from "#src/session-rules";
 import type { GateResult } from "./descriptor";
 import { formatBashExternalDirectoryAskPrompt } from "./external-directory-messages";
 import { selectUncoveredExternalPaths } from "./external-directory-policy";
+import { accessFactsFromPath } from "./helpers";
 import type { ToolCallContext } from "./types";
 
 /**
@@ -65,6 +66,10 @@ export function describeBashExternalDirectoryGate(
   // defined; the fallback keeps TypeScript happy across the early return. A
   // config-level "deny" is preserved (not downgraded to the catch-all "ask").
   const preCheck = worstCheck ?? uncoveredEntries[0].check;
+  // The AccessPath the decision was made against — its facts ride the wire.
+  const worstEntry =
+    uncoveredEntries.find(({ check }) => check === preCheck) ??
+    uncoveredEntries[0];
 
   const disclosures = uncoveredEntries.map(({ path }) => ({
     path: path.value(),
@@ -98,6 +103,7 @@ export function describeBashExternalDirectoryGate(
       toolCallId: tcc.toolCallId,
       toolName: tcc.toolName,
       command,
+      accessIntent: accessFactsFromPath("external_directory", worstEntry.path),
     },
     logContext: {
       source: "tool_call",
