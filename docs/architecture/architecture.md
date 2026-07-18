@@ -834,7 +834,7 @@ Recompute commands (run from the repo root):
 
 ### Steps
 
-#### Step 1: ADR 0008 — forwarded access-intent portability and principal identity ([#595])
+#### Step 1: ADR 0008 — forwarded access-intent portability and principal identity ([#595]) ✅
 
 **Cause:** the escalation edge has no defined semantics for what a forwarded path *means* across cwds nor for which agent identity governs serving evaluation — [#565] items 2–3 are unanswerable because the questions were never decided, only accepted as failure modes at [#557] ship time.
 
@@ -842,6 +842,9 @@ Recompute commands (run from the repo root):
 - **Target:** `docs/decisions/0008-cross-session-access-intent.md`.
   Settles: the portable meaning of a path-shaped ask is the match set fixed at the child (the child's lexical ∪ canonical `matchValues()` plus canonical `boundaryValue()`, computed where the path was typed — the parent matches its rules against those fixed values and never re-derives them); the `ForwardedAccessIntent` wire schema (surface, match values, boundary value, requester cwd, principal identity) with version-skew tolerance rules (tolerant read, `ask` floor for legacy requests); and the agent-scope semantics of serving evaluation (whether `requesterAgentName` participates or serving stays deliberately agent-neutral on the base ruleset).
 - **Outcome:** the cross-session intent contract is decided in writing before the wire changes; Steps 2–3 implement it rather than deciding it inline.
+- **Landed:** `docs/decisions/0008-cross-session-access-intent.md`, structured principle-first — *the child owns the facts; the parent owns the judgment* — with four derived consequences.
+  Resolved parameters (superseding the speculative framing above): path meaning is fixed at the child (child-fixed `matchValues()` ∪ `boundaryValue()`, no parent re-derivation); serving is **agent-scoped** (`requesterAgentName` is decision-participating, a strict superset of agent-neutral); version skew is a **required field** with an `ask` floor on absence (not a tolerant dual-path).
+  A composition section situates the record against ADR 0007 (Track A/B orthogonality) without re-deciding it.
 - **Impact 4 / Risk 1 / Priority 20.**
 
 Release: batch "cross-session-intent"
@@ -908,7 +911,7 @@ Release: independent
 
 ```mermaid
 flowchart TD
-    S1["Step 1 (#595): ADR 0008 — forwarded-intent portability + principal identity"] --> S2["Step 2 (#596): structured intent on the forwarded wire"]
+    S1["✅ Step 1 (#595): ADR 0008 — forwarded-intent portability + principal identity"] --> S2["Step 2 (#596): structured intent on the forwarded wire"]
     S2 --> S3["Step 3 (#597): serving resolves the forwarded intent"]
     S4["Step 4 (#598): Authorizer chain infrastructure"] --> S5["Step 5 (#599): registerAuthorizer seam + authorizerChain config"]
     S5 --> S6["Step 6 (#600): pi-permission-model-judge dogfood package"]
