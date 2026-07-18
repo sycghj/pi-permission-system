@@ -173,6 +173,11 @@ describe("ParentAuthorizer", () => {
       });
 
       const request = await waitForRequestFile(temp.location.requestsDir);
+      // The display fields still ride the same request alongside the structured
+      // intent (the #292/#557 non-degraded-broadcast contract must not regress).
+      expect(request.source).toBe("tool_call");
+      expect(request.surface).toBe("read");
+      expect(request.value).toBe("src/foo.ts");
       // requesterCwd comes from ctx.cwd; principal mirrors the request's own
       // computed identity fields (sessionId, requesterAgentName).
       expect(request.accessIntent).toEqual({

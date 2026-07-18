@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 
+import { AccessPath } from "#src/access-intent/access-path";
 import {
+  accessFactsFromPath,
+  accessFactsFromValue,
   buildDecisionEvent,
   deriveDecisionValue,
   deriveResolution,
 } from "#src/handlers/gates/helpers";
+import { posixPathFlavor } from "#src/path/path-flavor";
 import type { PermissionCheckResult } from "#src/types";
 
 describe("deriveDecisionValue", () => {
@@ -167,5 +171,39 @@ describe("buildDecisionEvent", () => {
     );
     expect(event.result).toBe("deny");
     expect(event.resolution).toBe("user_denied");
+  });
+});
+
+describe("accessFactsFromPath", () => {
+  it("projects the AccessPath's match set and boundary as strings", () => {
+    const path = AccessPath.forPath("/outside/x.ts", {
+      cwd: "/repo",
+      flavor: posixPathFlavor,
+    });
+    expect(accessFactsFromPath("external_directory", path)).toEqual({
+      surface: "external_directory",
+      matchValues: path.matchValues(),
+      boundaryValue: path.boundaryValue(),
+    });
+  });
+
+  it("collapses an empty boundary (literal-only path) to null", () => {
+    const path = AccessPath.forLiteral("relative-token");
+    expect(path.boundaryValue()).toBe("");
+    expect(accessFactsFromPath("path", path)).toEqual({
+      surface: "path",
+      matchValues: ["relative-token"],
+      boundaryValue: null,
+    });
+  });
+});
+
+describe("accessFactsFromValue", () => {
+  it("wraps a single portable value with a null boundary", () => {
+    expect(accessFactsFromValue("skill", "deep-research")).toEqual({
+      surface: "skill",
+      matchValues: ["deep-research"],
+      boundaryValue: null,
+    });
   });
 });
