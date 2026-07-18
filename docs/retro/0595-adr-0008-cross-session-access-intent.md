@@ -48,3 +48,24 @@ The plan was amended (commit `88d2c886`) to restructure the ADR principle-first,
 - **Synergy consequence recorded**: once Tracks A and B both land, a serving node's chain links (e.g. the model judge) review forwarded asks against the child-fixed fact set — honest evidence, not a parent-side re-derivation.
 - **Two guards against over-application baked into the plan**: the composition section is descriptive-only (cites `docs/decisions/0007-model-judge-authorizer-chain-adr.md` by path, decides nothing new), and the deferred-edges section names where the model is known-incomplete (single-surface fact set — #565 item 3; multi-hop principal identity).
 - **For the `/build-plan` stage**: the ADR's Decision section leads with the principle; the four former "decisions" are now consequences derived from it; the two deferred edges belong in `## Consequences`, not silently omitted.
+
+## Stage: Implementation — Build (2026-07-18T01:00:00Z)
+
+### Session summary
+
+Executed the docs-only plan in two `docs:` commits: wrote `docs/decisions/0008-cross-session-access-intent.md` (the principle-first ADR) and marked Phase 12 Step 1 complete in `docs/architecture/architecture.md` (heading `✅` + Mermaid `S1` node `✅` + a `Landed:` note).
+No `src/`/`test/`/schema/config changes, matching the plan's Non-Goals.
+Pre-completion reviewer returned PASS.
+
+### Observations
+
+- **ADR structure landed principle-first** as planned: `## Decision` leads with *the child owns the facts; the parent owns the judgment*, then four numbered consequences (path portability, wire schema, agent-scoped serving, version skew), a `### Composition` subsection situating the record against ADR 0007, and a `### Explicitly deferred edges` subsection.
+- **Deviation from the plan (cosmetic)**: the plan's Module-Level Changes placed the two deferred edges under `## Consequences`; the shipped ADR keeps them in a `### Explicitly deferred edges` subsection under `## Decision`, grouped with the four consequences and the composition section.
+  The reviewer flagged this as a WARN but judged it "arguably better organized"; kept as-is to avoid churn on a cohesive structure.
+- **Recorded the resolved decisions in the architecture `Landed:` note** — the pre-decision Target bullet framed open questions ("tolerant read"; "whether `requesterAgentName` participates or serving stays agent-neutral"), which the ADR resolved (required field with `ask` floor; agent-scoped serving).
+  The `Landed:` note explicitly states it supersedes that speculative framing so the roadmap is not left misleading.
+- **Pre-completion reviewer: PASS** — lint clean (Biome/ESLint/rumdl over docs); all four Mermaid blocks parse via `mmdc`; ADR cross-links to ADR 0005 ("Base ruleset (agent-neutral resolution)") and ADR 0007 (chain verdict range, terminal split, enforcement checkpoint) verified accurate against source; no scope creep into re-deciding ADR 0007; the one present-tense "is retired ([#597])" phrase is correctly `[#597]`-qualified, not a false implementation claim.
+- **Reviewer warnings**: one non-blocking WARN (deferred-edges subsection placement under `## Decision` vs. the plan's `## Consequences`); cosmetic only.
+- **Release**: mid-batch — defer (batch "cross-session-intent", tail = Step 3 / #597).
+  Both commits are `docs:` (hidden), so this step cuts no release on its own; the batch ships when #597 lands.
+- Next step is `/ship-issue`.
