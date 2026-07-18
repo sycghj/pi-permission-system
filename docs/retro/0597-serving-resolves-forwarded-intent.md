@@ -65,3 +65,59 @@ Pre-completion reviewer returned WARN (one cosmetic finding), fixed before finis
 - **Reviewer note (non-issue):** the same pre-existing pi-autoformat acceptance-test flake noted in the #596 retro recurred (`pnpm run test` root pass, 2 RPC timeouts, unrelated package, standalone re-run green both before and after this session's changes).
 - **Release**: ship now — `cross-session-intent` batch tail (Steps 1–3).
   Next step is `/ship-issue`.
+
+## Stage: Final Retrospective (2026-07-18T22:57:31Z)
+
+### Session summary
+
+Shipped issue #597 end to end in one continuous session — planned Phase 12 Track A Step 3, executed three TDD cycles (no Tidy-First prep needed), handled the pre-completion reviewer's one WARN, then pushed, verified CI, closed the issue, and merged the release-please PR to cut `pi-permission-system` 20.8.0 (the `cross-session-intent` batch, Steps 1–3).
+The change makes the serving node resolve a forwarded permission request against the child-fixed `ForwardedAccessIntent.matchValues` (agent-scoped), retiring the legacy `(surface, value)` re-derivation and structurally dissolving [#565] items 2–3.
+An exceptionally low-friction session — the only substantive user input across all four stages was the two `ask_user` design confirmations at planning time.
+
+### Observations
+
+#### What went well
+
+- **The planning `ask_user` gate caught a real issue-body-vs-accepted-ADR contradiction (novel win).**
+  The issue body said "keep the legacy `(surface, value)` fallback for version skew," but the operator's own accepted ADR 0008 §4 had already retired that branch (rejecting the "Tolerant dual-path" alternative with rationale).
+  Surfacing it rather than transcribing the issue produced a materially different — and correct — plan: the operator confirmed "follow the ADR," which drove the whole implementation (sole-resolution-path, `ask`-floor on absence).
+  This is the "issue body is a hypothesis, not a spec" principle plus "accepted ADR is authority" working exactly as intended.
+- **The testing skill's "hollow red" guidance paid off at Step 1.**
+  The new `permission-resolver.test.ts` case passed immediately under `vitest` (esbuild does not typecheck, and `toResolvedIntent`'s existing `else`-branch already passed a `path-values` intent through), so the runtime red was hollow.
+  The agent recognized this and confirmed the *real* red via `pnpm run check` (`TS2322` on the `path-values` literal) before implementing — no false-green slipped through.
+- **Verification was incremental at every stage.**
+  Green baseline before any edit; `pnpm run check` after each shared-signature change (the resolver widening in Step 1, the interface rename in Step 2); the target test file after every red→green; full suite + root `lint` + `fallow dead-code` after the last step and again pre-push.
+  The feedback-loop-gap lens found no deferred-verification gap.
+- **The plan's Module-Level Changes matched the actual diff exactly** — the atomic Step 2 scope (server + `index.ts` + fixtures + test suite in one commit) was correctly predicted, and the composition-root round-trip anchors stayed green unchanged, confirming agent-scoped serving is a true superset of the agent-neutral serving it replaced.
+
+#### What caused friction (agent side)
+
+- `other` (doc-comment staleness during an interface rename) — the `ServingPolicy` `check`→`resolve` rename left the `ForwardedRequestServerDeps.policy` field's doc comment describing the retired `(surface, value)` check.
+  The plan enumerated two doc comments to update (class-level and `resolveDecision`) but missed the field-level one, and the implementation followed the plan.
+  Impact: one pre-completion-reviewer WARN and one trivial follow-up `docs:` commit (`64b1b8e1`); no behavior rework.
+  Self-caught by the reviewer doing exactly its job — the right backstop for cosmetic doc staleness.
+- `other` (recurring environmental flake) — the pi-autoformat real-CLI acceptance tests (`test/acceptance.test.ts`) timed out under the concurrent `pnpm run test` root run (2 RPC timeouts), the same flake the #596 retro recorded.
+  Impact: ~3 confirmation tool-calls per occurrence (standalone re-run to prove it unrelated); no rework, resolved correctly using the #596 retro context.
+  Now observed across two consecutive sessions — filed as [#618] for a durable fix rather than per-session re-confirmation (see Changes made).
+
+#### What caused friction (user side)
+
+- **None — oversight was minimal and well-placed.**
+  The operator's only substantive interventions were the two planning-stage `ask_user` confirmations (the legacy-fallback and commit-type decisions), exactly the strategic-judgment calls the workflow reserves for a human; everything else ran unattended from a plan the operator had reviewed.
+
+### Diagnostic details
+
+- **Model-performance correlation** — every rendered parent-session turn ran on `anthropic/claude-opus-4-8` (Planning + Retrospective, judgment-heavy) or `anthropic/claude-sonnet-5` (TDD + Ship, implementation/mechanical) — appropriate allocation, no mismatch.
+  The `model_change` stream also showed several switches (`deepseek-v4-flash`, `claude-fable-5`, `claude-haiku-4-5`) that never ran a turn (no `[provider/model]` label appears on any rendered turn for them), so no reasoning-weak model executed judgment-heavy work.
+  The two subagent dispatches (`tidy-first-assessor`, `pre-completion-reviewer`) ran on their configured models for judgment tasks — appropriate.
+- **Escalation-delay tracking** — no `rabbit-hole` friction; the hollow-red at Step 1 resolved in a single follow-up tool call (`tsc`), well under the 5-call threshold.
+- **Unused-tool detection** — no `missing-context` gaps; planning read every relevant source file directly (the design was fully grounded before the plan was written), so implementation needed no exploratory search.
+- **Feedback-loop gap analysis** — verification was incremental at every stage (see "What went well"); no lens found a gap.
+
+### Changes made
+
+1. Filed [#618] (`pkg:pi-autoformat`) to harden the real-CLI acceptance tests against the concurrent-workspace-run RPC timeout flake — the one durable cross-session pattern (#596 + #597).
+   No `AGENTS.md`/prompt rule was added: the doc-comment miss was a self-caught one-off (reviewer backstop), and documenting the flake as a workaround was rejected in favor of the root-cause fix.
+2. `packages/pi-permission-system/docs/retro/0597-serving-resolves-forwarded-intent.md` — appended this Final Retrospective stage entry.
+
+[#618]: https://github.com/gotgenes/pi-packages/issues/618
