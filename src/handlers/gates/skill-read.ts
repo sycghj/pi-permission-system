@@ -4,6 +4,7 @@ import type { SkillPromptEntry } from "#src/skill-prompt-sanitizer";
 import { findSkillPathMatch } from "#src/skill-prompt-sanitizer";
 import { toRecord } from "#src/value-guards";
 import type { GateDescriptor } from "./descriptor";
+import { accessFactsFromValue } from "./helpers";
 import type { ToolCallContext } from "./types";
 
 /**
@@ -64,6 +65,7 @@ export function describeSkillReadGate(
       toolName: tcc.toolName,
       skillName: matchedSkill.name,
       path,
+      accessIntent: accessFactsFromValue("skill", matchedSkill.name),
     },
     logContext: {
       source: "skill_read",

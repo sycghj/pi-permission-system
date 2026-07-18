@@ -116,6 +116,19 @@ describe("describeSkillInputGate", () => {
     });
   });
 
+  it("carries the skill name as single-value access facts on promptDetails", () => {
+    const descriptor = describeSkillInputGate(
+      "my-skill",
+      null,
+      makeSkillCheck("ask"),
+    );
+    expect(descriptor.promptDetails.accessIntent).toEqual({
+      surface: "skill",
+      matchValues: ["my-skill"],
+      boundaryValue: null,
+    });
+  });
+
   it("does not set preResolved or sessionApproval", () => {
     const descriptor = describeSkillInputGate(
       "librarian",

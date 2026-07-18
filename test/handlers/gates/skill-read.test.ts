@@ -112,6 +112,17 @@ describe("describeSkillReadGate", () => {
     expect(result.decision.value).toBe("my-skill");
   });
 
+  it("carries the skill name as single-value access facts on promptDetails", () => {
+    const result = describeSkillReadGate(makeTcc(), normalizer, () => [
+      makeSkillEntry({ name: "my-skill" }),
+    ])!;
+    expect(result.promptDetails.accessIntent).toEqual({
+      surface: "skill",
+      matchValues: ["my-skill"],
+      boundaryValue: null,
+    });
+  });
+
   it("denialContext contains the skill name and read path", () => {
     const result = describeSkillReadGate(makeTcc(), normalizer, () => [
       makeSkillEntry({ name: "librarian" }),
