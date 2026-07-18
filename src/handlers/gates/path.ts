@@ -5,6 +5,7 @@ import { SessionApproval } from "#src/session-approval";
 import { deriveApprovalPattern } from "#src/session-rules";
 import type { ToolAccessExtractorLookup } from "#src/tool-access-extractor-registry";
 import type { GateDescriptor, GateResult } from "./descriptor";
+import { accessFactsFromPath } from "./helpers";
 import type { ToolCallContext } from "./types";
 
 /**
@@ -67,6 +68,7 @@ export function describePathGate(
       toolCallId: tcc.toolCallId,
       toolName: tcc.toolName,
       path: filePath,
+      accessIntent: accessFactsFromPath("path", accessPath),
     },
     logContext: {
       source: "tool_call",

@@ -7,6 +7,7 @@ import type { ToolAccessExtractorLookup } from "#src/tool-access-extractor-regis
 import type { GateResult } from "./descriptor";
 import { formatExternalDirectoryAskPrompt } from "./external-directory-messages";
 import { resolveExternalDirectoryPolicy } from "./external-directory-policy";
+import { accessFactsFromPath } from "./helpers";
 import type { ToolCallContext } from "./types";
 
 /**
@@ -104,6 +105,7 @@ export function describeExternalDirectoryGate(
       toolCallId: tcc.toolCallId,
       toolName: tcc.toolName,
       path: externalDirectoryPath,
+      accessIntent: accessFactsFromPath("external_directory", accessPath),
     },
     logContext: {
       source: "tool_call",

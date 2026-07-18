@@ -132,6 +132,22 @@ describe("describeExternalDirectoryGate", () => {
     expect(result.decision.surface).toBe("external_directory");
   });
 
+  it("carries the child-fixed access facts on promptDetails (external_directory surface)", () => {
+    const path = "/outside/project/file.ts";
+    const result = gateUnderTest(makeTcc({ input: { path } }), [
+      "/test/agent",
+    ]) as GateDescriptor;
+    const accessPath = new PathNormalizer(
+      pathFlavorForPlatform(process.platform),
+      "/test/project",
+    ).forPath(path);
+    expect(result.promptDetails.accessIntent).toEqual({
+      surface: "external_directory",
+      matchValues: accessPath.matchValues(),
+      boundaryValue: accessPath.boundaryValue(),
+    });
+  });
+
   it("carries a precomputed preCheck and an empty input (matching is done by the gate)", () => {
     const result = gateUnderTest(
       makeTcc({ input: { path: "/outside/project/file.ts" } }),

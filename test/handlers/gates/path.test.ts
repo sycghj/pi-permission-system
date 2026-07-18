@@ -176,6 +176,26 @@ describe("describePathGate", () => {
     });
   });
 
+  it("carries the child-fixed access facts on promptDetails (path surface)", () => {
+    const resolver = makeResolver(
+      makeCheckResult({ state: "ask", matchedPattern: "*.env" }),
+    );
+    const result = describePathGate(
+      makeTcc(),
+      resolver,
+      normalizer,
+    ) as GateDescriptor;
+    const accessPath = AccessPath.forPath(".env", {
+      cwd: "/test/project",
+      flavor: posixPathFlavor,
+    });
+    expect(result.promptDetails.accessIntent).toEqual({
+      surface: "path",
+      matchValues: accessPath.matchValues(),
+      boundaryValue: accessPath.boundaryValue(),
+    });
+  });
+
   it("descriptor decision uses surface 'path' and the file path as value", () => {
     const resolver = makeResolver(
       makeCheckResult({ state: "deny", matchedPattern: "*.env" }),
