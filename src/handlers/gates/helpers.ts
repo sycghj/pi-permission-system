@@ -23,7 +23,6 @@ export function accessFactsFromPath(
   return {
     surface,
     matchValues: path.matchValues(),
-
     boundaryValue: path.boundaryValue() || null,
   };
 }
