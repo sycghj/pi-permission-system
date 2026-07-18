@@ -29,10 +29,12 @@ The deliverable of this step is therefore the decision record itself: `docs/deci
 
 ## Goals
 
-- Write `docs/decisions/0008-cross-session-access-intent.md` (status `accepted`) settling three things:
-  1. the **portable meaning** of a path-shaped ask (fixed at the child; the parent never re-derives);
-  2. the **`ForwardedAccessIntent` wire schema** (surface, match values, boundary value, requester cwd, principal identity) and its version handling;
-  3. the **agent-scope semantics** of serving evaluation.
+- Write `docs/decisions/0008-cross-session-access-intent.md` (status `accepted`), structured **principle-first**: one decision — *the child owns the facts; the parent owns the judgment* — with three derived consequences:
+  1. the **portable meaning** of a path-shaped ask (the facts are fixed at the child; the parent never re-derives);
+  2. the **`ForwardedAccessIntent` wire schema** (the facts serialized: surface, match values, boundary value, requester cwd, principal identity) and its version handling;
+  3. the **agent-scope semantics** of serving evaluation (the parent's judgment, fully informed by principal identity).
+- Include a **composition section** situating the decision in the authorization walk (recorded authority → chain links → terminal; the courier carries facts, never judgment), citing `docs/decisions/0007-model-judge-authorizer-chain-adr.md` by path without re-deciding it.
+- Name the model's **explicitly deferred edges** (single-surface fact set, multi-hop principal identity) so the ADR marks where the unified model is known-incomplete.
 - Mark Phase 12 Step 1 complete in `docs/architecture/architecture.md` (heading `✅` + Mermaid node `✅` + a `Landed:` note), per the package skill's step-completion convention.
 - Leave all runtime code unchanged — this step decides; Steps 2–3 ([#596], [#597]) implement.
 
@@ -41,7 +43,8 @@ The deliverable of this step is therefore the decision record itself: `docs/deci
 - No code changes: `permission-forwarding.ts`, `forwarded-request-server.ts`, `forwarding-io.ts`, `approval-escalator.ts`, `permission-prompter.ts`, and `index.ts` are untouched by this step (they are Step 2/3 targets).
 - No schema/config changes (`config-schema.ts`, `schemas/permissions.schema.json`).
 - No change to the health-metric grep-count rows in the Phase 12 table — those targets (`ForwardedAccessIntent` counts) are moved by Steps 2–3, not Step 1.
-- Track B (the Authorizer chain, Steps 4–6) is out of scope.
+- Track B (the Authorizer chain, Steps 4–6) implementation is out of scope; the ADR's composition section *describes* the decided chain design (citing `docs/decisions/0007-model-judge-authorizer-chain-adr.md` by path) and decides nothing new about it.
+- No decision on multi-hop principal identity (originator vs. accumulated chain) or on widening the fact set to multi-surface asks — both are named in the ADR as explicitly deferred edges, not silently omitted.
 - Closing [#565] is deferred to Phase 12 end (per the architecture doc's open-issue sweep disposition), not this step.
 
 ## Background
@@ -60,6 +63,8 @@ Existing decision records this ADR builds on:
   Its "Base ruleset (agent-neutral resolution)" section is the exact decision ADR 0008 revises.
 - `docs/decisions/0002-path-values-string-boundary.md` — the manager stays string-based; `AccessPath` does not cross into it.
   The wire schema must carry **strings** (the match values), not `AccessPath` instances, consistent with this boundary.
+- `docs/decisions/0007-model-judge-authorizer-chain-adr.md` — the Authorizer chain (Track B): config-ordered non-terminal links with `allow | deny | defer` verdicts, a terminal that cannot defer, and the enforcement checkpoint capping link authority.
+  ADR 0008's composition section situates the facts/judgment decision alongside it; the two tracks are orthogonal axes of one structure (plurality of judges *within* a node vs. fidelity of facts *between* nodes).
 
 AGENTS.md / skill constraints that apply:
 
@@ -69,10 +74,16 @@ AGENTS.md / skill constraints that apply:
 
 ## Design Overview
 
-The ADR settles three decisions.
-All three were confirmed with the operator during planning (agent-scoped serving; child-fixed match set; required field with an `ask` floor on absence).
+The ADR is structured principle-first: one decision, three derived consequences, a composition section, and named deferred edges.
+All parameters were confirmed with the operator during planning (agent-scoped serving; child-fixed match set; required field with an `ask` floor on absence; principle-first restructure with the composition section).
 
-### Decision 1 — the portable meaning of a path-shaped ask is fixed at the child
+### The decision — the child owns the facts; the parent owns the judgment
+
+A forwarded ask separates cleanly into **facts** (what is being accessed, in every form the origin gate would recognize, and by whom) and **judgment** (what a policy says about it).
+The contract: facts are fixed at the origin child and carried unchanged through every hop; judgment is exercised anew at each node against that node's own ruleset; no node ever re-derives facts.
+The three consequences below are derivations of this principle, not independent parameters — the ADR presents them as such so each is justified by the principle rather than argued locally.
+
+### Consequence 1 — the portable meaning of a path-shaped ask is fixed at the child
 
 A path's meaning is the alias set computed **where the path was typed** (the child), never re-derived at the parent.
 The child ships the `AccessPath`'s `matchValues()` (the absolute ∪ cwd-relative ∪ canonical alias set) and `boundaryValue()` (canonical) as fixed strings.
@@ -86,9 +97,9 @@ Why this is portable across cwds (the worktree case): because `matchValues()` al
 Canonicalization does not bridge cwds (git worktrees are real directories, not symlinks); the cwd-relative alias is what makes cross-cwd matching work.
 Recorded consequence: a relative parent `allow` auto-grants a same-relative path from an unrelated child cwd — consistent with how relative rules already behave locally, and the operator confirmed this is acceptable.
 
-### Decision 2 — the `ForwardedAccessIntent` wire schema
+### Consequence 2 — the `ForwardedAccessIntent` wire schema (the facts, serialized)
 
-A new required field on the forwarded request carries the child-fixed intent.
+A new required field on the forwarded request carries the child-fixed facts.
 Shape (decided here, implemented in Step 2 — the ADR fixes the field names and semantics):
 
 ```typescript
@@ -110,7 +121,7 @@ interface ForwardedAccessIntent {
   /** Principal identity: who is requesting. */
   principal: {
     sessionId: string; // already carried today as requesterSessionId
-    agentName: string; // graduates from display-only to decision-participating (Decision 3)
+    agentName: string; // graduates from display-only to decision-participating (Consequence 3)
   };
 }
 ```
@@ -118,7 +129,7 @@ interface ForwardedAccessIntent {
 Non-path surfaces (bash command pattern, MCP target, skill name) are already portable — they carry their `(surface, value)` directly as a one-element `matchValues` with `boundaryValue: null`.
 The field is **required** going forward: it becomes the sole resolution path, and the legacy display-only `(surface, value)` resolution branch in `ServingPolicy` is retired in Step 3.
 
-### Decision 3 — agent-scoped serving evaluation
+### Consequence 3 — agent-scoped serving evaluation (the parent's judgment, fully informed)
 
 `requesterAgentName` graduates from display-only to **decision-participating**.
 The serving node resolves the forwarded intent against its **own** base ruleset **scoped to the requester's agent name** (the `principal.agentName`), applying the parent's per-agent overrides for that agent.
@@ -131,25 +142,60 @@ Serving-node call-site sketch (Step 3 shape, sketched here to validate the contr
 
 ```typescript
 // Serving node, per forwarded request (Step 3 — illustrative, not built here):
-const intent = request.accessIntent; // required field, Decision 2
+const intent = request.accessIntent; // required field, Consequence 2
 const decision = resolver.resolve(
   buildResolvedIntentFromWire(intent),        // match values used as-is; no PathNormalizer re-derivation
-  { agentName: intent.principal.agentName },  // Decision 3 — agent-scoped
+  { agentName: intent.principal.agentName },  // Consequence 3 — agent-scoped
 );
 // allow → auto-approve; deny → auto-deny; ask → escalate through AskEscalator (unchanged).
 ```
 
-### Decision 4 — version-skew handling (required field, floor to `ask`)
+### Consequence 4 — version-skew handling (no facts → no judgment → escalate)
 
 `ForwardedAccessIntent` is the sole resolution path; the legacy `(surface, value)` resolution branch is dropped (Step 3).
 A request that arrives **without** the field (a rare mid-upgrade skew: a long-running parent reading a newer/older child's request across a `pnpm install` version bump) floors to `ask` → prompt — never a hard deny (which would break a legitimate in-flight request) and never a silent grant.
+Under the principle this is a derivation, not a tolerance hack: missing facts make recorded judgment impossible, so the ask goes straight to live authority.
 This keeps the ADR 0005 fail-safe direction while shedding the permanent dual-path complexity.
+
+### Composition — how the decision sits in the authorization walk
+
+The ADR includes a composition section showing the unified structure the decision fits into.
+Authorization is a walk up a session tree: at each node an ordered sequence of judges examines the same fixed facts, and the only inter-node operation is the courier move, which carries facts and never judgment.
+
+```text
+decide(node, facts):
+  verdict = node.rules.resolve(facts, principal)   # recorded authority (deterministic judgment)
+  if allow or deny → return verdict
+  for link in node.chain:                          # non-terminal judges (Track B, decided in ADR 0007)
+    v = link.review(facts)                         #   allow* / deny / defer (* capped by the checkpoint)
+    if v ≠ defer → return v
+  return node.terminal.authorize(facts)            # terminal:
+    LocalUserAuthorizer → human decides            #   terminal judgment
+    ParentAuthorizer    → decide(parent, facts)    #   courier — recurse up the tree
+    DenyingAuthorizer   → deny                     #   fail-safe
+```
+
+What the section establishes, and its scope guard:
+
+- `ParentAuthorizer` occupies the `Authorizer` slot structurally but is a **courier**, not a judge — it carries the facts up and exercises no judgment; that is why serving must re-run recorded authority (the ADR 0005 contract) rather than treat arrival at the parent as "needs a human now."
+- Track A (this ADR) and Track B (`docs/decisions/0007-model-judge-authorizer-chain-adr.md`) are orthogonal axes: fidelity of facts *between* nodes vs. plurality of judges *within* a node.
+- Recorded synergy consequence: once both tracks land, a serving node's chain links (e.g. the model judge) review forwarded asks against the **child-fixed fact set** — honest evidence, not a parent-side re-derivation.
+- Scope guard: the section is *descriptive* of decided architecture (ADR 0005's serving flow, ADR 0007's chain) and decides nothing new about either; it exists so the tracks are legible as two halves of one picture.
+
+### Explicitly deferred edges
+
+The ADR names where the unified model is known-incomplete, so the deferrals are recorded rather than silent:
+
+- **Single-surface fact set** ([#565] item 3) — a child decision can layer multiple surfaces (an `external_directory` check over a `path`), but `ForwardedAccessIntent` carries one surface + one match set.
+  A multi-surface child decision still floors to `ask` at the parent (the safe direction); the fact schema may grow additional surfaces later without changing the principle.
+- **Multi-hop principal identity** — whether a grandchild-through-child forward carries the originator's identity or an accumulated chain is undecided; today forwarding is effectively one hop to the UI-bearing root.
+  Facts-at-origin answers the path question regardless; identity accumulation is deferred until multi-hop forwarding exists.
 
 ## Module-Level Changes
 
 This is a docs-only step.
 
-- **Add** `packages/pi-permission-system/docs/decisions/0008-cross-session-access-intent.md` — the ADR, following the 0005/0007 format: `status: accepted` / `date` frontmatter, `# 0008 — …`, `## Status`, `## Context`, `## Decision` (the four decisions above as subsections), `## Rejected alternatives`, `## Consequences` (including the deferred [#565] close and the relative-alias auto-grant consequence).
+- **Add** `packages/pi-permission-system/docs/decisions/0008-cross-session-access-intent.md` — the ADR, following the 0005/0007 format: `status: accepted` / `date` frontmatter, `# 0008 — …`, `## Status`, `## Context`, `## Decision` (the principle as the lead subsection, then the four consequences), a composition subsection (the `decide()` recursion, the courier observation, the Track A/B orthogonality, the synergy consequence, and the scope guard), `## Rejected alternatives`, `## Consequences` (including the deferred [#565] close, the relative-alias auto-grant consequence, and the two explicitly deferred edges).
   Reference issues with `[#N]` reference-style links; cite sibling ADRs by path.
 - **Edit** `packages/pi-permission-system/docs/architecture/architecture.md`:
   - Mark Step 1 complete: append `✅` to the `#### Step 1: ADR 0008 …` heading and to the Mermaid `S1[…]` node label, and add a `**Landed:**` note under the step recording the ADR path.
@@ -197,11 +243,17 @@ Steps 1 and 2 may be combined into a single `docs:` commit if preferred at build
   Mitigation: the ADR explicitly names the 0005 section it revises and states what 0005 behavior is preserved (Invariants at risk).
 - **Risk: marking Step 1 `✅` before Steps 2–3 land makes the roadmap look half-implemented.**
   Mitigation: Step 1's deliverable *is* the ADR — it is genuinely complete when the file exists; the `Landed:` note records that Steps 2–3 implement it, and the batch-tail release marker keeps the shipping story coherent.
+- **Risk: the unifying model is over-applied — a concept stretched past where it earned its evidence.**
+  Mitigation: the model earned its place by retro-explaining decisions made independently (ADR 0005's serving-is-resolution, ADR 0007's chain) and deriving all three confirmed parameters; the ADR bakes in two guards — the composition section is descriptive-only (decides nothing new), and the deferred-edges section names exactly where the model is known-incomplete.
+- **Risk: the composition section drifts into re-deciding ADR 0007.**
+  Mitigation: the scope guard is written into the section itself; the pre-completion reviewer checks the ADR introduces no new chain semantics beyond citing `docs/decisions/0007-model-judge-authorizer-chain-adr.md`.
 
 ## Open Questions
 
-None outstanding — the three deliberative parameters (agent scope, path portability, version-skew handling) were resolved with the operator during planning.
-No follow-up issues are filed: Steps 2 ([#596]) and 3 ([#597]) already exist as the implementation of this contract.
+No open questions block this step — the deliberative parameters (agent scope, path portability, version-skew handling, principle-first structure) were resolved with the operator during planning.
+Two edges are **explicitly deferred and recorded in the ADR** rather than left open: the single-surface fact set ([#565] item 3 — safe `ask` floor today, schema may grow) and multi-hop principal identity (undecided until multi-hop forwarding exists).
+Neither needs a follow-up issue now: the first is already tracked by [#565] (open through Phase 12 by roadmap decision), and the second has no implementable surface until multi-hop forwarding is proposed.
+No other follow-up issues are filed: Steps 2 ([#596]) and 3 ([#597]) already exist as the implementation of this contract.
 
 [#418]: https://github.com/gotgenes/pi-packages/issues/418
 [#486]: https://github.com/gotgenes/pi-packages/issues/486
