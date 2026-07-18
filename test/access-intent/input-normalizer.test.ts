@@ -19,6 +19,7 @@ vi.mock("node:fs", () => ({
 
 import {
   buildAccessIntentForSurface,
+  buildResolvedIntentFromMatchValues,
   normalizeInput,
 } from "#src/access-intent/input-normalizer";
 import { createMcpPermissionTargets } from "#src/access-intent/mcp-targets";
@@ -322,5 +323,75 @@ describe("buildAccessIntentForSurface", () => {
       undefined,
     );
     expect(intent.kind).toBe("tool");
+  });
+});
+
+describe("buildResolvedIntentFromMatchValues", () => {
+  // The forwarded-serving wire's sole producer of a pre-fixed ResolvedAccessIntent
+  // (#597): match values arrive already fixed at the child (matchValues()), so
+  // this never touches a PathNormalizer or rebuilds an AccessPath.
+  it("emits a path-values intent carrying the given match values as-is for the path surface", () => {
+    const intent = buildResolvedIntentFromMatchValues(
+      "path",
+      ["/worktree/issue-42/src/foo.ts", "src/foo.ts", "/main/src/foo.ts"],
+      "Explore",
+    );
+    expect(intent).toEqual({
+      kind: "path-values",
+      surface: "path",
+      values: [
+        "/worktree/issue-42/src/foo.ts",
+        "src/foo.ts",
+        "/main/src/foo.ts",
+      ],
+      agentName: "Explore",
+    });
+  });
+
+  it("emits a path-values intent for the external_directory surface", () => {
+    const intent = buildResolvedIntentFromMatchValues(
+      "external_directory",
+      ["/tmp/x", "/real/tmp/x"],
+      "Explore",
+    );
+    expect(intent).toEqual({
+      kind: "path-values",
+      surface: "external_directory",
+      values: ["/tmp/x", "/real/tmp/x"],
+      agentName: "Explore",
+    });
+  });
+
+  it("emits a tool intent from the single portable value for a non-path surface (bash)", () => {
+    const intent = buildResolvedIntentFromMatchValues(
+      "bash",
+      ["git status"],
+      "Explore",
+    );
+    expect(intent).toEqual({
+      kind: "tool",
+      surface: "bash",
+      input: { command: "git status" },
+      agentName: "Explore",
+    });
+  });
+
+  it("emits a tool intent from the single portable value for a skill surface", () => {
+    const intent = buildResolvedIntentFromMatchValues(
+      "skill",
+      ["librarian"],
+      "Explore",
+    );
+    expect(intent).toEqual({
+      kind: "tool",
+      surface: "skill",
+      input: { name: "librarian" },
+      agentName: "Explore",
+    });
+  });
+
+  it("threads an empty agentName through for agent-neutral resolution", () => {
+    const intent = buildResolvedIntentFromMatchValues("bash", ["ls"], "");
+    expect(intent.agentName).toBe("");
   });
 });

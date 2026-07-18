@@ -208,6 +208,65 @@ describe("PermissionResolver", () => {
     });
   });
 
+  describe("resolve — pre-fixed path-values intent (forwarded-serving producer)", () => {
+    // #597: the forwarded-serving wire hands the resolver a ResolvedAccessIntent
+    // it built directly from the child-fixed matchValues() — never an
+    // AccessPath. The resolver must pass it through to the manager unchanged
+    // (no matchValues() unwrap, since there is no AccessPath to unwrap).
+    it("passes a path-values intent to the manager unchanged, with the composed session ruleset", () => {
+      const pm = makePermissionManager();
+      const sessionRules = new SessionRules();
+      const { resolver } = makeResolver(pm, sessionRules);
+
+      sessionRules.recordSessionApproval(
+        SessionApproval.single("external_directory", "/tmp/*"),
+      );
+
+      resolver.resolve({
+        kind: "path-values",
+        surface: "external_directory",
+        values: ["/tmp/x", "/real/tmp/x"],
+        agentName: "Explore",
+      });
+
+      const [passedIntent, passedRules] = vi.mocked(pm.check).mock.calls[0];
+      expect(passedIntent).toEqual({
+        kind: "path-values",
+        surface: "external_directory",
+        values: ["/tmp/x", "/real/tmp/x"],
+        agentName: "Explore",
+      });
+      expect(passedRules).toHaveLength(1);
+      expect(passedRules?.[0]).toMatchObject({
+        surface: "external_directory",
+        pattern: "/tmp/*",
+        action: "allow",
+      });
+    });
+
+    it("returns the manager's check result for a path-values intent", () => {
+      const pm = makePermissionManager();
+      vi.mocked(pm.check).mockReturnValue({
+        state: "allow",
+        toolName: "path",
+        source: "special",
+        origin: "global",
+        matchedPattern: "src/**",
+      });
+      const { resolver } = makeResolver(pm);
+
+      const result = resolver.resolve({
+        kind: "path-values",
+        surface: "path",
+        values: ["/worktree/issue-42/src/foo.ts", "src/foo.ts"],
+        agentName: "Explore",
+      });
+
+      expect(result.state).toBe("allow");
+      expect(result.matchedPattern).toBe("src/**");
+    });
+  });
+
   describe("checkPermission (raw, off-interface)", () => {
     it("delegates to manager.check as a tool intent without session rules", () => {
       const { resolver, permissionManager } = makeResolver();

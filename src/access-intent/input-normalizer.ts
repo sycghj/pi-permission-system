@@ -1,7 +1,7 @@
 import { stripBashCommentLines } from "#src/bash-arity";
 import type { PathNormalizer } from "#src/path-normalizer";
 import { getNonEmptyString, toRecord } from "#src/value-guards";
-import type { AccessIntent } from "./access-intent";
+import type { AccessIntent, ResolvedAccessIntent } from "./access-intent";
 import { createMcpPermissionTargets } from "./mcp-targets";
 import { PATH_SURFACES } from "./path-surfaces";
 import { classifyToolKind } from "./tool-kind";
@@ -37,6 +37,39 @@ export function buildAccessIntentForSurface(
     kind: "tool",
     surface,
     input: buildInputForSurface(surface, value),
+    agentName,
+  };
+}
+
+/**
+ * Build a {@link ResolvedAccessIntent} directly from a forwarded request's
+ * child-fixed match values (ADR 0008 §2), for the forwarded-serving wire
+ * (#597).
+ *
+ * Unlike {@link buildAccessIntentForSurface}, this never touches a
+ * `PathNormalizer` and never rebuilds an `AccessPath` — a path-shaped surface
+ * gets a `path-values` intent carrying `matchValues` as-is (the values the
+ * child already fixed), and every other surface gets a `tool` intent built
+ * from its single portable value. `agentName` is always the requester's
+ * `principal.agentName` (ADR 0008 §3, agent-scoped serving).
+ */
+export function buildResolvedIntentFromMatchValues(
+  surface: string,
+  matchValues: readonly string[],
+  agentName: string,
+): ResolvedAccessIntent {
+  if (PATH_SURFACES.has(surface)) {
+    return {
+      kind: "path-values",
+      surface,
+      values: [...matchValues],
+      agentName,
+    };
+  }
+  return {
+    kind: "tool",
+    surface,
+    input: buildInputForSurface(surface, matchValues[0]),
     agentName,
   };
 }

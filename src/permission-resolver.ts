@@ -1,5 +1,6 @@
 import type {
   AccessIntent,
+  PathValuesAccessIntent,
   ResolvedAccessIntent,
 } from "./access-intent/access-intent";
 import type { ScopedPermissionManager } from "./permission-manager";
@@ -31,8 +32,14 @@ export interface ScopedPermissionResolver {
  * canonical alias set (#418) is derived. Keeping it here (not in the manager)
  * is the deliberate boundary formalized in ADR-0002
  * (`docs/decisions/0002-path-values-string-boundary.md`).
+ *
+ * Also accepts an already-resolved {@link PathValuesAccessIntent} (the
+ * forwarded-serving wire's producer, #597) as a pure passthrough — it is
+ * already a `ResolvedAccessIntent`, so there is nothing to unwrap.
  */
-function toResolvedIntent(intent: AccessIntent): ResolvedAccessIntent {
+function toResolvedIntent(
+  intent: AccessIntent | PathValuesAccessIntent,
+): ResolvedAccessIntent {
   if (intent.kind === "access-path") {
     return {
       kind: "path-values",
@@ -66,8 +73,16 @@ export class PermissionResolver
    * Answer a gate-emitted access intent, composing the current session ruleset
    * so callers never thread it by hand. Unwraps the `access-path` variant via
    * `matchValues()` before handing a string-based intent to the manager.
+   *
+   * Also accepts a pre-fixed `path-values` intent (the forwarded-serving wire,
+   * #597) — a passthrough, since it is already a `ResolvedAccessIntent`. The
+   * gate-facing {@link ScopedPermissionResolver} interface stays narrow
+   * (`AccessIntent` only); this wider acceptance is available only through the
+   * concrete `PermissionResolver` instance the composition root holds.
    */
-  resolve(intent: AccessIntent): PermissionCheckResult {
+  resolve(
+    intent: AccessIntent | PathValuesAccessIntent,
+  ): PermissionCheckResult {
     return this.permissionManager.check(
       toResolvedIntent(intent),
       this.sessionRules.getRuleset(),
