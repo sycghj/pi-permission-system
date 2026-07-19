@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getAgentDir, getPackageDir } from "@earendil-works/pi-coding-agent";
 import { warmBashParser } from "./access-intent/bash/parser";
 import { buildResolvedIntentFromMatchValues } from "./access-intent/input-normalizer";
+import { AuthorizerRegistry } from "./authority/authorizer-registry";
 import { AuthorizerSelection } from "./authority/authorizer-selection";
 import {
   ForwardedRequestServer,
@@ -64,6 +65,10 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
   const formatterRegistry = new ToolInputFormatterRegistry();
   registerBuiltinToolInputFormatters(formatterRegistry);
   const accessExtractorRegistry = new ToolAccessExtractorRegistry();
+  // One registry instance backs both the registerAuthorizer service surface and
+  // AuthorizerSelection's chain resolution, so a registration is visible to
+  // composition.
+  const authorizerRegistry = new AuthorizerRegistry();
 
   // Both `configStore` and `session` are forward-declared so the logger's
   // lazy thunks can close over them without a cast or null-init holder.
@@ -179,6 +184,7 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
     session,
     formatterRegistry,
     accessExtractorRegistry,
+    authorizerRegistry,
   );
 
   // Subscribe to @gotgenes/pi-subagents' child lifecycle events so child

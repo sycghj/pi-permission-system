@@ -11,10 +11,16 @@
  * reference — this ensures resilience across `/reload` and load-order edge cases.
  */
 
+import type { Authorizer } from "./authority/authorizer";
 import type { ToolAccessExtractor } from "./tool-access-extractor-registry";
 import type { ToolInputFormatter } from "./tool-input-formatter-registry";
 import type { PermissionCheckResult, PermissionState } from "./types";
 
+export type {
+  Authorizer,
+  AuthorizerVerdict,
+} from "./authority/authorizer";
+export type { PromptPermissionDetails } from "./authority/permission-prompter";
 export type {
   ForwardedPromptContext,
   PermissionDecisionEvent,
@@ -118,6 +124,30 @@ export interface PermissionsService extends PermissionQuery {
   registerToolAccessExtractor(
     toolName: string,
     extractor: ToolAccessExtractor,
+  ): () => void;
+
+  /**
+   * Register a named live-authority chain link (ADR 0007 §4).
+   *
+   * A link reviews an `ask` and returns `allow` / `deny` (with an optional
+   * teaching `reason`) / `defer`. It is handed a narrow, session-scoped
+   * {@link PermissionQuery} at `authorize` time so it can query the
+   * deterministic engine at gate parity. Register from a `permissions:ready`
+   * handler so registration is robust to load order and survives `/reload`.
+   *
+   * Registration alone grants **no authority**: the link decides nothing until
+   * the operator names it in the `authorizerChain` config (opt-in activation),
+   * and the chain owner caps every verdict with the bounded-delegation
+   * checkpoint (an `allow` on an excluded surface downgrades to `defer`). Only
+   * one link may be registered per name — a second call for the same name
+   * throws. The returned disposer unregisters the link.
+   *
+   * @param name      - Operator-facing link name referenced from `authorizerChain`.
+   * @param authorize - The link's decision callback (`(details, query) => verdict`).
+   */
+  registerAuthorizer(
+    name: string,
+    authorize: Authorizer["authorize"],
   ): () => void;
 }
 

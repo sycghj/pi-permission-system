@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AccessIntent } from "#src/access-intent/access-intent";
+import { AuthorizerRegistry } from "#src/authority/authorizer-registry";
 import { posixPathFlavor } from "#src/path/path-flavor";
 import { PathNormalizer } from "#src/path-normalizer";
 import { LocalPermissionsService } from "#src/permissions-service";
@@ -23,6 +24,7 @@ function makeService(
     getToolPermission: vi.fn(),
     registerToolInputFormatter: vi.fn(),
     registerToolAccessExtractor: vi.fn(),
+    registerAuthorizer: vi.fn(),
     ...overrides,
   };
 }
@@ -117,6 +119,7 @@ describe("service round-trip through the global slot", () => {
         },
         new ToolInputFormatterRegistry(),
         new ToolAccessExtractorRegistry(),
+        new AuthorizerRegistry(),
       ),
     );
   }

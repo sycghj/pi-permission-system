@@ -1,5 +1,7 @@
 import type { AccessIntent } from "./access-intent/access-intent";
 import { buildAccessIntentForSurface } from "./access-intent/input-normalizer";
+import type { Authorizer } from "./authority/authorizer";
+import type { AuthorizerRegistrar } from "./authority/authorizer-registry";
 import { resolveBashAdvisoryCheck } from "./bash-advisory-check";
 import type { PathNormalizer } from "./path-normalizer";
 import type { PermissionsService } from "./service";
@@ -44,6 +46,7 @@ export class LocalPermissionsService implements PermissionsService {
     private readonly session: PathNormalizerProvider,
     private readonly formatterRegistry: ToolInputFormatterRegistrar,
     private readonly accessExtractorRegistry: ToolAccessExtractorRegistrar,
+    private readonly authorizerRegistry: AuthorizerRegistrar,
   ) {}
 
   checkPermission(
@@ -86,5 +89,12 @@ export class LocalPermissionsService implements PermissionsService {
     extractor: ToolAccessExtractor,
   ): ReturnType<PermissionsService["registerToolAccessExtractor"]> {
     return this.accessExtractorRegistry.register(toolName, extractor);
+  }
+
+  registerAuthorizer(
+    name: string,
+    authorize: Authorizer["authorize"],
+  ): ReturnType<PermissionsService["registerAuthorizer"]> {
+    return this.authorizerRegistry.register(name, authorize);
   }
 }

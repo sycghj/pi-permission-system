@@ -31,6 +31,7 @@ function makeService(): PermissionsService {
     getToolPermission: vi.fn(),
     registerToolInputFormatter: vi.fn(),
     registerToolAccessExtractor: vi.fn(),
+    registerAuthorizer: vi.fn(),
   };
 }
 

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import type { AccessIntent } from "#src/access-intent/access-intent";
+import type { AuthorizerRegistrar } from "#src/authority/authorizer-registry";
 import { posixPathFlavor } from "#src/path/path-flavor";
 import { PathNormalizer } from "#src/path-normalizer";
 import { LocalPermissionsService } from "#src/permissions-service";
@@ -70,10 +71,17 @@ function makeAccessExtractorRegistry(): ToolAccessExtractorRegistrar {
   };
 }
 
+function makeAuthorizerRegistry(): AuthorizerRegistrar {
+  return {
+    register: vi.fn<AuthorizerRegistrar["register"]>().mockReturnValue(vi.fn()),
+  };
+}
+
 function makeService(overrides?: {
   resolver?: FakeResolver;
   formatterRegistry?: ToolInputFormatterRegistrar;
   accessExtractorRegistry?: ToolAccessExtractorRegistrar;
+  authorizerRegistry?: AuthorizerRegistrar;
 }) {
   const resolver = overrides?.resolver ?? makeResolver();
   // The published service always answers against the parent session's cwd.
@@ -82,13 +90,22 @@ function makeService(overrides?: {
     overrides?.formatterRegistry ?? makeFormatterRegistry();
   const accessExtractorRegistry =
     overrides?.accessExtractorRegistry ?? makeAccessExtractorRegistry();
+  const authorizerRegistry =
+    overrides?.authorizerRegistry ?? makeAuthorizerRegistry();
   const service = new LocalPermissionsService(
     resolver,
     session,
     formatterRegistry,
     accessExtractorRegistry,
+    authorizerRegistry,
   );
-  return { service, resolver, formatterRegistry, accessExtractorRegistry };
+  return {
+    service,
+    resolver,
+    formatterRegistry,
+    accessExtractorRegistry,
+    authorizerRegistry,
+  };
 }
 
 const normalizer = new PathNormalizer(posixPathFlavor, "/test/project");
@@ -231,6 +248,21 @@ describe("registerToolAccessExtractor", () => {
     expect(accessExtractorRegistry.register).toHaveBeenCalledWith(
       "ffgrep",
       extractor,
+    );
+    expect(result).toBe(unsub);
+  });
+});
+
+describe("registerAuthorizer", () => {
+  it("delegates to authorizerRegistry.register and returns the unsubscribe function", () => {
+    const unsub = vi.fn();
+    const { service, authorizerRegistry } = makeService();
+    vi.mocked(authorizerRegistry.register).mockReturnValue(unsub);
+    const authorize = vi.fn();
+    const result = service.registerAuthorizer("model-judge", authorize);
+    expect(authorizerRegistry.register).toHaveBeenCalledWith(
+      "model-judge",
+      authorize,
     );
     expect(result).toBe(unsub);
   });
