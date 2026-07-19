@@ -231,10 +231,11 @@ export function mergeUnifiedConfigs(
   }
 
   // Array fields: override replaces base when defined
-  const piInfrastructureReadPaths =
-    override.piInfrastructureReadPaths ?? base.piInfrastructureReadPaths;
-  if (piInfrastructureReadPaths !== undefined) {
-    merged.piInfrastructureReadPaths = piInfrastructureReadPaths;
+  for (const key of ["piInfrastructureReadPaths"] as const) {
+    const value = override[key] ?? base[key];
+    if (value !== undefined) {
+      merged[key] = value;
+    }
   }
 
   // shellTools: shallow-merge by tool name so a project entry overrides a
