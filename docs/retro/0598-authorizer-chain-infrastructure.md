@@ -32,4 +32,24 @@ Produced `docs/plans/0598-authorizer-chain-infrastructure.md` with three commits
   `refactor:`/`test:` commits are `hidden:` and don't cut a release.
 - **No follow-up issues filed** — Steps 5 (#599) and 6 (#600) already exist in the roadmap.
 
+## Stage: Implementation — TDD (2026-07-19T10:05:00Z)
+
+### Session summary
+
+Implemented all three TDD cycles for Phase 12 Step 4: reshaped the live-authority layer into a Chain of Responsibility per ADR 0007 with zero registered links, so behavior is byte-identical.
+Added `AuthorizerVerdict` + the non-terminal `Authorizer` / terminal `TerminalAuthorizer` split, the new `composeAuthorizerChain`, routed `AuthorizerSelection.activate` through the (empty) chain, and marked the roadmap step complete.
+Test count 2499 → 2506 (+7 `composeAuthorizerChain` unit tests); full suite, `check`, root `lint`, and `fallow dead-code` all green.
+
+### Observations
+
+- **No preparatory tidying warranted.**
+  The `tidy-first-assessor` found the interface split inherently atomic (repurposing the exported `Authorizer` type breaks every implementer/consumer at compile time simultaneously) with no length/coupling/duplication friction in the target files — proceeded directly to the cycle.
+- **The plan held exactly.**
+  All three commits landed as planned (`refactor:` / `refactor:` / `docs:`); every file in Module-Level Changes was touched and the two behavior pins (`authorizer.test.ts`, `authorizer-selection.test.ts`) stayed unchanged (zero-line diffs).
+  No deviations.
+- **Empty-links identity verified two ways.** `composeAuthorizerChain([], terminal)` returns the terminal instance, pinned both by the unchanged `authorizer-selection.test.ts` (`expect.any(LocalUserAuthorizer)`) and a dedicated `toBe(terminal)` unit test.
+- **One tool-friction note:** an `Edit` to `architecture.md` was first denied by the `external_directory` gate because I used a wrong path (`.../pi-permission-system/docs/...` instead of `.../pi-packages/packages/pi-permission-system/docs/...`) — corrected on retry. (A live instance of exactly the typo-path class ADR 0007's future model judge targets.)
+- **Pre-completion reviewer: PASS** — ready for `/ship-issue`.
+  Reviewer reconfirmed the mid-batch defer: the `docs:` completion commit sits in the pending release-please PR unmerged until Step 5 (#599) ships.
+
 [#599]: https://github.com/gotgenes/pi-packages/issues/599
