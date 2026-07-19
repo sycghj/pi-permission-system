@@ -23,6 +23,8 @@ export interface PermissionSystemExtensionConfig {
   toolTextSummaryMaxLength?: number;
   /** Non-bash tools that carry shell semantics, keyed by tool name. */
   shellTools?: ShellToolsConfig;
+  /** Ordered names of registered live-authority chain links to consult before the terminal authorizer. */
+  authorizerChain?: string[];
 }
 
 export const DEFAULT_EXTENSION_CONFIG: PermissionSystemExtensionConfig = {
@@ -74,6 +76,9 @@ export function normalizePermissionSystemConfig(
   }
   if (raw.shellTools !== undefined) {
     result.shellTools = raw.shellTools;
+  }
+  if (raw.authorizerChain !== undefined) {
+    result.authorizerChain = raw.authorizerChain;
   }
   return result;
 }

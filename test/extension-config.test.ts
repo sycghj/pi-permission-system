@@ -163,6 +163,18 @@ describe("normalizePermissionSystemConfig", () => {
     const result = normalizePermissionSystemConfig({});
     expect("shellTools" in result).toBe(false);
   });
+
+  it("includes authorizerChain when provided", () => {
+    const result = normalizePermissionSystemConfig({
+      authorizerChain: ["model-judge", "typo-reviewer"],
+    });
+    expect(result.authorizerChain).toEqual(["model-judge", "typo-reviewer"]);
+  });
+
+  it("omits authorizerChain when absent", () => {
+    const result = normalizePermissionSystemConfig({});
+    expect("authorizerChain" in result).toBe(false);
+  });
 });
 
 describe("isYoloModeEnabled", () => {

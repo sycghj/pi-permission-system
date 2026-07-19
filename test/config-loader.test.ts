@@ -600,6 +600,22 @@ describe("mergeUnifiedConfigs", () => {
     expect(merged.piInfrastructureReadPaths).toEqual([]);
   });
 
+  it("override authorizerChain replaces base array", () => {
+    const merged = mergeUnifiedConfigs(
+      { authorizerChain: ["base-judge"] },
+      { authorizerChain: ["override-judge"] },
+    );
+    expect(merged.authorizerChain).toEqual(["override-judge"]);
+  });
+
+  it("base authorizerChain survives when override omits it", () => {
+    const merged = mergeUnifiedConfigs(
+      { authorizerChain: ["kept-judge"] },
+      { debugLog: true },
+    );
+    expect(merged.authorizerChain).toEqual(["kept-judge"]);
+  });
+
   it("base shellTools survives when override omits it", () => {
     const merged = mergeUnifiedConfigs(
       { shellTools: { exec_command: { commandArgument: "cmd" } } },
