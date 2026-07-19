@@ -118,6 +118,10 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
     // session cwd). A thunk because `permissionsService` is constructed below;
     // it resolves at session_start (activate), well after assignment.
     getPermissionQuery: () => permissionsService,
+    // Same registry instance the registerAuthorizer service surface writes to,
+    // resolved in config order at activation.
+    authorizerRegistry,
+    getAuthorizerChain: () => configStore.current().authorizerChain ?? [],
   });
 
   // Resolver composes the manager + session ruleset and owns the

@@ -8,7 +8,11 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 
-import type { AuthorizerSelectionDeps as SelectionCtorDeps } from "#src/authority/authorizer";
+import type {
+  AuthorizerVerdict,
+  AuthorizerSelectionDeps as SelectionCtorDeps,
+} from "#src/authority/authorizer";
+import { AuthorizerRegistry } from "#src/authority/authorizer-registry";
 import { AuthorizerSelection } from "#src/authority/authorizer-selection";
 import { LocalUserAuthorizer } from "#src/authority/local-user-authorizer";
 import type { PermissionPromptDecision } from "#src/authority/permission-dialog";
@@ -68,9 +72,32 @@ function makeQuery(): PermissionQuery {
   return { checkPermission: vi.fn(), getToolPermission: vi.fn() };
 }
 
+/** Details whose gate-computed surface drives the delegation envelope. */
+function makeDetailsOn(surface: string): PromptPermissionDetails {
+  return {
+    ...makeDetails(),
+    accessIntent: { surface, matchValues: ["/v"], boundaryValue: null },
+  };
+}
+
+/** A prompter that actually runs the passed authorizer, so a test can observe
+ * the composed chain's decision (the real PermissionPrompter brackets log
+ * entries around `authorizer.authorize(details)`). */
+function makeInvokingPrompter(): PermissionPrompterApi & {
+  prompt: ReturnType<typeof vi.fn>;
+} {
+  return {
+    prompt: vi.fn<PermissionPrompterApi["prompt"]>((authorizer, details) =>
+      authorizer.authorize(details),
+    ),
+  };
+}
+
 type SelectionDeps = SelectionCtorDeps & {
   prompter: PermissionPrompterApi;
   getPermissionQuery: () => PermissionQuery;
+  authorizerRegistry: AuthorizerRegistry;
+  getAuthorizerChain: () => string[];
 };
 
 function makeDeps(overrides: Partial<SelectionDeps> = {}): SelectionDeps {
@@ -91,6 +118,9 @@ function makeDeps(overrides: Partial<SelectionDeps> = {}): SelectionDeps {
     logger: overrides.logger ?? { review: vi.fn(), debug: vi.fn() },
     prompter: overrides.prompter ?? makePrompterApi(),
     getPermissionQuery: overrides.getPermissionQuery ?? (() => makeQuery()),
+    authorizerRegistry:
+      overrides.authorizerRegistry ?? new AuthorizerRegistry(),
+    getAuthorizerChain: overrides.getAuthorizerChain ?? (() => []),
   };
 }
 
@@ -180,6 +210,156 @@ describe("AuthorizerSelection", () => {
       await selection.escalate(makeDetails());
 
       expect(prompter.prompt).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe("chain resolution", () => {
+    /** Register a link returning a fixed verdict. */
+    function register(
+      registry: AuthorizerRegistry,
+      name: string,
+      verdict: AuthorizerVerdict,
+    ): void {
+      registry.register(name, () => Promise.resolve(verdict));
+    }
+
+    it("consults a configured link before the terminal", async () => {
+      const registry = new AuthorizerRegistry();
+      register(registry, "judge", { kind: "deny", reason: "typo path" });
+      const selection = new AuthorizerSelection(
+        makeDeps({
+          prompter: makeInvokingPrompter(),
+          authorizerRegistry: registry,
+          getAuthorizerChain: () => ["judge"],
+        }),
+      );
+      selection.activate(makeCtx({ hasUI: true }));
+
+      const decision = await selection.escalate(makeDetailsOn("bash"));
+
+      // The link decided (deny_with_reason); the LocalUserAuthorizer terminal
+      // was never reached (it would have approved by default).
+      expect(decision).toEqual({
+        approved: false,
+        state: "denied_with_reason",
+        denialReason: "typo path",
+      });
+    });
+
+    it("resolves links in config order (first non-defer wins)", async () => {
+      const registry = new AuthorizerRegistry();
+      register(registry, "a", { kind: "deny", reason: "a-wins" });
+      register(registry, "b", { kind: "deny", reason: "b-wins" });
+      const selection = new AuthorizerSelection(
+        makeDeps({
+          prompter: makeInvokingPrompter(),
+          authorizerRegistry: registry,
+          getAuthorizerChain: () => ["a", "b"],
+        }),
+      );
+      selection.activate(makeCtx({ hasUI: true }));
+
+      const decision = await selection.escalate(makeDetailsOn("bash"));
+
+      expect(decision).toEqual({
+        approved: false,
+        state: "denied_with_reason",
+        denialReason: "a-wins",
+      });
+    });
+
+    it("skips an unregistered configured name with a warning", async () => {
+      const registry = new AuthorizerRegistry();
+      register(registry, "present", {
+        kind: "deny",
+        reason: "present-decided",
+      });
+      const logger = { review: vi.fn(), debug: vi.fn() };
+      const selection = new AuthorizerSelection(
+        makeDeps({
+          prompter: makeInvokingPrompter(),
+          authorizerRegistry: registry,
+          getAuthorizerChain: () => ["missing", "present"],
+          logger,
+        }),
+      );
+      selection.activate(makeCtx({ hasUI: true }));
+
+      const decision = await selection.escalate(makeDetailsOn("bash"));
+
+      // The unregistered "missing" link is skipped fail-safe; "present" decides.
+      expect(decision).toEqual({
+        approved: false,
+        state: "denied_with_reason",
+        denialReason: "present-decided",
+      });
+      expect(logger.review).toHaveBeenCalledWith(
+        "authorizer_chain_unregistered_link",
+        { name: "missing" },
+      );
+    });
+
+    it("caps a link's allow on an excluded surface, falling through to the terminal", async () => {
+      const registry = new AuthorizerRegistry();
+      register(registry, "judge", { kind: "allow" });
+      const selection = new AuthorizerSelection(
+        makeDeps({
+          prompter: makeInvokingPrompter(),
+          authorizerRegistry: registry,
+          getAuthorizerChain: () => ["judge"],
+        }),
+      );
+      // No UI, not a subagent → the terminal is DenyingAuthorizer.
+      selection.activate(makeCtx({ hasUI: false }));
+
+      const decision = await selection.escalate(
+        makeDetailsOn("external_directory"),
+      );
+
+      // The envelope downgraded the link's allow to defer, so the terminal
+      // (denying) owns the decision — the allow did not leak through.
+      expect(decision.approved).toBe(false);
+    });
+
+    it("lets a link's allow through on a non-excluded surface", async () => {
+      const registry = new AuthorizerRegistry();
+      register(registry, "judge", { kind: "allow" });
+      const selection = new AuthorizerSelection(
+        makeDeps({
+          prompter: makeInvokingPrompter(),
+          authorizerRegistry: registry,
+          getAuthorizerChain: () => ["judge"],
+        }),
+      );
+      selection.activate(makeCtx({ hasUI: false }));
+
+      const decision = await selection.escalate(makeDetailsOn("bash"));
+
+      // bash is not excluded, so the link's allow stands (a non-persistent
+      // approved grant) — the denying terminal is never reached.
+      expect(decision).toEqual({ approved: true, state: "approved" });
+    });
+
+    it("a registered but un-named link grants no authority (terminal identity)", async () => {
+      const registry = new AuthorizerRegistry();
+      register(registry, "judge", { kind: "allow" });
+      const prompter = makePrompterApi();
+      const selection = new AuthorizerSelection(
+        makeDeps({
+          prompter,
+          authorizerRegistry: registry,
+          getAuthorizerChain: () => [], // not named → opt-in withheld
+        }),
+      );
+      selection.activate(makeCtx({ hasUI: true }));
+
+      await selection.escalate(makeDetails());
+
+      // Empty chain ⇒ the selected value is the terminal instance itself.
+      expect(prompter.prompt).toHaveBeenCalledWith(
+        expect.any(LocalUserAuthorizer),
+        expect.anything(),
+      );
     });
   });
 });

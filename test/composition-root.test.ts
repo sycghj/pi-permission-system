@@ -369,6 +369,76 @@ describe("service and gate share one access extractor registry", () => {
   });
 });
 
+describe("service and chain share one authorizer registry", () => {
+  // A link registered through the published service must be consulted by the
+  // live ask gate when the operator names it in authorizerChain — proving both
+  // the registerAuthorizer surface and AuthorizerSelection reference the same
+  // AuthorizerRegistry instance the factory created once (#599).
+  it("consults a service-registered, config-named link at the ask gate", async () => {
+    writeGlobalConfig({
+      permission: { "*": "ask" },
+      authorizerChain: ["typo-judge"],
+    });
+
+    const cwd = mkdtempSync(join(tmpdir(), "pi-perm-auth-cwd-"));
+    const pi = makeFakePi({ toolNames: ["demo"] });
+    piPermissionSystemExtension(pi as unknown as ExtensionAPI);
+
+    const capturedTitles: string[] = [];
+    const { ctx } = makeUiCtx(cwd, capturedTitles);
+    await fireSessionStart(pi, ctx);
+
+    // Registered after session_start via the published service; link resolution
+    // is per-ask (ADR 0007 §4), so it is honored on the first ask.
+    getPermissionsService()!.registerAuthorizer("typo-judge", () =>
+      Promise.resolve({ kind: "deny", reason: "typo path" }),
+    );
+
+    const result = (await pi.fire(
+      "tool_call",
+      { toolName: "demo", toolCallId: "d-1", input: {} },
+      ctx,
+    )) as { block?: true };
+
+    // The link denied before the (approving) UI terminal was reached — so the
+    // gate escalated through the same registry the service wrote to, and the
+    // config named it (opt-in activation).
+    expect(result.block).toBe(true);
+    expect(capturedTitles).toEqual([]);
+
+    rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("ignores a registered link the operator did not name (opt-in)", async () => {
+    writeGlobalConfig({ permission: { "*": "ask" } }); // authorizerChain omitted
+
+    const cwd = mkdtempSync(join(tmpdir(), "pi-perm-auth-optin-"));
+    const pi = makeFakePi({ toolNames: ["demo"] });
+    piPermissionSystemExtension(pi as unknown as ExtensionAPI);
+
+    const capturedTitles: string[] = [];
+    const { ctx } = makeUiCtx(cwd, capturedTitles);
+    await fireSessionStart(pi, ctx);
+
+    getPermissionsService()!.registerAuthorizer("typo-judge", () =>
+      Promise.resolve({ kind: "deny", reason: "typo path" }),
+    );
+
+    const result = (await pi.fire(
+      "tool_call",
+      { toolName: "demo", toolCallId: "d-2", input: {} },
+      ctx,
+    )) as { block?: true };
+
+    // Registration alone grants no authority: the un-named link is dormant, so
+    // the ask reached the approving UI terminal.
+    expect(result.block).toBeUndefined();
+    expect(capturedTitles).toHaveLength(1);
+
+    rmSync(cwd, { recursive: true, force: true });
+  });
+});
+
 describe("ready emitted after service publication", () => {
   // Ordering contracts exist only at the composition root: a consumer reacting
   // to permissions:ready must be able to resolve the service immediately. The
