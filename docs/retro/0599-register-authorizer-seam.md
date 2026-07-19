@@ -50,6 +50,63 @@ All gates green (`check`, root `lint`, `test`, `fallow dead-code`, `verify:publi
 - **Checkpoint is dormant this batch** (deny-first links never `allow`), so the whole-`path` exclusion ships correct-but-unexercised-by-allow; #620 owns the secret-shaped refinement + the allow-capable adjudicator that first exercises it.
 - **Reviewer verdict: PASS** — no WARN findings.
 
+## Stage: Final Retrospective (2026-07-19T22:25:00Z)
+
+### Session summary
+
+Phase 12 Step 5 shipped end to end in one continuous session (plan → TDD → ship) and released as `pi-permission-system-v20.9.0`, the tail of the "authorizer-chain" batch.
+The session was notably clean: an exemplary plan-time ambiguity gate, two tidy-first prep refactors that paid off, five green TDD cycles, and one self-caught design correction (per-ask vs. activate-time chain resolution).
+Friction was minor and mechanical — two path-transcription slips and one truncated CI SHA, all self-corrected with zero rework.
+
+### Observations
+
+#### What went well
+
+1. **The plan-time ambiguity gate was exemplary.**
+   Two genuine forks (inject `PermissionQuery` now vs. defer; whole-`path` vs. secret-shaped exclusion) were surfaced with grounded context.
+   When the operator asked clarifying questions back, the answer synthesized a unifying fact — *both forks are slice-2 (allow-capable) machinery, and slice-2 was unfiled* — which resolved both at once and produced a concrete follow-up ([#620]) instead of leaving the deferrals floating under [#472].
+2. **A self-caught design correction during TDD.**
+   The plan sketched resolving the chain at `activate`, but mid-Step-5 I traced that a link registered in a `permissions:ready` handler can fire *after* activation, so ADR 0007 §4 ("before the session's first ask") requires per-ask resolution.
+   Moved resolution into `escalate` and pinned it with a composition-root test that registers the link *after* `session_start`.
+   Caught before any wrong code landed — zero rework.
+3. **Both tidy-first prep refactors genuinely shrank the change.**
+   Extracting `PermissionQuery` first removed one axis from the plan's admittedly-atomic Step 1; the `mergeUnifiedConfigs` array-merge key loop made the `authorizerChain` merge a one-token append.
+4. **Incremental verification throughout.**
+   `pnpm run check` ran after every shared-interface change (not just at the end), affected test files ran per cycle, and the full gate (`test` / root `lint` / `fallow` / `verify:public-types`) ran once before the docs commit.
+
+#### What caused friction (agent side)
+
+1. `other` (mechanical path typo) — twice I addressed an `Edit`/`Read` at a **doubled** absolute path (`/…/pi-permission-system/packages/pi-permission-system/…`, the `pi-packages` root segment dropped), which the permission gate denied.
+   Impact: 2 wasted tool calls, both self-corrected on the next call; no rework.
+   Ironically the exact typo-path shape ADR 0007's use case 1 is built to auto-deny.
+2. `instruction-violation` (self-identified) — the first `ci_find` was passed a 39-char SHA (dropped the trailing `b` while transcribing `git rev-parse` output), which the ship prompt explicitly warns against ("pass that exact value … never hand-expand").
+   Impact: one 125 s `ci_find` timeout, then re-ran `git rev-parse` and retried with the full SHA; no rework.
+3. `instruction-violation` (self-identified, harmless) — one `Edit` call carried a stray `newText2: ""` key (the `oldText2`/`newText2` trap AGENTS.md names); it was silently ignored and the single `newText` was already complete, so nothing was dropped.
+   Impact: none, but re-read the region to confirm.
+
+#### What caused friction (user side)
+
+1. None.
+   The operator's plan-time clarifying questions were a strength — pushing back with "when *will* we inject it?"
+   and "is there a refining issue?
+   is this hard-coded?"
+   forced the slice-2/`#620` framing that made the plan sharper.
+   No mechanical-oversight friction.
+
+### Diagnostic details
+
+- **Model-performance correlation** — two subagent dispatches, both appropriate: `tidy-first-assessor` (preparatory-refactor judgment) and `pre-completion-reviewer` (deterministic gates + judgment checklist).
+  No reasoning-weak-model-on-judgment or high-cost-model-on-mechanical mismatch.
+- **Escalation-delay tracking** — no `rabbit-hole` friction; the longest same-error streak was 1 retry (path typos, SHA truncation).
+- **Unused-tool detection** — no `missing-context`/`rabbit-hole` points; exploration at plan time was thorough (read the ADR, Step 4 plan, all touched source, and the registry precedent before writing).
+- **Feedback-loop gap analysis** — no gap; verification was incremental (`check` after each interface change, per-file tests per cycle), not end-loaded.
+
+### Changes made
+
+1. Wrote this Final Retrospective stage entry in `packages/pi-permission-system/docs/retro/0599-register-authorizer-seam.md`.
+2. No `AGENTS.md` or `.pi/prompts/` changes — operator chose record-only.
+   The three friction points were mechanical and zero-rework: the CI-SHA case is already covered by an existing `/ship-issue` rule, the path typos self-corrected, and the `activate`-vs-`escalate` timing lesson is already documented concretely in the package `SKILL.md`.
+
 [#472]: https://github.com/gotgenes/pi-packages/issues/472
 [#598]: https://github.com/gotgenes/pi-packages/issues/598
 [#600]: https://github.com/gotgenes/pi-packages/issues/600
