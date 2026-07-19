@@ -52,4 +52,55 @@ Test count 2499 → 2506 (+7 `composeAuthorizerChain` unit tests); full suite, `
 - **Pre-completion reviewer: PASS** — ready for `/ship-issue`.
   Reviewer reconfirmed the mid-batch defer: the `docs:` completion commit sits in the pending release-please PR unmerged until Step 5 (#599) ships.
 
+## Stage: Final Retrospective (2026-07-19T15:17:13Z)
+
+### Session summary
+
+Shipped Phase 12 Step 4 across a single-process planning → TDD → ship sequence: the live-authority layer is now a Chain of Responsibility (ADR 0007) with zero registered links, so behavior is byte-identical.
+Four commits landed exactly as planned, CI passed, #598 closed, and the release was correctly deferred (batch "authorizer-chain" head; tail = Step 5, [#599]).
+An unusually clean run — the plan held with zero deviations and the pre-completion reviewer returned PASS on the first pass.
+
+### Observations
+
+#### What went well
+
+- **The plan held with zero deviations.**
+  Every file in Module-Level Changes was touched, the two behavior pins stayed at zero-line diffs, and the three TDD commits matched their planned messages and types.
+  Front-loading the design reconciliation (terminal keeps `PermissionPromptDecision`; ADR-faithful rename via `ask_user`) into planning left nothing to re-decide during implementation.
+- **`tidy-first-assessor` correctly declined (novel).**
+  On this dispatch the assessor recommended *no* preparatory work — it recognized the interface split as inherently atomic (repurposing the exported `Authorizer` type breaks every implementer at compile time simultaneously) with no length/coupling/duplication friction, and its Rejected-as-scope-creep list stayed inside the change's own files.
+  This is the skill's "first-live-use checkpoint" behaving as intended: a clean decline rather than manufactured busywork.
+- **The empty-links identity was pinned two ways.**
+  `composeAuthorizerChain([], terminal)` returning the terminal instance is guarded by both the unchanged `authorizer-selection.test.ts` (`expect.any(LocalUserAuthorizer)`) and a dedicated `toBe(terminal)` unit test — stronger than prose-only, and the pre-completion reviewer called this out.
+- **Incremental verification cadence.**
+  `pnpm run check` ran right after the shared-interface change (Step 1), affected-file tests ran per step, and the full suite + root `lint` + `fallow dead-code` ran once at the end — no end-of-session verification pile-up.
+
+#### What caused friction (agent side)
+
+- `other` (Edit-tool mechanics) — the first `Edit` to `denying-authorizer.test.ts` used an `oldText` (`const authorizer: Authorizer = new DenyingAuthorizer();`) that matched two occurrences and was rejected as non-unique.
+  Impact: one extra retry with wider context; no rework, no wrong edit applied (the batch is atomic, so nothing landed on the miss).
+- `other` (path typo, self-identified) — an `Edit` to `architecture.md` used a wrong absolute path (`.../pi-permission-system/docs/...`, dropping the `pi-packages/packages/` segment) and was denied by the `external_directory` gate.
+  Impact: one retry with the corrected path; no rework.
+  The gate fail-safe caught it immediately — and it is a live instance of exactly the typo-path class ADR 0007's future model judge is designed to auto-deny with a teaching reason.
+
+#### What caused friction (user side)
+
+- None.
+  The single `ask_user` at planning (ADR-faithful rename vs. additive `AuthorizerLink`) and the ship-time release-defer confirmation were both well-scoped strategic decisions, answered once each with no back-and-forth.
+
+### Diagnostic details
+
+- **Model-performance correlation** — the main planning/TDD/ship work ran on `claude-opus-4-8` (appropriate for the ADR-reconciliation judgment), with a mid-session switch to `claude-sonnet-5` and back.
+  Both read-only subagents (`tidy-first-assessor`, `pre-completion-reviewer`) ran on `claude-sonnet-5` per their frontmatter — fitting for assessment/review.
+  No mismatch: judgment-heavy work stayed on the strong model, mechanical read-only sweeps on the cheaper one.
+- **Escalation-delay tracking** — no `rabbit-hole` friction; both friction points resolved on the first retry (well under the 5-consecutive-call threshold).
+- **Unused-tool detection** — not applicable; no `missing-context` or `rabbit-hole` friction.
+  `colgrep`/`grep`/`Read` were used appropriately during planning exploration.
+- **Feedback-loop gap analysis** — no gap; verification was incremental (see "Incremental verification cadence" above), matching the AGENTS.md rule to run `pnpm run check` immediately after a shared-interface change.
+
+### Changes made
+
+1. Wrote this Final Retrospective stage entry in `packages/pi-permission-system/docs/retro/0598-authorizer-chain-infrastructure.md`.
+   No `AGENTS.md` or prompt changes — both friction points were one-off, self-corrected tool mechanics with zero rework, so no rule change was justified (operator confirmed "retro file only").
+
 [#599]: https://github.com/gotgenes/pi-packages/issues/599
