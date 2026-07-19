@@ -5,6 +5,7 @@ import {
   selectAuthorizer,
   type TerminalAuthorizer,
 } from "./authorizer";
+import { composeAuthorizerChain } from "./authorizer-chain";
 import type {
   PermissionPrompterApi,
   PromptPermissionDetails,
@@ -57,9 +58,14 @@ export class AuthorizerSelection
     },
   ) {}
 
-  /** Select the Authorizer for `ctx` and store it. */
+  /**
+   * Select the terminal Authorizer for `ctx`, compose the (currently empty)
+   * chain of non-terminal links ahead of it, and store the result. Step 5
+   * replaces the empty link list with the operator's configured chain.
+   */
   activate(ctx: ExtensionContext): void {
-    this.selected = selectAuthorizer(ctx, this.deps);
+    const terminal = selectAuthorizer(ctx, this.deps);
+    this.selected = composeAuthorizerChain([], terminal);
   }
 
   /** Clear the stored selection. */
