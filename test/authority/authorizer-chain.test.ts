@@ -3,6 +3,7 @@ import type { AuthorizerVerdict } from "#src/authority/authorizer";
 import { composeAuthorizerChain } from "#src/authority/authorizer-chain";
 import type { PermissionPromptDecision } from "#src/authority/permission-dialog";
 import type { PromptPermissionDetails } from "#src/authority/permission-prompter";
+import type { PermissionQuery } from "#src/service";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -12,6 +13,14 @@ function makeDetails(): PromptPermissionDetails {
     source: "tool_call",
     agentName: null,
     message: "Allow this?",
+  };
+}
+
+/** A narrow PermissionQuery stub; identity-comparable for injection assertions. */
+function makeQuery(): PermissionQuery {
+  return {
+    checkPermission: vi.fn(),
+    getToolPermission: vi.fn(),
   };
 }
 
@@ -30,7 +39,12 @@ function makeTerminal(decision: PermissionPromptDecision) {
 function makeLink(verdict: AuthorizerVerdict) {
   return {
     authorize: vi
-      .fn<(details: PromptPermissionDetails) => Promise<AuthorizerVerdict>>()
+      .fn<
+        (
+          details: PromptPermissionDetails,
+          query: PermissionQuery,
+        ) => Promise<AuthorizerVerdict>
+      >()
       .mockResolvedValue(verdict),
   };
 }
@@ -41,21 +55,25 @@ describe("composeAuthorizerChain", () => {
   it("returns the terminal instance itself when there are no links", () => {
     const terminal = makeTerminal({ approved: true, state: "approved" });
 
-    const composed = composeAuthorizerChain([], terminal);
+    const composed = composeAuthorizerChain([], terminal, makeQuery());
 
     // Identity is a behavioral invariant: escalate hands the real terminal to
     // the prompter, so `expect.any(LocalUserAuthorizer)` still holds.
     expect(composed).toBe(terminal);
   });
 
-  it("maps an allow verdict to an approved decision and stops before the terminal", async () => {
+  it("maps an allow verdict to an approved decision and injects the query", async () => {
     const terminal = makeTerminal({ approved: false, state: "denied" });
     const link = makeLink({ kind: "allow" });
+    const query = makeQuery();
+    const details = makeDetails();
 
-    const composed = composeAuthorizerChain([link], terminal);
-    const decision = await composed.authorize(makeDetails());
+    const composed = composeAuthorizerChain([link], terminal, query);
+    const decision = await composed.authorize(details);
 
     expect(decision).toEqual({ approved: true, state: "approved" });
+    // The chain injects the session-scoped query into each link (ADR 0007 §3).
+    expect(link.authorize).toHaveBeenCalledWith(details, query);
     expect(terminal.authorize).not.toHaveBeenCalled();
   });
 
@@ -66,7 +84,7 @@ describe("composeAuthorizerChain", () => {
       reason: "wrong path; use pi-packages",
     });
 
-    const composed = composeAuthorizerChain([link], terminal);
+    const composed = composeAuthorizerChain([link], terminal, makeQuery());
     const decision = await composed.authorize(makeDetails());
 
     expect(decision).toEqual({
@@ -81,7 +99,7 @@ describe("composeAuthorizerChain", () => {
     const terminal = makeTerminal({ approved: true, state: "approved" });
     const link = makeLink({ kind: "deny" });
 
-    const composed = composeAuthorizerChain([link], terminal);
+    const composed = composeAuthorizerChain([link], terminal, makeQuery());
     const decision = await composed.authorize(makeDetails());
 
     expect(decision).toEqual({ approved: false, state: "denied" });
@@ -95,13 +113,14 @@ describe("composeAuthorizerChain", () => {
     };
     const terminal = makeTerminal(terminalDecision);
     const link = makeLink({ kind: "defer" });
+    const query = makeQuery();
     const details = makeDetails();
 
-    const composed = composeAuthorizerChain([link], terminal);
+    const composed = composeAuthorizerChain([link], terminal, query);
     const decision = await composed.authorize(details);
 
     expect(decision).toEqual(terminalDecision);
-    expect(link.authorize).toHaveBeenCalledWith(details);
+    expect(link.authorize).toHaveBeenCalledWith(details, query);
     expect(terminal.authorize).toHaveBeenCalledWith(details);
   });
 
@@ -111,7 +130,11 @@ describe("composeAuthorizerChain", () => {
     const second = makeLink({ kind: "deny", reason: "no" });
     const third = makeLink({ kind: "allow" });
 
-    const composed = composeAuthorizerChain([first, second, third], terminal);
+    const composed = composeAuthorizerChain(
+      [first, second, third],
+      terminal,
+      makeQuery(),
+    );
     const decision = await composed.authorize(makeDetails());
 
     expect(decision).toEqual({
@@ -128,7 +151,11 @@ describe("composeAuthorizerChain", () => {
     const first = makeLink({ kind: "defer" });
     const second = makeLink({ kind: "defer" });
 
-    const composed = composeAuthorizerChain([first, second], terminal);
+    const composed = composeAuthorizerChain(
+      [first, second],
+      terminal,
+      makeQuery(),
+    );
     const decision = await composed.authorize(makeDetails());
 
     expect(decision).toEqual({ approved: true, state: "approved" });

@@ -17,6 +17,7 @@ import type {
   PromptPermissionDetails,
 } from "#src/authority/permission-prompter";
 import type { SubagentDetector } from "#src/authority/subagent-detection";
+import type { PermissionQuery } from "#src/service";
 
 // ── Test helpers ──────────────────────────────────────────────────────────
 
@@ -63,7 +64,14 @@ function makeDetection(isSubagent = false): SubagentDetector {
   return { isSubagent: vi.fn(() => isSubagent) };
 }
 
-type SelectionDeps = SelectionCtorDeps & { prompter: PermissionPrompterApi };
+function makeQuery(): PermissionQuery {
+  return { checkPermission: vi.fn(), getToolPermission: vi.fn() };
+}
+
+type SelectionDeps = SelectionCtorDeps & {
+  prompter: PermissionPrompterApi;
+  getPermissionQuery: () => PermissionQuery;
+};
 
 function makeDeps(overrides: Partial<SelectionDeps> = {}): SelectionDeps {
   return {
@@ -82,6 +90,7 @@ function makeDeps(overrides: Partial<SelectionDeps> = {}): SelectionDeps {
     registry: overrides.registry,
     logger: overrides.logger ?? { review: vi.fn(), debug: vi.fn() },
     prompter: overrides.prompter ?? makePrompterApi(),
+    getPermissionQuery: overrides.getPermissionQuery ?? (() => makeQuery()),
   };
 }
 

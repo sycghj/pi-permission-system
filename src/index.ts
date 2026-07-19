@@ -108,6 +108,11 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
     registry: subagentRegistry,
     logger,
     prompter,
+    // The published service is the narrow, session-scoped PermissionQuery a
+    // chain link is handed (it routes bash/path at gate parity against the live
+    // session cwd). A thunk because `permissionsService` is constructed below;
+    // it resolves at session_start (activate), well after assignment.
+    getPermissionQuery: () => permissionsService,
   });
 
   // Resolver composes the manager + session ruleset and owns the

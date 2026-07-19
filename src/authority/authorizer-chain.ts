@@ -1,3 +1,4 @@
+import type { PermissionQuery } from "#src/service";
 import type {
   Authorizer,
   AuthorizerVerdict,
@@ -15,13 +16,16 @@ import { createDeniedPermissionDecision } from "./permission-dialog";
  * (returns a full decision), so a deferring link cannot occupy the terminal
  * slot.
  *
- * With zero links the composed chain **is** the terminal instance (identity),
- * so behavior is byte-identical to the pre-chain spine \u2014 the empty-links case
- * this Step 4 always hits.
+ * Each link is handed the session-scoped `query` at `authorize` time (ADR 0007
+ * §3) so it queries the deterministic engine at gate parity; the terminal never
+ * queries. With zero links the composed chain **is** the terminal instance
+ * (identity), so behavior is byte-identical to the pre-chain spine — the
+ * empty-links case that ships until a link registers.
  */
 export function composeAuthorizerChain(
   links: readonly Authorizer[],
   terminal: TerminalAuthorizer,
+  query: PermissionQuery,
 ): TerminalAuthorizer {
   if (links.length === 0) {
     return terminal;
@@ -29,7 +33,7 @@ export function composeAuthorizerChain(
   return {
     async authorize(details) {
       for (const link of links) {
-        const verdict = await link.authorize(details);
+        const verdict = await link.authorize(details, query);
         const decision = decideFromVerdict(verdict);
         if (decision) {
           return decision;

@@ -6,6 +6,7 @@ import type {
 } from "#src/authority/permission-prompt-component";
 import type { SubagentSessionRegistry } from "#src/authority/subagent-registry";
 import type { PermissionEventBus } from "#src/permission-events";
+import type { PermissionQuery } from "#src/service";
 import type { DebugReviewLogger } from "#src/session-logger";
 import { ParentAuthorizer } from "./approval-escalator";
 import { DenyingAuthorizer } from "./denying-authorizer";
@@ -25,11 +26,16 @@ export type AuthorizerVerdict =
 
 /**
  * A non-terminal link in the live-authority chain: reviews an `ask` and may
- * decide it or defer to the next link (ADR 0007). No link exists yet — the
- * interface is the seam Step 5 exposes via `registerAuthorizer`.
+ * decide it or defer to the next link (ADR 0007). The chain injects a narrow,
+ * session-scoped {@link PermissionQuery} at `authorize` time (§3), so a link
+ * queries the deterministic engine at gate parity rather than reaching for the
+ * cross-extension service via `Symbol.for()`.
  */
 export interface Authorizer {
-  authorize(details: PromptPermissionDetails): Promise<AuthorizerVerdict>;
+  authorize(
+    details: PromptPermissionDetails,
+    query: PermissionQuery,
+  ): Promise<AuthorizerVerdict>;
 }
 
 /**

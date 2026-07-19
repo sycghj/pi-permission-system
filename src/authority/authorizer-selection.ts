@@ -1,5 +1,6 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { PermissionPromptDecision } from "#src/authority/permission-dialog";
+import type { PermissionQuery } from "#src/service";
 import {
   type AuthorizerSelectionDeps,
   selectAuthorizer,
@@ -55,6 +56,8 @@ export class AuthorizerSelection
   constructor(
     private readonly deps: AuthorizerSelectionDeps & {
       prompter: PermissionPrompterApi;
+      /** The session-scoped query injected into each chain link (ADR 0007 §3). */
+      getPermissionQuery: () => PermissionQuery;
     },
   ) {}
 
@@ -65,7 +68,11 @@ export class AuthorizerSelection
    */
   activate(ctx: ExtensionContext): void {
     const terminal = selectAuthorizer(ctx, this.deps);
-    this.selected = composeAuthorizerChain([], terminal);
+    this.selected = composeAuthorizerChain(
+      [],
+      terminal,
+      this.deps.getPermissionQuery(),
+    );
   }
 
   /** Clear the stored selection. */
