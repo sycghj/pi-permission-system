@@ -757,13 +757,14 @@ src/
 ├── tool-registry.ts           ToolRegistry interface + tool name validation
 ├── active-agent.ts            Agent name detection from session/system prompt
 ├── authority/                 Subagent detection, the Authorizer spine, and forwarded-permission escalation
-│   ├── authorizer.ts          `Authorizer` interface (`authorize(details): Promise<PermissionPromptDecision>`) + `AuthorizerSelectionDeps` + `selectAuthorizer(ctx, deps)` - the once-per-activation hasUI/isSubagent/deny dispatch
-│   ├── local-user-authorizer.ts `LocalUserAuthorizer` class - Authorizer for a session with UI and the single `permissions:ui_prompt` emit site: renders a forwarded ask's provenance as a non-degraded broadcast + `(Subagent)` title, then dispatches to the inline keybind dialog (TUI) or the `select`/`input` fallback
+│   ├── authorizer.ts          `Authorizer` (non-terminal chain link, `authorize(details): Promise<AuthorizerVerdict>`) + `TerminalAuthorizer` (terminal, `authorize(details): Promise<PermissionPromptDecision>` - cannot defer, enforced type-level) + `AuthorizerVerdict` (`allow | deny | defer`) + `AuthorizerSelectionDeps` + `selectAuthorizer(ctx, deps): TerminalAuthorizer` - the once-per-activation hasUI/isSubagent/deny dispatch
+│   ├── authorizer-chain.ts    `composeAuthorizerChain(links, terminal)` - folds non-terminal links ahead of the context-selected terminal (`defer` → next link, `allow`/`deny` → decision); zero links returns the terminal instance (identity)
+│   ├── local-user-authorizer.ts `LocalUserAuthorizer` class - `TerminalAuthorizer` for a session with UI and the single `permissions:ui_prompt` emit site: renders a forwarded ask's provenance as a non-degraded broadcast + `(Subagent)` title, then dispatches to the inline keybind dialog (TUI) or the `select`/`input` fallback
 │   ├── permission-dialog.ts   Dialog option semantics + `requestPermissionDecisionFromUi` (`select`/`input` fallback); the mode dispatch lives in `permission-prompt-component.ts`
 │   ├── permission-prompt-decision.ts Pure decision model (`reducePrompt` + `PromptModelConfig`/`PromptViewState`) for the inline keybind dialog - hotkey arming (double-press), step transitions, reason validation; no SDK/TUI imports
 │   ├── permission-prompt-component.ts Inline `ctx.ui.custom<PermissionPromptDecision>` keybind dialog (TUI) driven by the decision model + the `requestPermissionDecision` mode dispatcher (tui → inline, else fallback)
-│   ├── denying-authorizer.ts  `DenyingAuthorizer` class - least-privilege Authorizer for a session with no reachable authority; denies with the `confirmationUnavailable` marker so the ask path derives the `confirmation_unavailable` resolution
-│   ├── authorizer-selection.ts `AuthorizerSelection` class - context-owning `AskEscalator` implementation (`escalate(details)`); selects the `Authorizer` once per activation and delegates to it via `PermissionPrompter`
+│   ├── denying-authorizer.ts  `DenyingAuthorizer` class - least-privilege `TerminalAuthorizer` for a session with no reachable authority; denies with the `confirmationUnavailable` marker so the ask path derives the `confirmation_unavailable` resolution
+│   ├── authorizer-selection.ts `AuthorizerSelection` class - context-owning `AskEscalator` implementation (`escalate(details)`); selects the terminal once per activation, composes the (empty) chain via `composeAuthorizerChain`, and delegates to it via `PermissionPrompter`
 │   ├── permission-prompter.ts `PermissionPrompter` class (`PermissionPrompterApi`) - review-log bracketing (waiting → approved/denied) around `authorizer.authorize(details)`; `PromptPermissionDetails` type (carries the child-fixed `accessIntent` facts a forwarded ask relays)
 │   ├── subagent-detection.ts  SubagentDetection class - single owner of subagent detection (SubagentDetector.isSubagent + RegisteredChildDetector.isRegisteredChild); delegates to subagent-context
 │   ├── subagent-context.ts    Pure subagent execution context detection (registry + env vars + filesystem)
@@ -771,7 +772,7 @@ src/
 │   ├── subagent-lifecycle-events.ts subscribeSubagentLifecycle() - subscribes to @gotgenes/pi-subagents child lifecycle events; registers/unregisters child sessions in SubagentSessionRegistry (ADR 0002)
 │   ├── forwarder-context.ts   `ForwarderContext` read-interface + `getSessionId`/`getCwd` - shared by the escalation and serving roles
 │   ├── permission-forwarding.ts Cross-session forwarding wire types (`ForwardedPermissionRequest`, the `ForwardedAccessFacts`/`ForwardedAccessIntent` intent schema per ADR 0008) + registry/env-var target resolution
-│   ├── approval-escalator.ts  `ParentAuthorizer` class - Authorizer for a subagent session: escalates the ask up the tree via the request-write/poll machinery, completing the child-fixed facts into a `ForwardedAccessIntent` (stamps `requesterCwd`/`principal`), `ctx` bound at construction
+│   ├── approval-escalator.ts  `ParentAuthorizer` class - `TerminalAuthorizer` for a subagent session: escalates the ask up the tree via the request-write/poll machinery, completing the child-fixed facts into a `ForwardedAccessIntent` (stamps `requesterCwd`/`principal`), `ctx` bound at construction
 │   ├── forwarded-request-server.ts `ForwardedRequestServer` class (`InboxProcessor`) - serving-down role: `processInbox()` drains forwarded requests and resolves each like a local action - `ServingPolicy` (recorded authority) then `AskEscalator` on `ask`; `ServingPolicy.resolve(intent: ForwardedAccessIntent)` is intent-shaped (agent-scoped to `principal.agentName`, child-fixed `matchValues` used as-is, never re-derived through this session's `PathNormalizer`/cwd), floors to `ask` when `accessIntent` is absent (version skew); one-hop canary
 │   ├── forwarding-io.ts       Forwarding filesystem helpers - request/response read-write (tolerant read of the optional `accessIntent` field), location derivation, atomic JSON writes
 │   └── forwarding-manager.ts  `ForwardingController` interface + `ForwardingManager` class - drives the forwarded-permission inbox polling lifecycle; tells `ForwardedRequestServer.processInbox`
@@ -880,13 +881,15 @@ Release: batch "cross-session-intent"
 
 Release: batch "cross-session-intent"
 
-#### Step 4: Authorizer chain infrastructure ([#598])
+#### ✅ Step 4: Authorizer chain infrastructure ([#598])
 
 **Cause:** the live-authority layer's shape (one terminal `Authorizer` selected once per activation) is closed against non-terminal participants — a link that reviews an ask and defers cannot be seated, which is the structural reason [#472] has had no home since Phase 9 built the spine.
 
 - **Smell:** Category C (OCP at the live-authority layer).
 - **Target:** `src/authority/authorizer.ts` (`AuthorizerVerdict`: `allow | deny | defer`, with `deny` carrying an optional teaching `reason`), new `src/authority/authorizer-chain.ts` (`composeAuthorizerChain` — registered non-terminal links, then the context-selected terminal; the terminal-cannot-defer invariant is type-level), `src/authority/authorizer-selection.ts` (`selectAuthorizer` becomes the terminal-selection step; the `AskEscalator` surface is unchanged).
 - **Outcome:** refactor-only — behavior is identical with zero registered links, pinned by the existing authorizer-selection tests; the chain seam exists for Step 5 to expose.
+- **Landed:** `Authorizer` is now the non-terminal chain link (`allow | deny | defer`), `TerminalAuthorizer` is the terminal (cannot defer, type-level), and `composeAuthorizerChain([], terminal)` returns the terminal instance so behavior is byte-identical; `AuthorizerSelection.activate` routes through the empty chain.
+  Seven `composeAuthorizerChain` unit tests added.
 - **Impact 4 / Risk 3 / Priority 12.**
 
 Release: batch "authorizer-chain"
@@ -920,7 +923,7 @@ Release: independent
 flowchart TD
     S1["✅ Step 1 (#595): ADR 0008 — forwarded-intent portability + principal identity"] --> S2["✅ Step 2 (#596): structured intent on the forwarded wire"]
     S2 --> S3["✅ Step 3 (#597): serving resolves the forwarded intent"]
-    S4["Step 4 (#598): Authorizer chain infrastructure"] --> S5["Step 5 (#599): registerAuthorizer seam + authorizerChain config"]
+    S4["✅ Step 4 (#598): Authorizer chain infrastructure"] --> S5["Step 5 (#599): registerAuthorizer seam + authorizerChain config"]
     S5 --> S6["Step 6 (#600): pi-permission-model-judge dogfood package"]
 ```
 
