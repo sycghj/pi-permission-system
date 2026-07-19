@@ -721,7 +721,7 @@ src/
 │
 ├── index.ts                  Extension factory - event wiring, collaborator construction (established injection-bag wiring kept inline per the anti-procedure-splitting rule)
 ├── bash-advisory-check.ts    `resolveBashAdvisoryCheck(command, agentName, resolver)` — routes an advisory `bash` query through the gate's shared `resolveBashCommandCheck` over `parseBashCommandsSync` units, falling back to a whole-string `tool` intent in the pre-warm window; kept out of `access-intent/` to avoid a domain→handler import
-├── permissions-service.ts    `LocalPermissionsService` class - in-process implementation of `PermissionsService`; injected with narrow collaborator interfaces (a `resolve` + `getToolPermission` resolver view, a `getPathNormalizer` session view, the two registrars); routes path-surface queries through the resolver as an `access-path` intent so external policy queries match lexical ∪ canonical like the gates, and bash queries through `resolveBashAdvisoryCheck` for decomposed fidelity
+├── permissions-service.ts    `LocalPermissionsService` class - in-process implementation of `PermissionsService`; injected with narrow collaborator interfaces (a `resolve` + `getToolPermission` resolver view, a `getPathNormalizer` session view, the formatter/access-extractor/authorizer registrars); routes path-surface queries through the resolver as an `access-path` intent so external policy queries match lexical ∪ canonical like the gates, and bash queries through `resolveBashAdvisoryCheck` for decomposed fidelity
 ├── service-lifecycle.ts      `ServiceLifecycle` interface + `PermissionServiceLifecycle` class — owns the process-global service publish (child-gated), ready emit, and session teardown ordering
 ├── service.ts                PermissionsService interface, Symbol.for() accessor (cross-extension API); public surface published as a self-contained dist/public.d.ts bundle
 ├── permission-events.ts      Event channel constants, payload types, emit helpers
@@ -757,14 +757,16 @@ src/
 ├── tool-registry.ts           ToolRegistry interface + tool name validation
 ├── active-agent.ts            Agent name detection from session/system prompt
 ├── authority/                 Subagent detection, the Authorizer spine, and forwarded-permission escalation
-│   ├── authorizer.ts          `Authorizer` (non-terminal chain link, `authorize(details): Promise<AuthorizerVerdict>`) + `TerminalAuthorizer` (terminal, `authorize(details): Promise<PermissionPromptDecision>` - cannot defer, enforced type-level) + `AuthorizerVerdict` (`allow | deny | defer`) + `AuthorizerSelectionDeps` + `selectAuthorizer(ctx, deps): TerminalAuthorizer` - the once-per-activation hasUI/isSubagent/deny dispatch
-│   ├── authorizer-chain.ts    `composeAuthorizerChain(links, terminal)` - folds non-terminal links ahead of the context-selected terminal (`defer` → next link, `allow`/`deny` → decision); zero links returns the terminal instance (identity)
+│   ├── authorizer.ts          `Authorizer` (non-terminal chain link, `authorize(details, query): Promise<AuthorizerVerdict>` - handed a session-scoped `PermissionQuery` per ADR 0007 §3) + `TerminalAuthorizer` (terminal, `authorize(details): Promise<PermissionPromptDecision>` - cannot defer, enforced type-level) + `AuthorizerVerdict` (`allow | deny | defer`) + `AuthorizerSelectionDeps` + `selectAuthorizer(ctx, deps): TerminalAuthorizer` - the once-per-activation hasUI/isSubagent/deny dispatch
+│   ├── authorizer-chain.ts    `composeAuthorizerChain(links, terminal, query)` - folds non-terminal links ahead of the context-selected terminal (`defer` → next link, `allow`/`deny` → decision), injecting `query` into each link; zero links returns the terminal instance (identity)
+│   ├── authorizer-registry.ts `AuthorizerRegistry` (+ `AuthorizerLookup`/`AuthorizerRegistrar` ISP interfaces) - name → link `authorize` map mirroring `ToolAccessExtractorRegistry`; one instance in `index.ts`, exposed cross-extension via `PermissionsService.registerAuthorizer`; throw-on-duplicate, identity-guarded disposer
+│   ├── delegation-envelope.ts `encloseInDelegationEnvelope(authorize)` + `DELEGATION_EXCLUDED_SURFACES` - the bounded-delegation checkpoint (ADR 0007 §5): caps a link's `allow` on an excluded surface (`external_directory`/`path`, or an undetermined surface, fail-safe) to `defer`; deny/defer pass through
 │   ├── local-user-authorizer.ts `LocalUserAuthorizer` class - `TerminalAuthorizer` for a session with UI and the single `permissions:ui_prompt` emit site: renders a forwarded ask's provenance as a non-degraded broadcast + `(Subagent)` title, then dispatches to the inline keybind dialog (TUI) or the `select`/`input` fallback
 │   ├── permission-dialog.ts   Dialog option semantics + `requestPermissionDecisionFromUi` (`select`/`input` fallback); the mode dispatch lives in `permission-prompt-component.ts`
 │   ├── permission-prompt-decision.ts Pure decision model (`reducePrompt` + `PromptModelConfig`/`PromptViewState`) for the inline keybind dialog - hotkey arming (double-press), step transitions, reason validation; no SDK/TUI imports
 │   ├── permission-prompt-component.ts Inline `ctx.ui.custom<PermissionPromptDecision>` keybind dialog (TUI) driven by the decision model + the `requestPermissionDecision` mode dispatcher (tui → inline, else fallback)
 │   ├── denying-authorizer.ts  `DenyingAuthorizer` class - least-privilege `TerminalAuthorizer` for a session with no reachable authority; denies with the `confirmationUnavailable` marker so the ask path derives the `confirmation_unavailable` resolution
-│   ├── authorizer-selection.ts `AuthorizerSelection` class - context-owning `AskEscalator` implementation (`escalate(details)`); selects the terminal once per activation, composes the (empty) chain via `composeAuthorizerChain`, and delegates to it via `PermissionPrompter`
+│   ├── authorizer-selection.ts `AuthorizerSelection` class - context-owning `AskEscalator` implementation (`escalate(details)`); selects the terminal once per activation, and per ask resolves the `authorizerChain` config to registered links (config order; unregistered names skipped fail-safe with an `authorizer_chain_unregistered_link` review event; each wrapped in the delegation envelope), composes them via `composeAuthorizerChain`, and delegates via `PermissionPrompter`
 │   ├── permission-prompter.ts `PermissionPrompter` class (`PermissionPrompterApi`) - review-log bracketing (waiting → approved/denied) around `authorizer.authorize(details)`; `PromptPermissionDetails` type (carries the child-fixed `accessIntent` facts a forwarded ask relays)
 │   ├── subagent-detection.ts  SubagentDetection class - single owner of subagent detection (SubagentDetector.isSubagent + RegisteredChildDetector.isRegisteredChild); delegates to subagent-context
 │   ├── subagent-context.ts    Pure subagent execution context detection (registry + env vars + filesystem)
@@ -894,7 +896,7 @@ Release: batch "cross-session-intent"
 
 Release: batch "authorizer-chain"
 
-#### Step 5: `registerAuthorizer` seam, `authorizerChain` config, and the enforcement checkpoint ([#599])
+#### ✅ Step 5: `registerAuthorizer` seam, `authorizerChain` config, and the enforcement checkpoint ([#599])
 
 **Cause:** same cause, consumed — the chain needs a registration surface and an operator-owned naming step, honoring ADR 0007's invariants: config order (not registration order) fixes the chain order, a missing configured link is skipped fail-safe, and registration alone grants no authority.
 
@@ -902,6 +904,9 @@ Release: batch "authorizer-chain"
 - **Target:** `src/service.ts` + `src/permissions-service.ts` (`registerAuthorizer(name, link)` with a disposer, mirroring `registerToolAccessExtractor`), `src/config-schema.ts` (an `authorizerChain: string[]` field with `.meta` descriptions) + regenerated `schemas/permissions.schema.json` + carry-through in `extension-config.ts` and `mergeUnifiedConfigs()` (the [#332]/[#347] drop class), the enforcement checkpoint in the chain owner (an excluded-surface `allow` downgrades to `defer`; `external_directory` and secret-shaped `path` always excluded), `config/config.example.json`, `docs/configuration.md`, `README.md`.
 - **Outcome:** a downstream extension can offer a named link on `permissions:ready` and it decides nothing until the operator names it in `authorizerChain`; the checkpoint caps any link's authority; `grep -c registerAuthorizer src/service.ts` and `grep -c authorizerChain src/config-schema.ts` both go 0 → ≥ 1.
   The surface ships config-gated; it is vacant only until Step 6 lands (the [#267] guard).
+- **Landed:** `registerAuthorizer(name, authorize)` on `PermissionsService` backed by `AuthorizerRegistry`; `authorizerChain: string[]` config carried through the schema, `extension-config.ts`, and `mergeUnifiedConfigs()`; a session-scoped `PermissionQuery` (Step 4's deferred injection) handed to each link via `composeAuthorizerChain(links, terminal, query)`; `AuthorizerSelection` resolves the chain **per ask** (config order, fail-safe skip, delegation-envelope wrap) so a link registered in a late `permissions:ready` handler is honored before the first ask.
+  The checkpoint excludes the **whole** `path` surface (no formal secrets model to key a secret-shaped exclusion on); the secret-shaped refinement, the `origin:"authorizer:model"` audit shape, and the allow-capable adjudicator that consumes the query are deferred to [#620].
+  Two preparatory refactors (`PermissionQuery` extraction, array-merge key loop) landed first.
 - **Impact 5 / Risk 2 / Priority 20.**
 
 Release: batch "authorizer-chain"
@@ -923,7 +928,7 @@ Release: independent
 flowchart TD
     S1["✅ Step 1 (#595): ADR 0008 — forwarded-intent portability + principal identity"] --> S2["✅ Step 2 (#596): structured intent on the forwarded wire"]
     S2 --> S3["✅ Step 3 (#597): serving resolves the forwarded intent"]
-    S4["✅ Step 4 (#598): Authorizer chain infrastructure"] --> S5["Step 5 (#599): registerAuthorizer seam + authorizerChain config"]
+    S4["✅ Step 4 (#598): Authorizer chain infrastructure"] --> S5["✅ Step 5 (#599): registerAuthorizer seam + authorizerChain config"]
     S5 --> S6["Step 6 (#600): pi-permission-model-judge dogfood package"]
 ```
 
@@ -970,6 +975,7 @@ Each phase's findings, numbered plan, dependency diagram, and health metrics are
 [#598]: https://github.com/gotgenes/pi-packages/issues/598
 [#599]: https://github.com/gotgenes/pi-packages/issues/599
 [#600]: https://github.com/gotgenes/pi-packages/issues/600
+[#620]: https://github.com/gotgenes/pi-packages/issues/620
 [#332]: https://github.com/gotgenes/pi-packages/issues/332
 [#347]: https://github.com/gotgenes/pi-packages/issues/347
 [#393]: https://github.com/gotgenes/pi-packages/issues/393

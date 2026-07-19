@@ -52,6 +52,9 @@ Scalar fields (`debugLog`, `permissionReviewLog`, `yoloMode`, `doublePressToConf
     "exec_command": { "commandArgument": "cmd", "workdirArgument": "workdir" }
   },
 
+  // Ordered names of registered live-authority chain links (empty = none)
+  "authorizerChain": [],
+
   // Flat permission policy
   "permission": {
     "*": "ask",                              // universal fallback
@@ -81,15 +84,16 @@ Scalar fields (`debugLog`, `permissionReviewLog`, `yoloMode`, `doublePressToConf
 
 ## Runtime Knobs
 
-| Key                         | Default | Description                                                                                                                                          |
-| --------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `debugLog`                  | `false` | Enables verbose diagnostic logging to `logs/pi-permission-system-debug.jsonl`                                                                        |
-| `permissionReviewLog`       | `true`  | Enables the permission request/denial review log at `logs/pi-permission-system-permission-review.jsonl`                                              |
-| `yoloMode`                  | `false` | Auto-approves `ask` results instead of prompting when yolo mode is enabled                                                                           |
-| `doublePressToConfirm`      | `true`  | Requires a confirming second press of a decision hotkey in the inline TUI dialog (see below). TUI sessions only; set to `false` for single-press.    |
-| `toolInputPreviewMaxLength` | `200`   | Max characters of inline JSON shown in permission prompts for tool inputs. Omit to use the default. Set to a large value to disable truncation.      |
-| `toolTextSummaryMaxLength`  | `80`    | Max characters of inline pattern/path summaries (grep patterns, find globs, ls paths) in permission prompts. Omit to use the default.                |
-| `piInfrastructureReadPaths` | `[]`    | Extra directories to auto-allow for reads, bypassing the `external_directory` gate. Supports `~`/`$HOME` expansion and wildcard patterns (`*`, `?`). |
+| Key                         | Default | Description                                                                                                                                                                |
+| --------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `debugLog`                  | `false` | Enables verbose diagnostic logging to `logs/pi-permission-system-debug.jsonl`                                                                                              |
+| `permissionReviewLog`       | `true`  | Enables the permission request/denial review log at `logs/pi-permission-system-permission-review.jsonl`                                                                    |
+| `yoloMode`                  | `false` | Auto-approves `ask` results instead of prompting when yolo mode is enabled                                                                                                 |
+| `doublePressToConfirm`      | `true`  | Requires a confirming second press of a decision hotkey in the inline TUI dialog (see below). TUI sessions only; set to `false` for single-press.                          |
+| `toolInputPreviewMaxLength` | `200`   | Max characters of inline JSON shown in permission prompts for tool inputs. Omit to use the default. Set to a large value to disable truncation.                            |
+| `toolTextSummaryMaxLength`  | `80`    | Max characters of inline pattern/path summaries (grep patterns, find globs, ls paths) in permission prompts. Omit to use the default.                                      |
+| `piInfrastructureReadPaths` | `[]`    | Extra directories to auto-allow for reads, bypassing the `external_directory` gate. Supports `~`/`$HOME` expansion and wildcard patterns (`*`, `?`).                       |
+| `authorizerChain`           | `[]`    | Ordered names of registered live-authority chain links to consult before the terminal authorizer (see [Authorizer chain](#authorizer-chain--case-by-case-decision-links)). |
 
 Both logs write to `~/.pi/agent/extensions/pi-permission-system/logs/`.
 No debug output is printed to the terminal.
@@ -158,6 +162,38 @@ To change a specific tool's mapping, set that tool's key at the project scope (t
 
 `shellTools` only ever *tightens* enforcement and is inert when the named tool is not registered in the current session.
 Opting a project out of a shell-aliasing extension is a package-disable concern, not a `shellTools` edit.
+
+### Authorizer chain — case-by-case decision links
+
+The deterministic policy above decides `allow` / `deny` / `ask` for every request.
+When a request lands on `ask`, the **authorizer chain** decides who answers it.
+By default that is you (an interactive prompt), the subagent-forwarding path, or a headless deny.
+A downstream extension can register a **link** — a reviewer that sees the `ask` and returns `allow`, `deny` (with an optional teaching reason), or `defer` to the next link — and the chain ends at the default terminal that always decides.
+The canonical use case is a light model judge that reviews asks case by case (e.g. auto-denying an errant typo-path with a corrective reason).
+
+`authorizerChain` is the ordered list of link names to consult, ahead of the terminal:
+
+```jsonc
+{
+  "authorizerChain": ["model-judge"]
+}
+```
+
+Three invariants govern the chain:
+
+1. **Config order wins, never registration order.**
+   The order in `authorizerChain` — not the order extensions happen to register in — fixes the security-relevant chain order.
+2. **A missing link is skipped fail-safe.**
+   A name with no registered link is skipped with a logged warning; the `ask` still reaches the terminal.
+   Absence of a judge means *more* prompting, never less.
+3. **Registration alone grants no authority.**
+   Installing a judge extension gives it nothing; a link decides nothing until you name it here (opt-in activation).
+
+The chain owner caps every link with a **bounded-delegation checkpoint**: a link's `allow` on an excluded surface (`external_directory` or the `path` surface) is downgraded to `defer`, so a buggy or over-eager judge can never approve access outside your policy.
+Deny and defer are never capped.
+
+Extension authors: register a link from a `permissions:ready` handler via `getPermissionsService().registerAuthorizer(name, authorize)`; the callback receives the ask details and a narrow, session-scoped `PermissionQuery` (`checkPermission` / `getToolPermission`) so it can consult the deterministic engine at gate parity.
+Registration returns a disposer, and only one link may hold a given name.
 
 ---
 
