@@ -33,13 +33,12 @@ export type { PermissionCheckResult, PermissionState, ToolInputFormatter };
 const SERVICE_KEY = Symbol.for("@gotgenes/pi-permission-system:service");
 
 /**
- * Public interface exposed to other extensions via `getPermissionsService()`.
- *
- * `checkPermission` takes a surface + optional value + optional agent name,
- * and delegates to `PermissionManager.checkPermission()` with current session
- * rules internally.
+ * The narrow, read-only projection of {@link PermissionsService}: answer a
+ * policy query for a surface, and report a tool-level state. This is the
+ * capability an Authorizer chain link is handed (ISP) — it never sees the
+ * registration surface.
  */
-export interface PermissionsService {
+export interface PermissionQuery {
   /**
    * Query the permission policy for a surface and value.
    *
@@ -57,6 +56,28 @@ export interface PermissionsService {
     agentName?: string,
   ): PermissionCheckResult;
 
+  /**
+   * Query the tool-level permission state for pre-filtering tools before
+   * creating a child session.
+   *
+   * Returns `"deny"` | `"allow"` | `"ask"` based on the composed policy.
+   * Does not consider command-level rules (e.g. per-bash-command patterns) —
+   * use `checkPermission` for runtime invocation gates.
+   *
+   * @param toolName  - Tool name (e.g. `"bash"`, `"read"`, `"my-extension:tool"`).
+   * @param agentName - Optional agent name for per-agent policy resolution.
+   */
+  getToolPermission(toolName: string, agentName?: string): PermissionState;
+}
+
+/**
+ * Public interface exposed to other extensions via `getPermissionsService()`.
+ *
+ * `checkPermission` takes a surface + optional value + optional agent name,
+ * and delegates to `PermissionManager.checkPermission()` with current session
+ * rules internally.
+ */
+export interface PermissionsService extends PermissionQuery {
   /**
    * Register a custom preview formatter for a specific tool name.
    *
@@ -98,19 +119,6 @@ export interface PermissionsService {
     toolName: string,
     extractor: ToolAccessExtractor,
   ): () => void;
-
-  /**
-   * Query the tool-level permission state for pre-filtering tools before
-   * creating a child session.
-   *
-   * Returns `"deny"` | `"allow"` | `"ask"` based on the composed policy.
-   * Does not consider command-level rules (e.g. per-bash-command patterns) —
-   * use `checkPermission` for runtime invocation gates.
-   *
-   * @param toolName  - Tool name (e.g. `"bash"`, `"read"`, `"my-extension:tool"`).
-   * @param agentName - Optional agent name for per-agent policy resolution.
-   */
-  getToolPermission(toolName: string, agentName?: string): PermissionState;
 }
 
 /**
