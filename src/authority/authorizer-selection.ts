@@ -1,9 +1,9 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { PermissionPromptDecision } from "#src/authority/permission-dialog";
 import {
-  type Authorizer,
   type AuthorizerSelectionDeps,
   selectAuthorizer,
+  type TerminalAuthorizer,
 } from "./authorizer";
 import type {
   PermissionPrompterApi,
@@ -49,7 +49,7 @@ export interface AskEscalator {
 export class AuthorizerSelection
   implements AskEscalator, AuthorizerSelectionLifecycle
 {
-  private selected: Authorizer | null = null;
+  private selected: TerminalAuthorizer | null = null;
 
   constructor(
     private readonly deps: AuthorizerSelectionDeps & {

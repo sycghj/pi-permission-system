@@ -1,5 +1,5 @@
 import type { PermissionPromptDecision } from "#src/authority/permission-dialog";
-import type { Authorizer } from "./authorizer";
+import type { TerminalAuthorizer } from "./authorizer";
 
 /**
  * Least-privilege Authorizer: no authority is reachable for this session
@@ -9,7 +9,7 @@ import type { Authorizer } from "./authorizer";
  * distinguish "nobody could answer" from an interactive user denial when it
  * derives the review-entry and decision-event resolution.
  */
-export class DenyingAuthorizer implements Authorizer {
+export class DenyingAuthorizer implements TerminalAuthorizer {
   authorize(): Promise<PermissionPromptDecision> {
     return Promise.resolve({
       approved: false,

@@ -4,7 +4,7 @@ import type {
   ForwardedSessionApproval,
 } from "#src/authority/permission-forwarding";
 import type { ReviewLogger } from "#src/session-logger";
-import type { Authorizer } from "./authorizer";
+import type { TerminalAuthorizer } from "./authorizer";
 
 export type PermissionReviewSource = "tool_call" | "skill_input" | "skill_read";
 
@@ -69,7 +69,7 @@ export interface PromptPermissionDetails {
  */
 export interface PermissionPrompterApi {
   prompt(
-    authorizer: Authorizer,
+    authorizer: TerminalAuthorizer,
     details: PromptPermissionDetails,
   ): Promise<PermissionPromptDecision>;
 }
@@ -82,7 +82,7 @@ export interface PermissionPrompterDeps {
 
 /**
  * Brackets the ask-path flow with review-log entries and delegates the
- * live decision to the selected {@link Authorizer}:
+ * live decision to the selected {@link TerminalAuthorizer}:
  *   1. Review-log "waiting" entry.
  *   2. `authorizer.authorize(details)`.
  *   3. Review-log "approved" / "denied" entry.
@@ -100,7 +100,7 @@ export class PermissionPrompter implements PermissionPrompterApi {
   constructor(private readonly deps: PermissionPrompterDeps) {}
 
   async prompt(
-    authorizer: Authorizer,
+    authorizer: TerminalAuthorizer,
     details: PromptPermissionDetails,
   ): Promise<PermissionPromptDecision> {
     this.writeReviewEntry("permission_request.waiting", details);

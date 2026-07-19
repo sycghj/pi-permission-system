@@ -35,7 +35,7 @@ import type { SubagentSessionRegistry } from "#src/authority/subagent-registry";
 import { buildUiPrompt } from "#src/permission-ui-prompt";
 import type { DebugReviewLogger } from "#src/session-logger";
 import { toRecord } from "#src/value-guards";
-import type { Authorizer } from "./authorizer";
+import type { TerminalAuthorizer } from "./authorizer";
 import type { PromptPermissionDetails } from "./permission-prompter";
 
 // ── Module-private helpers ────────────────────────────────────────────────
@@ -100,7 +100,7 @@ export interface ParentAuthorizerDeps {
  * (formerly `ApprovalEscalator.requestApproval`'s `hasUI` / `!isSubagent`
  * arms, both dead once every caller routes through `selectAuthorizer`).
  */
-export class ParentAuthorizer implements Authorizer {
+export class ParentAuthorizer implements TerminalAuthorizer {
   private readonly forwardingDir: string;
   private readonly registry: SubagentSessionRegistry | undefined;
   private readonly logger: DebugReviewLogger;

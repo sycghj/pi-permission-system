@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Authorizer } from "#src/authority/authorizer";
+import type { TerminalAuthorizer } from "#src/authority/authorizer";
 import type { PermissionPromptDecision } from "#src/authority/permission-dialog";
 import {
   PermissionPrompter,
@@ -9,9 +9,13 @@ import {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function makeAuthorizer(decision: PermissionPromptDecision): Authorizer {
+function makeAuthorizer(
+  decision: PermissionPromptDecision,
+): TerminalAuthorizer {
   return {
-    authorize: vi.fn<Authorizer["authorize"]>().mockResolvedValue(decision),
+    authorize: vi
+      .fn<TerminalAuthorizer["authorize"]>()
+      .mockResolvedValue(decision),
   };
 }
 

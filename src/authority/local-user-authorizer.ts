@@ -14,7 +14,7 @@ import {
   type PermissionEventBus,
 } from "#src/permission-events";
 import { buildUiPrompt } from "#src/permission-ui-prompt";
-import type { Authorizer } from "./authorizer";
+import type { TerminalAuthorizer } from "./authorizer";
 import type { PromptPermissionDetails } from "./permission-prompter";
 
 /** Dependencies required by {@link LocalUserAuthorizer}. */
@@ -41,7 +41,7 @@ export interface LocalUserAuthorizerDeps {
  * class renders (populated `forwarding` context + "(Subagent)" title) so the
  * broadcast stays non-degraded (#292) without a second emission path.
  */
-export class LocalUserAuthorizer implements Authorizer {
+export class LocalUserAuthorizer implements TerminalAuthorizer {
   constructor(private readonly deps: LocalUserAuthorizerDeps) {}
 
   authorize(

@@ -14,15 +14,36 @@ import type { PromptPermissionDetails } from "./permission-prompter";
 import type { SubagentDetector } from "./subagent-detection";
 
 /**
- * The live-authority role: on `ask`, an `Authorizer` rules on a single
- * request and is told the decision.
+ * A non-terminal chain link's ruling on an `ask`: decide (`allow`/`deny`) or
+ * pass the ask on to the next link (`defer`). A `deny` carries an optional
+ * teaching `reason` the invoking model sees, so it can self-correct.
+ */
+export type AuthorizerVerdict =
+  | { kind: "allow" }
+  | { kind: "deny"; reason?: string }
+  | { kind: "defer" };
+
+/**
+ * A non-terminal link in the live-authority chain: reviews an `ask` and may
+ * decide it or defer to the next link (ADR 0007). No link exists yet — the
+ * interface is the seam Step 5 exposes via `registerAuthorizer`.
+ */
+export interface Authorizer {
+  authorize(details: PromptPermissionDetails): Promise<AuthorizerVerdict>;
+}
+
+/**
+ * The terminal link: on `ask`, rules on a single request and is told the
+ * decision. Structurally cannot defer — it always returns a full
+ * {@link PermissionPromptDecision}, which is the type-level enforcement of
+ * ADR 0007's terminal-cannot-defer invariant.
  *
  * One method, one responsibility. `DenyingAuthorizer` ignores `details`;
  * `LocalUserAuthorizer` reads `message`/`sessionLabel` and derives the UI
  * event from it; `ParentAuthorizer` reads `message` and derives the
  * forwarded display from it.
  */
-export interface Authorizer {
+export interface TerminalAuthorizer {
   authorize(
     details: PromptPermissionDetails,
   ): Promise<PermissionPromptDecision>;
@@ -56,7 +77,7 @@ export interface AuthorizerSelectionDeps {
 export function selectAuthorizer(
   ctx: ExtensionContext,
   deps: AuthorizerSelectionDeps,
-): Authorizer {
+): TerminalAuthorizer {
   if (ctx.hasUI) {
     return new LocalUserAuthorizer({
       ui: ctx.ui,
