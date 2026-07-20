@@ -911,13 +911,15 @@ Release: batch "authorizer-chain"
 
 Release: batch "authorizer-chain"
 
-#### Step 6: Dogfood package — `@gotgenes/pi-permission-model-judge` ([#600])
+#### ✅ Step 6: Dogfood package — `@gotgenes/pi-permission-model-judge` ([#600])
 
 **Cause:** the [#267] history guard — an inbound registration surface nobody consumes goes vacant; ADR 0007 requires the seam born consumed by a first-party deny-first reviewer, which also exercises the config split (chain policy here, model mechanism there) end to end.
 
 - **Smell:** Category F (cross-package responsibility placement, done deliberately: this package holds no model-prompt config it does not read).
 - **Target:** new `packages/pi-permission-model-judge/` — registers `"model-judge"` on `permissions:ready`; the deny-first typo-path reviewer (verdicts `deny | defer` only in this slice; the allow-capable opaque-bash adjudicator stays deferred per ADR 0007's capability gradient); model calls via `@earendil-works/pi-ai` `complete` (feasibility-probed) with the provider/model/instructions/timeout in its own `config.json`; full monorepo wiring per AGENTS.md (`release-please-config.json` component + `docs/plans`/`docs/retro` exclude-paths, `.release-please-manifest.json` at `0.0.0`, `.pi/settings.json` load path + npm disable entry, root `README.md` packages table).
 - **Outcome:** `registerAuthorizer` has a day-one consumer; an errant typo-path `external_directory` ask can be auto-denied with a teaching reason when the operator opts in; `ls packages | grep -c pi-permission-model-judge` goes 0 → 1.
+- **Landed:** new `packages/pi-permission-model-judge/` registers `"model-judge"` on `permissions:ready` (from both its own `session_start` and the ready event, idempotently, so either extension-init order completes the registration); the deny-first reviewer gates on the `external_directory` surface, a configured `typoPatterns` regex pre-filter, then a model confirmation via `@earendil-works/pi-ai` `complete` — verdicts `deny | defer` only, fail-safe to `defer` on any uncertainty.
+  Its own zod-validated `config.json` (provider/model/instructions/typoPatterns/timeout) holds the model mechanism; the chain policy stays in pi-permission-system.
 - **Impact 4 / Risk 3 / Priority 12.**
 
 Release: independent
@@ -929,7 +931,7 @@ flowchart TD
     S1["✅ Step 1 (#595): ADR 0008 — forwarded-intent portability + principal identity"] --> S2["✅ Step 2 (#596): structured intent on the forwarded wire"]
     S2 --> S3["✅ Step 3 (#597): serving resolves the forwarded intent"]
     S4["✅ Step 4 (#598): Authorizer chain infrastructure"] --> S5["✅ Step 5 (#599): registerAuthorizer seam + authorizerChain config"]
-    S5 --> S6["Step 6 (#600): pi-permission-model-judge dogfood package"]
+    S5 --> S6["✅ Step 6 (#600): pi-permission-model-judge dogfood package"]
 ```
 
 ### Parallel tracks
