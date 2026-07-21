@@ -63,7 +63,7 @@ The invariant is enforced **at the type level**, not by a runtime assertion: a t
 ```typescript
 /** A non-terminal chain link: may decide or defer. */
 interface Authorizer {
-  authorize(details: PromptPermissionDetails, query: PermissionQuery): Promise<AuthorizerVerdict>;
+  authorize(details: PromptPermissionDetails, query: PermissionQuery, log: AuthorizerLog): Promise<AuthorizerVerdict>;
 }
 
 /** The terminal link: structurally cannot defer. */
@@ -91,6 +91,22 @@ interface PermissionQuery {
 
 The tool-augmented adjudication (use case 2) exposes these primitives to the model *as tools*: the model decomposes an opaque command and calls `checkPermission("bash", subCommand)` / `checkPermission("external_directory", token)` per piece; the deterministic engine answers every sub-question.
 The model's non-determinism is confined to *how it decomposes*, never *what the rules decide* — determinism-of-decision survives at the leaf.
+
+#### The review-log seam is injected the same way
+
+A link is handed a second narrow capability at `authorize` time: an `AuthorizerLog`, for recording its decision trail.
+The motivation is observability — without it a link's verdict (especially a `defer`) is unobservable, so a misbehaving link deferring every ask is indistinguishable from a link never running (the `pi-permission-model-judge` auth-failure that motivated this addition).
+The seam follows the same injection discipline as `PermissionQuery`: a link never reaches for the session logger via `Symbol.for()`; the chain owner passes the session's own logger straight through, so a link's entries land in the same `pi-permission-system-permission-review.jsonl` as the gate decisions, keyed by `requestId`.
+
+```typescript
+/** Narrow, injected review-log seam. */
+interface AuthorizerLog {
+  review(event: string, details?: Record<string, unknown>): void; // durable, default-on audit entry
+  debug(event: string, details?: Record<string, unknown>): void; // verbose detail, gated by `debugLog`
+}
+```
+
+The seam only *records*; it grants no authority and cannot alter a verdict, so it is inert with respect to the bounded-delegation invariant below.
 
 ### 4. Named-capability registration, opt-in activation
 
