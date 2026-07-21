@@ -22,6 +22,7 @@ import type {
 } from "#src/authority/permission-prompter";
 import type { SubagentDetector } from "#src/authority/subagent-detection";
 import type { PermissionQuery } from "#src/service";
+import { makeAuthorizerLog } from "#test/helpers/authorizer-log-fixtures";
 
 // ── Test helpers ──────────────────────────────────────────────────────────
 
@@ -115,7 +116,7 @@ function makeDeps(overrides: Partial<SelectionDeps> = {}): SelectionDeps {
       vi.fn().mockResolvedValue({ approved: true, state: "approved" }),
     forwardingDir: overrides.forwardingDir ?? "/tmp/forwarding",
     registry: overrides.registry,
-    logger: overrides.logger ?? { review: vi.fn(), debug: vi.fn() },
+    logger: overrides.logger ?? makeAuthorizerLog(),
     prompter: overrides.prompter ?? makePrompterApi(),
     getPermissionQuery: overrides.getPermissionQuery ?? (() => makeQuery()),
     authorizerRegistry:
@@ -274,7 +275,7 @@ describe("AuthorizerSelection", () => {
         kind: "deny",
         reason: "present-decided",
       });
-      const logger = { review: vi.fn(), debug: vi.fn() };
+      const logger = makeAuthorizerLog();
       const selection = new AuthorizerSelection(
         makeDeps({
           prompter: makeInvokingPrompter(),
