@@ -3,6 +3,7 @@ import type { Authorizer, AuthorizerVerdict } from "#src/authority/authorizer";
 import { encloseInDelegationEnvelope } from "#src/authority/delegation-envelope";
 import type { PromptPermissionDetails } from "#src/authority/permission-prompter";
 import type { PermissionQuery } from "#src/service";
+import { makeAuthorizerLog } from "#test/helpers/authorizer-log-fixtures";
 
 function makeQuery(): PermissionQuery {
   return { checkPermission: vi.fn(), getToolPermission: vi.fn() };
@@ -37,23 +38,28 @@ function makeLink(verdict: AuthorizerVerdict): Authorizer["authorize"] {
 
 describe("encloseInDelegationEnvelope", () => {
   const query = makeQuery();
+  const log = makeAuthorizerLog();
 
   describe("caps an allow verdict on an excluded surface to defer", () => {
     it("downgrades an allow on external_directory", async () => {
       const enclosed = encloseInDelegationEnvelope(makeLink({ kind: "allow" }));
-      const verdict = await enclosed(makeDetails("external_directory"), query);
+      const verdict = await enclosed(
+        makeDetails("external_directory"),
+        query,
+        log,
+      );
       expect(verdict).toEqual({ kind: "defer" });
     });
 
     it("downgrades an allow on the path surface", async () => {
       const enclosed = encloseInDelegationEnvelope(makeLink({ kind: "allow" }));
-      const verdict = await enclosed(makeDetails("path"), query);
+      const verdict = await enclosed(makeDetails("path"), query, log);
       expect(verdict).toEqual({ kind: "defer" });
     });
 
     it("downgrades an allow when the surface is undetermined (fail-safe)", async () => {
       const enclosed = encloseInDelegationEnvelope(makeLink({ kind: "allow" }));
-      const verdict = await enclosed(makeDetails(undefined, null), query);
+      const verdict = await enclosed(makeDetails(undefined, null), query, log);
       expect(verdict).toEqual({ kind: "defer" });
     });
   });
@@ -61,13 +67,13 @@ describe("encloseInDelegationEnvelope", () => {
   describe("passes verdicts through unchanged", () => {
     it("keeps an allow on a non-excluded surface (bash)", async () => {
       const enclosed = encloseInDelegationEnvelope(makeLink({ kind: "allow" }));
-      const verdict = await enclosed(makeDetails("bash"), query);
+      const verdict = await enclosed(makeDetails("bash"), query, log);
       expect(verdict).toEqual({ kind: "allow" });
     });
 
     it("keeps an allow on a per-tool surface (read)", async () => {
       const enclosed = encloseInDelegationEnvelope(makeLink({ kind: "allow" }));
-      const verdict = await enclosed(makeDetails("read"), query);
+      const verdict = await enclosed(makeDetails("read"), query, log);
       expect(verdict).toEqual({ kind: "allow" });
     });
 
@@ -75,13 +81,17 @@ describe("encloseInDelegationEnvelope", () => {
       const enclosed = encloseInDelegationEnvelope(
         makeLink({ kind: "deny", reason: "wrong path" }),
       );
-      const verdict = await enclosed(makeDetails("external_directory"), query);
+      const verdict = await enclosed(
+        makeDetails("external_directory"),
+        query,
+        log,
+      );
       expect(verdict).toEqual({ kind: "deny", reason: "wrong path" });
     });
 
     it("never caps a defer", async () => {
       const enclosed = encloseInDelegationEnvelope(makeLink({ kind: "defer" }));
-      const verdict = await enclosed(makeDetails("path"), query);
+      const verdict = await enclosed(makeDetails("path"), query, log);
       expect(verdict).toEqual({ kind: "defer" });
     });
   });
@@ -93,15 +103,16 @@ describe("encloseInDelegationEnvelope", () => {
     const verdict = await enclosed(
       makeDetails("external_directory", "bash"),
       query,
+      log,
     );
     expect(verdict).toEqual({ kind: "defer" });
   });
 
-  it("forwards details and the injected query to the wrapped link", async () => {
+  it("forwards details, the injected query, and the review-log seam to the wrapped link", async () => {
     const link = makeLink({ kind: "defer" });
     const enclosed = encloseInDelegationEnvelope(link);
     const details = makeDetails("bash");
-    await enclosed(details, query);
-    expect(link).toHaveBeenCalledWith(details, query);
+    await enclosed(details, query, log);
+    expect(link).toHaveBeenCalledWith(details, query, log);
   });
 });

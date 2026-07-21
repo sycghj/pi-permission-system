@@ -126,6 +126,7 @@ export class AuthorizerSelection
       this.resolveConfiguredLinks(),
       this.terminal,
       this.deps.getPermissionQuery(),
+      this.deps.logger,
     );
     return this.deps.prompter.prompt(chain, details);
   }

@@ -3,7 +3,11 @@ import type { AuthorizerVerdict } from "#src/authority/authorizer";
 import { composeAuthorizerChain } from "#src/authority/authorizer-chain";
 import type { PermissionPromptDecision } from "#src/authority/permission-dialog";
 import type { PromptPermissionDetails } from "#src/authority/permission-prompter";
-import type { PermissionQuery } from "#src/service";
+import type { AuthorizerLog, PermissionQuery } from "#src/service";
+import { makeAuthorizerLog } from "#test/helpers/authorizer-log-fixtures";
+
+/** A shared review-log seam; identity-comparable for injection assertions. */
+const log = makeAuthorizerLog();
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -43,6 +47,7 @@ function makeLink(verdict: AuthorizerVerdict) {
         (
           details: PromptPermissionDetails,
           query: PermissionQuery,
+          log: AuthorizerLog,
         ) => Promise<AuthorizerVerdict>
       >()
       .mockResolvedValue(verdict),
@@ -55,7 +60,7 @@ describe("composeAuthorizerChain", () => {
   it("returns the terminal instance itself when there are no links", () => {
     const terminal = makeTerminal({ approved: true, state: "approved" });
 
-    const composed = composeAuthorizerChain([], terminal, makeQuery());
+    const composed = composeAuthorizerChain([], terminal, makeQuery(), log);
 
     // Identity is a behavioral invariant: escalate hands the real terminal to
     // the prompter, so `expect.any(LocalUserAuthorizer)` still holds.
@@ -68,12 +73,13 @@ describe("composeAuthorizerChain", () => {
     const query = makeQuery();
     const details = makeDetails();
 
-    const composed = composeAuthorizerChain([link], terminal, query);
+    const composed = composeAuthorizerChain([link], terminal, query, log);
     const decision = await composed.authorize(details);
 
     expect(decision).toEqual({ approved: true, state: "approved" });
-    // The chain injects the session-scoped query into each link (ADR 0007 §3).
-    expect(link.authorize).toHaveBeenCalledWith(details, query);
+    // The chain injects the session-scoped query and the review-log seam into
+    // each link (ADR 0007 §3).
+    expect(link.authorize).toHaveBeenCalledWith(details, query, log);
     expect(terminal.authorize).not.toHaveBeenCalled();
   });
 
@@ -84,7 +90,7 @@ describe("composeAuthorizerChain", () => {
       reason: "wrong path; use pi-packages",
     });
 
-    const composed = composeAuthorizerChain([link], terminal, makeQuery());
+    const composed = composeAuthorizerChain([link], terminal, makeQuery(), log);
     const decision = await composed.authorize(makeDetails());
 
     expect(decision).toEqual({
@@ -99,7 +105,7 @@ describe("composeAuthorizerChain", () => {
     const terminal = makeTerminal({ approved: true, state: "approved" });
     const link = makeLink({ kind: "deny" });
 
-    const composed = composeAuthorizerChain([link], terminal, makeQuery());
+    const composed = composeAuthorizerChain([link], terminal, makeQuery(), log);
     const decision = await composed.authorize(makeDetails());
 
     expect(decision).toEqual({ approved: false, state: "denied" });
@@ -116,11 +122,11 @@ describe("composeAuthorizerChain", () => {
     const query = makeQuery();
     const details = makeDetails();
 
-    const composed = composeAuthorizerChain([link], terminal, query);
+    const composed = composeAuthorizerChain([link], terminal, query, log);
     const decision = await composed.authorize(details);
 
     expect(decision).toEqual(terminalDecision);
-    expect(link.authorize).toHaveBeenCalledWith(details, query);
+    expect(link.authorize).toHaveBeenCalledWith(details, query, log);
     expect(terminal.authorize).toHaveBeenCalledWith(details);
   });
 
@@ -134,6 +140,7 @@ describe("composeAuthorizerChain", () => {
       [first, second, third],
       terminal,
       makeQuery(),
+      log,
     );
     const decision = await composed.authorize(makeDetails());
 
@@ -155,6 +162,7 @@ describe("composeAuthorizerChain", () => {
       [first, second],
       terminal,
       makeQuery(),
+      log,
     );
     const decision = await composed.authorize(makeDetails());
 

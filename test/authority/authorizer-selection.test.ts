@@ -9,6 +9,7 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 
 import type {
+  Authorizer,
   AuthorizerVerdict,
   AuthorizerSelectionDeps as SelectionCtorDeps,
 } from "#src/authority/authorizer";
@@ -245,6 +246,34 @@ describe("AuthorizerSelection", () => {
         state: "denied_with_reason",
         denialReason: "typo path",
       });
+    });
+
+    it("injects the session review-log seam into each link (ADR 0007 §3)", async () => {
+      const logger = makeAuthorizerLog();
+      const link = vi
+        .fn<Authorizer["authorize"]>()
+        .mockResolvedValue({ kind: "defer" });
+      const registry = new AuthorizerRegistry();
+      registry.register("judge", link);
+      const selection = new AuthorizerSelection(
+        makeDeps({
+          prompter: makeInvokingPrompter(),
+          authorizerRegistry: registry,
+          getAuthorizerChain: () => ["judge"],
+          logger,
+        }),
+      );
+      selection.activate(makeCtx({ hasUI: true }));
+
+      await selection.escalate(makeDetailsOn("bash"));
+
+      // The link is handed the session logger as its third argument, so it can
+      // record a decision trail to the shared review log.
+      expect(link).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        logger,
+      );
     });
 
     it("resolves links in config order (first non-defer wins)", async () => {

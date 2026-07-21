@@ -26,13 +26,14 @@ export const DELEGATION_EXCLUDED_SURFACES: ReadonlySet<string> = new Set([
 /**
  * Wrap a link's `authorize` so an `allow` on an excluded surface is capped to
  * `defer`. All other verdicts, and `allow`s on non-excluded surfaces, pass
- * through unchanged. `details` and the injected `query` are forwarded as-is.
+ * through unchanged. `details`, the injected `query`, and the review-log `log`
+ * are forwarded as-is.
  */
 export function encloseInDelegationEnvelope(
   authorize: Authorizer["authorize"],
 ): Authorizer["authorize"] {
-  return async (details, query) => {
-    const verdict = await authorize(details, query);
+  return async (details, query, log) => {
+    const verdict = await authorize(details, query, log);
     if (verdict.kind === "allow" && isExcludedSurface(details)) {
       return { kind: "defer" };
     }
