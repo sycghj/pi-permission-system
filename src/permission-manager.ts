@@ -21,6 +21,7 @@ import {
   evaluate,
   evaluateAnyValue,
   evaluateFirst,
+  floorAllowsToAsk,
   pathMatchOptions,
   rewriteAsksToYolo,
 } from "./rule";
@@ -61,6 +62,12 @@ type ResolvedPermissions = {
    * Session rules are appended at call-time inside check().
    */
   composedRules: Ruleset;
+  /**
+   * Non-global scopes whose config file failed to load or validate. When
+   * non-empty the composed ruleset has been floored allow→ask (#646); the
+   * names also drive the fail-closed notice in {@link getConfigIssues}.
+   */
+  failClosedScopes: RuleOrigin[];
 };
 
 /**
@@ -159,8 +166,16 @@ export class PermissionManager implements ScopedPermissionManager {
 
   getConfigIssues(agentName?: string): string[] {
     // Trigger a load/resolve to ensure issues are collected.
-    this.resolvePermissions(agentName);
-    return [...this.loader.getConfigIssues()];
+    const { failClosedScopes } = this.resolvePermissions(agentName);
+    const issues = [...this.loader.getConfigIssues()];
+    if (failClosedScopes.length > 0) {
+      issues.push(
+        `Invalid ${failClosedScopes.join(", ")} configuration detected — ` +
+          `failing closed: 'allow' rules are clamped to 'ask' for this session ` +
+          `until the configuration is corrected.`,
+      );
+    }
+    return issues;
   }
 
   getResolvedPolicyPaths(): ResolvedPolicyPaths {
@@ -222,7 +237,25 @@ export class PermissionManager implements ScopedPermissionManager {
       configRules,
     );
 
-    const value: ResolvedPermissions = { composedRules };
+    // Fail closed when a non-global scope's config is invalid: floor every
+    // `allow` (including one inherited from a lower scope) to `ask` so a
+    // higher scope meant to tighten policy cannot silently fail open (#646).
+    // Global is excluded — nothing more permissive is inherited when it fails.
+    const failClosedScopes: RuleOrigin[] = [];
+    if (projectConfig.invalid === true) failClosedScopes.push("project");
+    if (agentConfig.invalid === true) failClosedScopes.push("agent");
+    if (projectAgentConfig.invalid === true)
+      failClosedScopes.push("project-agent");
+
+    const effectiveRules =
+      failClosedScopes.length > 0
+        ? floorAllowsToAsk(composedRules)
+        : composedRules;
+
+    const value: ResolvedPermissions = {
+      composedRules: effectiveRules,
+      failClosedScopes,
+    };
     this.resolvedPermissionsCache.set(cacheKey, { stamp, value });
     return value;
   }

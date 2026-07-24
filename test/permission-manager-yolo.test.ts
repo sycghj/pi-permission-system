@@ -95,3 +95,34 @@ describe("PermissionManager yolo rewrite", () => {
     expect(manager.getToolPermission("bash")).toBe("ask");
   });
 });
+
+describe("PermissionManager fail-closed clamp under yolo (#646)", () => {
+  it("yolo re-permits a fail-closed floored allow (allow→ask→allow)", () => {
+    // Invalid project scope floors global's `allow` to `ask` at composition;
+    // yolo then rewrites the `ask` back to `allow`. yolo is an explicit
+    // full-permissive opt-in, so yolo users are unaffected by the clamp.
+    const manager = makeManager({ bash: "allow" }, () => true, {
+      invalid: true,
+    });
+    const result = manager.check({
+      kind: "tool",
+      surface: "bash",
+      input: { command: "echo hi" },
+    });
+    expect(result.state).toBe("allow");
+    expect(result.origin).toBe("yolo");
+  });
+
+  it("preserves a hard deny under yolo even with an invalid scope", () => {
+    const manager = makeManager({ bash: "deny" }, () => true, {
+      invalid: true,
+    });
+    const result = manager.check({
+      kind: "tool",
+      surface: "bash",
+      input: { command: "rm -rf /" },
+    });
+    expect(result.state).toBe("deny");
+    expect(result.origin).not.toBe("yolo");
+  });
+});
