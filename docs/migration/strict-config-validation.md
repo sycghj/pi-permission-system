@@ -11,10 +11,24 @@ For example, a config with `"debugLog": "yes"` (a string, not a boolean) simply 
 The loader is now **strict and fail-closed**:
 
 - A config file with **any** invalid field is rejected as a whole scope (global or project).
-- The rejected scope contributes **no** permission rules, so its surfaces fall back to the safe universal `ask` default — never `allow`.
+- The rejected scope contributes **no** permission rules.
 - Each problem is reported as a clear, path-qualified issue in the permission review log (and the debug log when `debugLog` is on).
 
 Nothing about the config **format** changed — a config that was already valid keeps working unchanged.
+
+## Cross-scope hardening (fail closed on an invalid higher scope)
+
+Rejecting a scope's rules is only half the story.
+Because a higher-precedence scope that contributes no rules leaves the **lower** scope's rules in place, an invalid *higher* scope used to silently inherit the lower scope's policy — including a permissive `allow`.
+For example, a global `bash: allow` remained effective even when a project config meant to deny bash but contained a typo.
+
+The loader now fails closed across scopes as well: when a **non-global** scope (project config, global agent frontmatter, or project agent frontmatter) is present but invalid, the effective policy is floored so nothing resolves more permissively than `ask`.
+Every `allow` — including one inherited from a lower scope — is clamped to `ask`; `deny` and `ask` are unchanged.
+Alongside the per-problem validation issues, a distinct notice is reported: `Invalid <scope> configuration detected — failing closed: 'allow' rules are clamped to 'ask' …`.
+
+An invalid **global** scope does not trigger the cross-scope clamp — it is the lowest precedence, so nothing more permissive is inherited when it fails.
+The clamp is deny-preserving, and (like `yoloMode`) applied at composition; when `yoloMode` is on it re-permits the floored `ask` back to `allow`.
+Fix the reported problems and reload to restore the intended policy.
 
 ## What you need to do
 

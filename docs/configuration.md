@@ -32,6 +32,14 @@ Project config overrides global config; per-agent frontmatter overrides both.
 The `permission` object uses deep-shallow merge: string-vs-string replaces; both-object shallow-merges pattern maps; string-vs-object the override wins entirely.
 Scalar fields (`debugLog`, `permissionReviewLog`, `yoloMode`, `doublePressToConfirm`) use simple replacement.
 
+**Invalid higher-precedence scope fails closed.**
+If a non-global scope (project config, global agent frontmatter, or project agent frontmatter) is present but fails to load or validate, it no longer contributes an empty scope that silently inherits the lower scope's rules.
+Instead the effective policy is floored so nothing resolves more permissively than `ask`: every `allow` (including one inherited from a lower scope) is clamped to `ask`, while `deny` and `ask` are unchanged.
+So a global `bash: allow` cannot remain effective behind a project scope that was meant to deny bash but contains a typo — bash prompts until the invalid config is fixed.
+A validation warning plus a distinct fail-closed notice are emitted, and a fix + reload restores the intended policy.
+An invalid **global** scope does not trigger the clamp — it is the lowest precedence, so nothing more permissive is inherited when it fails.
+This clamp is deny-preserving and, like `yoloMode`, applied at composition; when `yoloMode` is on it re-permits the floored `ask` back to `allow`, since yolo is an explicit full-permissive opt-in.
+
 ## Full Example
 
 ```jsonc

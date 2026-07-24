@@ -34,7 +34,9 @@ This document describes the internal design of the permission system, informed b
  * Synthesized:   "builtin" (universal default / evaluate() fallback),
  *                "baseline" (conditional MCP metadata auto-allow).
  * Runtime:       "session" (session approvals).
- * Rewrite:       "yolo" (composition-stage ask→allow rewrite under yolo mode).
+ * Rewrite:       "yolo" (composition-stage ask→allow rewrite under yolo mode),
+ *                "fail-closed" (composition-stage allow→ask floor when an
+ *                invalid non-global config scope is detected).
  */
 type RuleOrigin =
   | "global"
@@ -44,7 +46,8 @@ type RuleOrigin =
   | "builtin"
   | "baseline"
   | "session"
-  | "yolo";
+  | "yolo"
+  | "fail-closed";
 
 interface Rule {
   /** The permission surface: "bash", "edit", "mcp", "skill", "external_directory", "path", etc. */
@@ -533,6 +536,23 @@ It honors principle 5 (defaults are rules; no side-channel fallbacks): `evaluate
 A future "disable everything" mode — overriding denies too — would be a *different*, deliberately named operation: appending a final `{ surface: "*", pattern: "*", action: "allow" }` rule (last-match-wins).
 It is not built, and it would be requested by name, never conflated with yolo.
 
+### Fail-closed on an invalid non-global scope
+
+The mirror image of the yolo rewrite.
+When a non-global config scope (project, agent, or project-agent) is present but fails to load or validate, the loader marks it invalid (`ScopeConfig.invalid`) instead of silently substituting an empty scope.
+At composition the manager floors every `allow` in the composed ruleset to `ask`, tagged `origin: "fail-closed"`, so a permissive rule inherited from a lower-precedence scope cannot remain effective behind a higher scope that was meant to tighten it (#646).
+
+```typescript
+const effective =
+  failClosedScopes.length > 0
+    ? composed.map((r) => (r.action === "allow" ? { ...r, action: "ask", origin: "fail-closed" } : r))
+    : composed;
+```
+
+Like yolo it is deny-preserving (only `allow` is touched) and applied at composition, so the display surfaces (`getComposedConfigRules`, `getToolPermission`) reflect the clamp too.
+Global is excluded — it is the lowest precedence, so nothing more permissive is inherited when it fails.
+The two overlays stack in order: fail-closed floors `allow`→`ask` first, then yolo (if enabled) rewrites `ask`→`allow`, so an explicit yolo opt-in still wins.
+
 ### Discriminating delegation: a model `Authorizer`
 
 Nothing constrains an `Authorizer` to be deterministic.
@@ -666,9 +686,9 @@ src/
 ├── expand-home.ts            ~/$HOME expansion for patterns and path values
 ├── session-approval.ts        SessionApproval value object - owns the single/multi-pattern union; exposes representativePattern and toGateApproval()
 ├── session-rules.ts          Session approval store (Ruleset wrapper); `implements SessionApprovalRecorder`; injected into `GateRunner` as the recorder role
-├── policy-loader.ts          PolicyLoader interface + FilePolicyLoader (file I/O, mtime caching)
+├── policy-loader.ts          PolicyLoader interface + FilePolicyLoader (file I/O, mtime caching); marks a present-but-unloadable non-global scope `invalid` (an absent file stays a plain empty scope) so composition can fail closed
 ├── scope-merge.ts            Cross-scope permission merge + origin-map bookkeeping
-├── permission-manager.ts     Scope loading + rule composition + `check(intent)` (single resolution entry point); delegates I/O to PolicyLoader; `getPromotablePathTokenMatcher(agentName?)` builds a `PathRuleTokenMatcher` from the composed config's specific `path`-surface deny/ask rules, feeding bash bare-filename promotion. Constraint: stays string-based — must not import `AccessPath` (the ADR 0002 string boundary, lint-guarded by `no-restricted-imports`)
+├── permission-manager.ts     Scope loading + rule composition + `check(intent)` (single resolution entry point); delegates I/O to PolicyLoader; floors the composed ruleset `allow`→`ask` (origin `fail-closed`) when a non-global scope is `invalid`, and appends a fail-closed notice to `getConfigIssues`; `getPromotablePathTokenMatcher(agentName?)` builds a `PathRuleTokenMatcher` from the composed config's specific `path`-surface deny/ask rules, feeding bash bare-filename promotion. Constraint: stays string-based — must not import `AccessPath` (the ADR 0002 string boundary, lint-guarded by `no-restricted-imports`)
 ├── permission-gate.ts        Pure deny/ask/allow gate (injected IO)
 ├── permission-resolver.ts    `ScopedPermissionResolver` interface - the single `{ resolve(intent) }` role the gate factories / runner / pipeline depend on; `PermissionResolver` concrete class holds `ScopedPermissionManager` + `SessionRules`, owns `resolve(intent)` (unwraps an `access-path` `AccessIntent` via `matchValues()` before calling `manager.check`; the concrete class also accepts a pre-fixed `path-values` intent as a passthrough — the forwarded-serving wire's producer, #597 — while the gate-facing interface stays narrow to `AccessIntent`), raw `checkPermission` (`implements SkillPermissionChecker`, no session rules), `getToolPermission`, and `getConfigIssues`
 ├── decision-reporter.ts      `DecisionReporter` interface + `GateDecisionReporter` class - owns `SessionLogger` and event bus; writes review-log entries and emits decision events
