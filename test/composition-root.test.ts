@@ -86,11 +86,27 @@ function writeGlobalConfig(config: Record<string, unknown>): void {
   );
 }
 
-/** Build a minimal subagent `ctx` (no UI) for driving tool-call gates. */
-function makeChildCtx(cwd: string, sessionId: string): unknown {
+/** A `ui.select` implementation for a test ctx. */
+type CtxSelect = (
+  title: string,
+  options: string[],
+) => Promise<string | undefined>;
+
+/**
+ * Build a test `ctx` with the scaffolding every composition-root ctx shares —
+ * `cwd`, a trusted project, a minimal `sessionManager`, and a `ui` whose
+ * `notify`/`setStatus`/`input` are inert. Callers vary only `hasUI` and the
+ * `select` behavior that drives (or declines) a prompt.
+ */
+function makeBaseCtx(
+  cwd: string,
+  sessionId: string,
+  options: { hasUI?: boolean; select?: CtxSelect } = {},
+): unknown {
   return {
     cwd,
-    hasUI: false,
+    hasUI: options.hasUI ?? true,
+    isProjectTrusted: (): boolean => true,
     sessionManager: {
       getEntries: (): unknown[] => [],
       getSessionId: (): string => sessionId,
@@ -99,10 +115,16 @@ function makeChildCtx(cwd: string, sessionId: string): unknown {
     ui: {
       notify: (): void => {},
       setStatus: (): void => {},
-      select: async (): Promise<string | undefined> => undefined,
+      select:
+        options.select ?? (async (): Promise<string | undefined> => undefined),
       input: async (): Promise<string | undefined> => undefined,
     },
   };
+}
+
+/** Build a minimal subagent `ctx` (no UI) for driving tool-call gates. */
+function makeChildCtx(cwd: string, sessionId: string): unknown {
+  return makeBaseCtx(cwd, sessionId, { hasUI: false });
 }
 
 /**
@@ -111,24 +133,12 @@ function makeChildCtx(cwd: string, sessionId: string): unknown {
  * preview) is the first line of the select title.
  */
 function makeUiCtx(cwd: string, capturedTitles: string[]): { ctx: unknown } {
-  const ctx = {
-    cwd,
-    hasUI: true,
-    sessionManager: {
-      getEntries: (): unknown[] => [],
-      getSessionId: (): string => "ui-session",
-      getSessionDir: (): string => cwd,
+  const ctx = makeBaseCtx(cwd, "ui-session", {
+    select: async (title: string): Promise<string | undefined> => {
+      capturedTitles.push(title);
+      return "Yes";
     },
-    ui: {
-      notify: (): void => {},
-      setStatus: (): void => {},
-      select: async (title: string): Promise<string | undefined> => {
-        capturedTitles.push(title);
-        return "Yes";
-      },
-      input: async (): Promise<string | undefined> => undefined,
-    },
-  };
+  });
   return { ctx };
 }
 
@@ -479,26 +489,14 @@ describe("single source of truth for session state", () => {
     piPermissionSystemExtension(pi as unknown as ExtensionAPI);
 
     // UI ctx that approves the gate prompt for this session (options[1]).
-    const ctx = {
-      cwd,
-      hasUI: true,
-      sessionManager: {
-        getEntries: (): unknown[] => [],
-        getSessionId: (): string => "sot-session",
-        getSessionDir: (): string => cwd,
-      },
-      ui: {
-        notify: (): void => {},
-        setStatus: (): void => {},
-        // Return the second option label-agnostically — always the
-        // "for this session" choice regardless of the exact label text.
-        select: async (
-          _title: string,
-          options: string[],
-        ): Promise<string | undefined> => options[1],
-        input: async (): Promise<string | undefined> => undefined,
-      },
-    };
+    // Return the second option label-agnostically — always the "for this
+    // session" choice regardless of the exact label text.
+    const ctx = makeBaseCtx(cwd, "sot-session", {
+      select: async (
+        _title: string,
+        options: string[],
+      ): Promise<string | undefined> => options[1],
+    });
 
     await fireSessionStart(pi, ctx);
 
@@ -679,24 +677,12 @@ describe("session approvals do not leak across same-cwd session switches", () =>
 
   /** A UI ctx that approves the gate's "for this session" option (options[1]). */
   function makeSessionApprovingCtx(cwd: string, sessionId: string): unknown {
-    return {
-      cwd,
-      hasUI: true,
-      sessionManager: {
-        getEntries: (): unknown[] => [],
-        getSessionId: (): string => sessionId,
-        getSessionDir: (): string => cwd,
-      },
-      ui: {
-        notify: (): void => {},
-        setStatus: (): void => {},
-        select: async (
-          _title: string,
-          options: string[],
-        ): Promise<string | undefined> => options[1],
-        input: async (): Promise<string | undefined> => undefined,
-      },
-    };
+    return makeBaseCtx(cwd, sessionId, {
+      select: async (
+        _title: string,
+        options: string[],
+      ): Promise<string | undefined> => options[1],
+    });
   }
 
   it("starts the next same-cwd session with an empty session ruleset", async () => {
@@ -753,33 +739,21 @@ describe("forwarded grant-scope selection round-trip", () => {
     selectLog: string[][],
     scope: "whole" | "subagent",
   ): unknown {
-    return {
-      cwd,
-      hasUI: true,
-      sessionManager: {
-        getEntries: (): unknown[] => [],
-        getSessionId: (): string => sessionId,
-        getSessionDir: (): string => cwd,
+    return makeBaseCtx(cwd, sessionId, {
+      select: async (
+        _title: string,
+        options: string[],
+      ): Promise<string | undefined> => {
+        selectLog.push(options);
+        const wholeOption = options.find((o) =>
+          o.startsWith("The whole session"),
+        );
+        if (wholeOption) {
+          return scope === "whole" ? wholeOption : options[0];
+        }
+        return options[1];
       },
-      ui: {
-        notify: (): void => {},
-        setStatus: (): void => {},
-        select: async (
-          _title: string,
-          options: string[],
-        ): Promise<string | undefined> => {
-          selectLog.push(options);
-          const wholeOption = options.find((o) =>
-            o.startsWith("The whole session"),
-          );
-          if (wholeOption) {
-            return scope === "whole" ? wholeOption : options[0];
-          }
-          return options[1];
-        },
-        input: async (): Promise<string | undefined> => undefined,
-      },
-    };
+    });
   }
 
   it("records a whole-session grant on the serving node so later forwards and the parent's own action resolve without a second prompt", async () => {
