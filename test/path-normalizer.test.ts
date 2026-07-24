@@ -1,11 +1,16 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 // Mock node:os so tilde-expansion is deterministic across platforms.
-vi.mock("node:os", () => {
+// Every other binding passes through, so `tmpdir()` reaches the real module
+// for the filesystem-backed `entryExists` fixtures below.
+vi.mock("node:os", async () => {
+  const actual = await vi.importActual<typeof import("node:os")>("node:os");
   const homedir = vi.fn(() => "/mock/home");
   return {
+    ...actual,
     homedir,
-    default: { homedir },
+    default: { ...actual, homedir },
   };
 });
 
@@ -27,6 +32,7 @@ vi.mock("node:fs", async () => {
 
 import { posixPathFlavor, win32PathFlavor } from "#src/path/path-flavor";
 import { PathNormalizer } from "#src/path-normalizer";
+import { createTmpFixture } from "#test/helpers/tmp-fixture";
 
 describe("PathNormalizer", () => {
   beforeEach(() => {
@@ -314,6 +320,65 @@ describe("PathNormalizer", () => {
     test("allows a read targeting the project-local .pi/npm dir (from baked cwd)", () => {
       const ap = normalizer.forPath("/projects/my-app/.pi/npm/dep/index.js");
       expect(normalizer.isInfrastructureRead("read", ap, [])).toBe(true);
+    });
+  });
+
+  describe("entryExists", () => {
+    // Real filesystem: the probe's whole purpose is to consult fs state, so
+    // these use actual temp files rather than the mocked realpathSync above.
+    const tmp = createTmpFixture();
+    let root: string;
+    let normalizer: PathNormalizer;
+
+    beforeEach(() => {
+      root = tmp.dir("pi-perm-exists-");
+      normalizer = new PathNormalizer(posixPathFlavor, root);
+    });
+
+    afterEach(() => {
+      tmp.cleanup();
+    });
+
+    test("existing regular file → true", () => {
+      const file = tmp.file(root, "secret.txt", "contents");
+      expect(normalizer.entryExists(file)).toBe(true);
+    });
+
+    test("existing directory → true", () => {
+      const dir = tmp.subdir(root, "nested");
+      expect(normalizer.entryExists(dir)).toBe(true);
+    });
+
+    test("symlink to an existing target → true", () => {
+      const target = tmp.file(root, "target.txt");
+      const link = tmp.symlink(root, "link", target);
+      expect(normalizer.entryExists(link)).toBe(true);
+    });
+
+    test("dangling symlink → true (lstat: the link itself is an entry)", () => {
+      const link = tmp.symlink(root, "dangling", join(root, "gone.txt"));
+      expect(normalizer.entryExists(link)).toBe(true);
+    });
+
+    test("nonexistent path → false", () => {
+      expect(normalizer.entryExists(join(root, "missing.txt"))).toBe(false);
+    });
+
+    test("path under a nonexistent parent → false (ENOTDIR/ENOENT)", () => {
+      expect(normalizer.entryExists(join(root, "no-dir", "file.txt"))).toBe(
+        false,
+      );
+    });
+
+    test("empty path → false", () => {
+      expect(normalizer.entryExists("")).toBe(false);
+    });
+
+    test("answers from the filesystem, not the flavor — win32 normalizer agrees", () => {
+      const file = tmp.file(root, "flavor-independent.txt");
+      const win32Normalizer = new PathNormalizer(win32PathFlavor, root);
+      expect(win32Normalizer.entryExists(file)).toBe(true);
+      expect(win32Normalizer.entryExists(join(root, "nope.txt"))).toBe(false);
     });
   });
 });

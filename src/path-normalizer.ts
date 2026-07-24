@@ -1,3 +1,5 @@
+import { lstatSync } from "node:fs";
+
 import type { PathFlavor } from "#src/path/path-flavor";
 
 import { AccessPath } from "./access-intent/access-path";
@@ -202,5 +204,31 @@ export class PathNormalizer {
       this.cwd,
       this.flavor,
     );
+  }
+
+  /**
+   * True when `absolutePath` names an existing filesystem entry.
+   *
+   * The existence probe that resolves an *unknown* bash token: a bare word is a
+   * path candidate iff it names something real (ADR 0009, #645). Uses `lstat`,
+   * not `stat`, so a symlink counts as an entry even when its target is
+   * dangling — the link is the operand the command names, and dropping it would
+   * reopen the bypass this probe closes.
+   *
+   * Any error (ENOENT, ENOTDIR, EACCES, ELOOP) answers `false`: an entry the
+   * gate cannot confirm is not promoted, leaving the token exactly as
+   * unrestricted as it is today.
+   *
+   * Lives here beside {@link forPath}'s canonicalization so the package keeps a
+   * single filesystem edge for path interpretation.
+   */
+  entryExists(absolutePath: string): boolean {
+    if (!absolutePath) return false;
+    try {
+      lstatSync(absolutePath);
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
