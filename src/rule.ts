@@ -11,7 +11,9 @@ import { type WildcardMatchOptions, wildcardMatch } from "./wildcard-matcher";
  * Synthesized:   "builtin" (universal default / evaluate() fallback),
  *                "baseline" (conditional MCP metadata auto-allow).
  * Runtime:       "session" (session approvals).
- * Rewrite:       "yolo" (composition-stage ask→allow rewrite under yolo mode).
+ * Rewrite:       "yolo" (composition-stage ask→allow rewrite under yolo mode),
+ *                "fail-closed" (composition-stage allow→ask floor when an
+ *                invalid non-global config scope is detected).
  */
 export type RuleOrigin =
   | "global"
@@ -21,7 +23,8 @@ export type RuleOrigin =
   | "builtin"
   | "baseline"
   | "session"
-  | "yolo";
+  | "yolo"
+  | "fail-closed";
 
 /** A single permission rule — the atomic unit of policy. */
 export interface Rule {
@@ -60,6 +63,28 @@ export type Ruleset = Rule[];
 export function rewriteAsksToYolo(rules: Ruleset): Ruleset {
   return rules.map((rule) =>
     rule.action === "ask" ? { ...rule, action: "allow", origin: "yolo" } : rule,
+  );
+}
+
+/**
+ * Floor every `allow` rule to `ask`, tagged `origin: "fail-closed"`.
+ *
+ * The mirror image of {@link rewriteAsksToYolo}: the composition-stage
+ * expression of the fail-closed clamp applied when an invalid non-global config
+ * scope is detected. A permissive `allow` inherited from a lower-precedence
+ * scope becomes an `ask` prompt rather than a silent grant, while `deny` and
+ * existing `ask` rules pass through untouched — so the clamp removes only
+ * permissive inheritance and never weakens a hard deny.
+ *
+ * Pure and non-mutating — `surface`, `pattern`, and `layer` are preserved so
+ * downstream `matchedPattern` / source derivation is unaffected; only `action`
+ * and `origin` change.
+ */
+export function floorAllowsToAsk(rules: Ruleset): Ruleset {
+  return rules.map((rule) =>
+    rule.action === "allow"
+      ? { ...rule, action: "ask", origin: "fail-closed" }
+      : rule,
   );
 }
 

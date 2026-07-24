@@ -6,6 +6,7 @@ import {
   evaluateAnyValue,
   evaluateFirst,
   evaluateMostRestrictive,
+  floorAllowsToAsk,
   rewriteAsksToYolo,
 } from "#src/rule";
 
@@ -800,5 +801,68 @@ describe("rewriteAsksToYolo", () => {
   test("'yolo' is a valid RuleOrigin", () => {
     const origin: RuleOrigin = "yolo";
     expect(origin).toBe("yolo");
+  });
+});
+
+describe("floorAllowsToAsk", () => {
+  test("floors an allow rule to ask tagged origin 'fail-closed'", () => {
+    const result = floorAllowsToAsk([overlayAllowRead]);
+    expect(result).toEqual([
+      {
+        surface: "read",
+        pattern: "*",
+        action: "ask",
+        layer: "config",
+        origin: "fail-closed",
+      },
+    ]);
+  });
+
+  test("preserves surface, pattern, and layer while flooring allow", () => {
+    const [floored] = floorAllowsToAsk([overlayAllowRead]);
+    expect(floored.surface).toBe("read");
+    expect(floored.pattern).toBe("*");
+    expect(floored.layer).toBe("config");
+    expect(floored.action).toBe("ask");
+    expect(floored.origin).toBe("fail-closed");
+  });
+
+  test("passes deny rules through untouched (preserves hard denies)", () => {
+    const result = floorAllowsToAsk([overlayDenyEnv]);
+    expect(result).toEqual([overlayDenyEnv]);
+  });
+
+  test("passes ask rules through untouched", () => {
+    const result = floorAllowsToAsk([overlayAskBash]);
+    expect(result).toEqual([overlayAskBash]);
+  });
+
+  test("floors only allow rules in a mixed ruleset, preserving order", () => {
+    const ruleset: Ruleset = [
+      overlayAskDefault,
+      overlayAllowRead,
+      overlayAskBash,
+      overlayDenyEnv,
+    ];
+    const result = floorAllowsToAsk(ruleset);
+    expect(result.map((r) => r.action)).toEqual(["ask", "ask", "ask", "deny"]);
+    expect(result.map((r) => r.origin)).toEqual([
+      "builtin",
+      "fail-closed",
+      "global",
+      "project",
+    ]);
+  });
+
+  test("does not mutate the input ruleset", () => {
+    const ruleset: Ruleset = [overlayAllowRead];
+    floorAllowsToAsk(ruleset);
+    expect(ruleset[0]?.action).toBe("allow");
+    expect(ruleset[0]?.origin).toBe("agent");
+  });
+
+  test("'fail-closed' is a valid RuleOrigin", () => {
+    const origin: RuleOrigin = "fail-closed";
+    expect(origin).toBe("fail-closed");
   });
 });
