@@ -5,7 +5,7 @@ import {
 } from "#src/access-intent/bash/node-text";
 import type { TSNode } from "#src/access-intent/bash/parser";
 import {
-  classifyPromotedRuleCandidate,
+  classifyBareTokenCandidate,
   classifyTokenAsPathCandidate,
   classifyTokenAsRuleCandidate,
 } from "#src/access-intent/bash/token-classification";
@@ -503,7 +503,7 @@ export class BashPathResolver {
     for (const { token, base } of candidates) {
       const candidate =
         classifyTokenAsRuleCandidate(token, this.normalizer.flavor) ??
-        classifyPromotedRuleCandidate(token, this.isPromotablePathToken);
+        this.promoteBareToken(token);
       if (!candidate) continue;
 
       const path = this.buildRuleCandidatePath(candidate, base);
@@ -517,6 +517,18 @@ export class BashPathResolver {
     }
 
     return result;
+  }
+
+  /**
+   * Promote a bare token the broad shape gate rejected, or `null` to skip.
+   *
+   * The shape prelude runs first, then the injected promotion predicate decides
+   * (#509). The predicate is replaced by an existence probe in #645.
+   */
+  private promoteBareToken(token: string): string | null {
+    const bare = classifyBareTokenCandidate(token);
+    if (bare === null) return null;
+    return this.isPromotablePathToken(bare) ? bare : null;
   }
 
   private buildRuleCandidatePath(

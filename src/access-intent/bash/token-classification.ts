@@ -4,9 +4,16 @@
  * Exports three classifiers consumed by `bash-path-resolver.ts`:
  *   - `classifyTokenAsPathCandidate` — strict gate for the external-directory guard.
  *   - `classifyTokenAsRuleCandidate` — broader gate for cross-cutting `path` rules.
- *   - `classifyPromotedRuleCandidate` — rule-driven promotion of a bare filename
- *     (e.g. `id_rsa`) that `classifyTokenAsRuleCandidate` rejects for shape, but
- *     which matches an active, specific (non-`*`) `path` deny/ask rule (#509).
+ *   - `classifyBareTokenCandidate` — prelude-only gate for a bare token (e.g.
+ *     `id_rsa`, `outside-link`) that `classifyTokenAsRuleCandidate` rejects for
+ *     shape. It answers only "is this shape capable of naming a path?"; whether
+ *     it *does* name one is settled by the resolver's existence probe (#645).
+ *
+ * Token classification is three-valued: definitely-path (shape), definitely-not
+ * (prelude), and unknown (a bare word). These functions own the first two; the
+ * third is resolved against the filesystem rather than against policy, so no
+ * classifier here consults the ruleset — see
+ * `docs/decisions/0009-bash-path-projection-completeness-contract.md`.
  *
  * All three classifiers share the private `rejectNonPathToken` predicate that
  * captures the six rejection cases common to them (the production clone this
@@ -28,7 +35,6 @@
  * never reads `process.platform` itself.
  */
 import type { PathFlavor } from "#src/path/path-flavor";
-import type { PathRuleTokenMatcher } from "#src/types";
 
 // ── Public classifiers ─────────────────────────────────────────────────────
 
@@ -91,28 +97,28 @@ export function classifyTokenAsRuleCandidate(
 }
 
 /**
- * Rule-driven promotion classifier for bare filenames (#509).
+ * Prelude-only classifier for a bare token (#645).
  *
- * A bare token (`id_rsa`) has none of the shapes `classifyTokenAsRuleCandidate`
- * accepts, so it is dropped before rule evaluation by default — most bash
- * argument tokens are not file paths (subcommands, branch names, search
- * patterns). This classifier promotes a bare token into the rule-candidate
- * surface only when the caller-supplied `isPromotable` predicate says it
- * matches an active, specific `path` deny/ask rule, closing the bypass without
- * treating every bare argument as a path.
+ * A bare token (`id_rsa`, `outside-link`) has none of the shapes
+ * `classifyTokenAsRuleCandidate` accepts, because most bash argument tokens are
+ * not file paths (subcommands, branch names, search patterns). This classifier
+ * answers the narrower question the existence probe needs: could this token's
+ * *shape* name a path at all?
  *
- * Still runs the shared `rejectNonPathToken` prelude first, so a flag,
- * env-assignment, URL, `@scope` token, or regex-shaped token is never
- * promoted even if it happens to match a configured pattern.
+ * It runs only the shared `rejectNonPathToken` prelude, so a flag,
+ * env-assignment, URL, `@scope` token, or regex-shaped token is never a
+ * candidate. Everything else is returned for the caller to probe.
+ *
+ * Deliberately consults no policy: candidacy is settled by the filesystem and
+ * the decision by the ruleset, which keeps this module a pure shape function
+ * (ADR 0009). It replaced the rule-driven promotion of #509, which matched a
+ * token's *spelling* against `path` rules and so could never see that a
+ * symlink's target is what a rule names.
  *
  * Returns the raw token string if it qualifies, or `null` to skip.
  */
-export function classifyPromotedRuleCandidate(
-  token: string,
-  isPromotable: PathRuleTokenMatcher,
-): string | null {
-  if (rejectNonPathToken(token)) return null;
-  return isPromotable(token) ? token : null;
+export function classifyBareTokenCandidate(token: string): string | null {
+  return rejectNonPathToken(token) ? null : token;
 }
 
 // ── Private rejection predicate ────────────────────────────────────────────
