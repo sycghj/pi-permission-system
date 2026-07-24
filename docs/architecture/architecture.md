@@ -288,6 +288,8 @@ The cross-cutting `path` and `external_directory` gates extract paths for **exte
 The extractor registry (`src/tool-access-extractor-registry.ts`) is created once in `index.ts` and shared: its lookup side is threaded into `ToolCallGatePipeline`, and its registrar side is exposed cross-extension via `PermissionsService.registerToolAccessExtractor`.
 Per-tool path maps for extension tools (a custom extractor key per tool) are a deferred follow-up.
 
+On the bash side, which argument tokens count as filesystem operands is settled by [ADR 0009](../decisions/0009-bash-path-projection-completeness-contract.md): candidacy comes from the filesystem (a bare token is a path candidate iff it names an existing entry), the decision comes from explicit rules or the external boundary, and the ADR names both what the projection guarantees and which gaps are accepted residuals rather than bugs.
+
 ## Session approvals: the cache-miss model
 
 Session rules are stored as `Ruleset` and are generalized to all surfaces.
