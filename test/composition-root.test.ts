@@ -768,6 +768,37 @@ describe("bash bare-token path gating (#509, #645)", () => {
     rmSync(cwd, { recursive: true, force: true });
     rmSync(outside, { recursive: true, force: true });
   });
+
+  it("denies a path embedded in a long option under external_directory deny (#645)", async () => {
+    // The issue's second repro: `grep --file=/tmp/…` under an allowing
+    // `grep *` bash rule. The flag token never reached the path surfaces.
+    const cwd = mkdtempSync(join(tmpdir(), "pi-perm-flagpath-cwd-"));
+    const outside = mkdtempSync(join(tmpdir(), "pi-perm-flagpath-target-"));
+    const patterns = join(outside, "pi-permission-patterns");
+    writeFileSync(patterns, "secret\n");
+    writeGlobalConfig({
+      permission: {
+        "*": "allow",
+        bash: { "grep *": "allow" },
+        external_directory: "deny",
+      },
+    });
+
+    const pi = makeFakePi({ events: createEventBus() });
+    piPermissionSystemExtension(pi as unknown as ExtensionAPI);
+    const ctx = makeChildCtx(cwd, "flag-path-session-deny");
+    await fireSessionStart(pi, ctx);
+
+    const result = await fireBashToolCall(
+      pi,
+      ctx,
+      `grep --file=${patterns} target`,
+    );
+    expect(result.block).toBe(true);
+
+    rmSync(cwd, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  });
 });
 
 describe("multi-instance global service interplay", () => {

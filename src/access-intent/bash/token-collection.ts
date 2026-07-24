@@ -42,9 +42,10 @@ export function collectCommandTokens(node: TSNode): string[] {
   const config = commandName
     ? PATTERN_FIRST_COMMANDS.get(commandName)
     : undefined;
-  return config
+  const tokens = config
     ? collectPatternCommandTokens(node, config)
     : collectGenericCommandTokens(node);
+  return [...tokens, ...collectEmbeddedOptionValues(node)];
 }
 
 /**
@@ -80,6 +81,42 @@ export function extractCommandName(node: TSNode): string | undefined {
 }
 
 // ── Private helpers and config ─────────────────────────────────────────────
+
+/**
+ * A long or short option carrying its value inline: one or two leading dashes,
+ * a name containing no `=` or whitespace, then `=` and a non-empty value.
+ * Only the first `=` separates, so `--opt=/tmp/a=b` yields `/tmp/a=b`.
+ */
+const OPTION_VALUE_PATTERN = /^-{1,2}[^=\s]+=(.+)$/;
+
+/**
+ * The values embedded in this command's `--opt=value` argument tokens.
+ *
+ * Read straight from the argument nodes rather than from the collected token
+ * list, because a pattern-first command's collector classifies a flag and never
+ * emits it — so `grep --file=/tmp/patterns` would otherwise lose the path.
+ *
+ * This is token *preprocessing*, not classification: the extracted value is
+ * handed to the ordinary shape classifiers and existence probe, so
+ * `--file=/tmp/patterns` reaches the path surfaces while `--format=json`
+ * yields a bare `json` that names nothing and is dropped. Keeping the split
+ * here is what lets the projection see option-embedded paths without per-command
+ * option tables (ADR 0009, #645).
+ */
+function collectEmbeddedOptionValues(node: TSNode): string[] {
+  const values: string[] = [];
+  for (let i = 0; i < node.childCount; i++) {
+    const child = node.child(i);
+    if (!child) continue;
+    if (child.type === "command_name" || child.type === "variable_assignment")
+      continue;
+    if (!ARG_NODE_TYPES.has(child.type)) continue;
+
+    const value = OPTION_VALUE_PATTERN.exec(resolveNodeText(child))?.[1];
+    if (value !== undefined) values.push(value);
+  }
+  return values;
+}
 
 interface PatternCommandConfig {
   /** Flags that consume the next argument as a non-path value (pattern, separator, etc.) */

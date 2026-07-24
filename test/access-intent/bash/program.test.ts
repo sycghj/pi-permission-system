@@ -316,6 +316,19 @@ describe("BashProgram", () => {
       });
     });
 
+    it("flags a path embedded in a long option (#645)", async () => {
+      // The issue's second repro: `grep --file=…` under an allowing `grep *`
+      // rule. The flag token is rejected by the shape prelude, so the value is
+      // split out at collection and classified on its own.
+      const program = await BashProgram.parse(
+        "grep --file=/tmp/pi-permission-patterns target",
+        normalizer,
+      );
+      expect(program.externalPaths().map((p) => p.value())).toContain(
+        "/tmp/pi-permission-patterns",
+      );
+    });
+
     it("excludes paths within cwd", async () => {
       const program = await BashProgram.parse("cat src/index.ts", normalizer);
       expect(program.externalPaths()).toHaveLength(0);

@@ -298,3 +298,54 @@ describe("collectPathCandidateTokens", () => {
     }
   });
 });
+
+describe("embedded --opt=value extraction (#645)", () => {
+  async function tokensOf(cmd: string): Promise<string[]> {
+    const { node, tree } = await parseCommandNode(cmd);
+    try {
+      return collectCommandTokens(node);
+    } finally {
+      tree.delete();
+    }
+  }
+
+  it("emits the value of a long option carrying an inline path", async () => {
+    // The issue's second repro: the flag token itself is rejected by the
+    // shape prelude, so the embedded path had to be split out to be seen.
+    expect(await tokensOf("grep --file=/tmp/patterns target")).toContain(
+      "/tmp/patterns",
+    );
+  });
+
+  it("emits the embedded value for a non-pattern-first command too", async () => {
+    expect(await tokensOf("tar --directory=/etc -xf a.tar")).toContain("/etc");
+  });
+
+  it("preserves the original flag token", async () => {
+    expect(await tokensOf("cat --file=/tmp/x")).toContain("--file=/tmp/x");
+  });
+
+  it("emits a bare value, leaving it for the shape gates to drop", async () => {
+    // --format=json yields "json", which names nothing and is dropped later.
+    expect(await tokensOf("cat --format=json")).toContain("json");
+  });
+
+  it("splits the single-dash form", async () => {
+    expect(await tokensOf("cat -o=/tmp/out")).toContain("/tmp/out");
+  });
+
+  it("does not split a flag with no value", async () => {
+    const tokens = await tokensOf("grep --recursive target");
+    expect(tokens).not.toContain("");
+    expect(tokens).not.toContain("--recursive");
+  });
+
+  it("does not split a non-flag token containing '='", async () => {
+    // FOO=bar is a variable_assignment, never an argument token.
+    expect(await tokensOf("cat a=b")).toEqual(["a=b"]);
+  });
+
+  it("keeps only the first '=' as the separator", async () => {
+    expect(await tokensOf("cat --opt=/tmp/a=b")).toContain("/tmp/a=b");
+  });
+});
