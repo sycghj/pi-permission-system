@@ -43,3 +43,39 @@ Pre-completion reviewer returned PASS.
 - Repo-wide `pnpm run test` shows 2 unrelated FAILs in `@gotgenes/pi-autoformat` (`test/acceptance.test.ts`, `test/acceptance-event-bus.test.ts`) — e2e tests that spawn a real `pi` CLI via RPC and time out at 30s; environmental, zero overlap with this change's files.
 - Pre-completion reviewer: PASS (no WARN findings).
 - The `#526` yolo deny-preservation and `#547` single-scope fail-closed invariants are both pinned by tests in this change (fail-closed-under-yolo cases; the untouched `#547` tests still pass).
+
+## Stage: Final Retrospective (2026-07-24T16:52:42Z)
+
+### Session summary
+
+Reviewed the Ship and Retrospective stages together.
+Ship landed the code cleanly (CI green, issue closed, release-please PR merged), but the release-please CI job failed on a transient GitHub API error *after* it had already tagged `pi-permission-system-v21.0.0` — GitHub's default `needs:`-skip-on-failure behavior silently dropped the downstream `publish` job, so the version was tagged/released on GitHub but never published to npm.
+The user caught the discrepancy externally, and this session diagnosed the cascade, guided a manual `pnpm publish` recovery, and manually replicated the skipped `last-release-sha` write-back.
+
+### Observations
+
+#### What went well
+
+- The third-party protocol held end-to-end across all three prior stages: authorship check (`gh api user` vs. issue `author.login`) correctly triggered the Planning-stage `ask_user` gate, and the plan's Goals/Design were driven by the operator's answers rather than transcribed from the issue body.
+  Confirmed this explicitly when the user asked about it mid-retro, by reading the Planning stage notes rather than relying on memory.
+- The CI-failure diagnosis was methodical rather than reactive: confirmed the GitHub API rate limit was healthy before concluding "transient hiccup" (not a rate-limit issue), inspected step-level (not just job-level) conclusions to isolate `release-please` as the failing step, and read the attempt-1 logs before choosing a non-destructive recovery (no force-push, no re-tagging, no speculative retries).
+- The `last-release-sha` write-back gap was caught proactively as a second-order consequence of the same root cause — not left for a future session to rediscover when the baseline drifted further.
+
+#### What caused friction (agent side)
+
+- `missing-context` — told the user `npm login` was "the one legitimate exception to the pnpm-only rule" without first checking whether `pnpm` has its own native `login`/`whoami`/`publish` commands (it does; no exception is needed).
+  Impact: incorrect guidance the user had to correct; would have propagated a wrong command into `AGENTS.md` if not caught here.
+- `missing-context` (minor, self-corrected) — reflexively ran `npm view`/`npm whoami` before the repo's pnpm-only guard blocked it, then switched to `pnpm view`/`pnpm whoami` in the same turn.
+  Impact: one wasted tool call, no rework.
+
+#### What caused friction (user side)
+
+- The Ship session's final report declared the release fully landed based on `release_watch` returning the tag, but a `release-please` job can fail *after* completing its main side effect (tagging), and `publish` silently skips as a result.
+  `/ship-issue` had no step that would have caught this — the user had to notice externally and open a new message to report it.
+  This is a genuine gap in the prompt's verification coverage, not a user-process gap: the flow verified "CI passed on the shipped commit" and "tag landed," but never "the push-triggered CI run following the release-please merge itself succeeded."
+
+### Changes made
+
+1. `AGENTS.md` — corrected the first-release manual-publish command (`pnpm login` + `pnpm publish`, dropped the incorrect `--otp <code>`) and added a new paragraph documenting the release-please-fails-after-tagging recovery procedure (manual publish + manual `last-release-sha` advance), referencing this issue.
+2. `.pi/prompts/ship-issue.md` — added step `6b` ("Verify the release-triggered CI run"): captures the release merge commit SHA, runs `ci_find`/`ci_watch` on it, and stops before the Final report if `release-please` or `publish` failed or was unexpectedly skipped.
+   Also added a matching bullet to the Constraints section.
