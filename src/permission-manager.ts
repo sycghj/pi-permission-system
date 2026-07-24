@@ -22,7 +22,6 @@ import {
   evaluateAnyValue,
   evaluateFirst,
   floorAllowsToAsk,
-  pathMatchOptions,
   rewriteAsksToYolo,
 } from "./rule";
 import { mergeScopesWithOrigins } from "./scope-merge";
@@ -33,20 +32,15 @@ import {
 } from "./synthesize";
 import type {
   FlatPermissionConfig,
-  PathRuleTokenMatcher,
   PermissionCheckResult,
   PermissionState,
 } from "./types";
 import { isPermissionState } from "./types";
-import { wildcardMatch } from "./wildcard-matcher";
 
 const SPECIAL_PERMISSION_KEYS = new Set(["external_directory", "path"]);
 
 /** Universal fallback when permission["*"] is absent from all scopes. */
 const DEFAULT_UNIVERSAL_FALLBACK: PermissionState = "ask";
-
-/** Promotion predicate matching no token — the no-`path`-rules default (#509). */
-const NO_PROMOTION: PathRuleTokenMatcher = () => false;
 
 /** Default yolo reader — yolo disabled unless the composition root injects one. */
 const YOLO_DISABLED = (): boolean => false;
@@ -90,15 +84,6 @@ export interface ScopedPermissionManager {
   ): PermissionCheckResult;
   getToolPermission(toolName: string, agentName?: string): PermissionState;
   getConfigIssues(agentName?: string): string[];
-  /**
-   * Build a predicate deciding whether a bare bash token should be promoted
-   * into the `path` rule-candidate surface (#509).
-   *
-   * Matches against specific (non-`*`) `path`-surface config rules whose
-   * action is `deny` or `ask` — an allow rule never gates, and `"*"` would
-   * promote every bare bash argument.
-   */
-  getPromotablePathTokenMatcher(agentName?: string): PathRuleTokenMatcher;
 }
 
 export interface PermissionManagerOptions extends PolicyLoaderOptions {
@@ -269,37 +254,6 @@ export class PermissionManager implements ScopedPermissionManager {
   getComposedConfigRules(agentName?: string): Ruleset {
     const { composedRules } = this.resolvePermissions(agentName);
     return composedRules.filter((r) => r.layer === "config");
-  }
-
-  /**
-   * Build a predicate deciding whether a bare bash token should be promoted
-   * into the `path` rule-candidate surface (#509).
-   *
-   * Filters the composed config ruleset to specific (non-`*`) `path`-surface
-   * deny/ask patterns, then returns a closure matching a token against them
-   * with the platform-correct fold (Windows case-and-separator matching, same
-   * as {@link pathMatchOptions} applies for evaluation) so promotion agrees
-   * with the later `path`-surface decision.
-   *
-   * Returns a matcher rejecting every token when no such rule exists — the
-   * default-config case is unaffected by promotion.
-   */
-  getPromotablePathTokenMatcher(agentName?: string): PathRuleTokenMatcher {
-    const { composedRules } = this.resolvePermissions(agentName);
-    const patterns = composedRules
-      .filter(
-        (r) =>
-          r.layer === "config" &&
-          r.surface === "path" &&
-          r.pattern !== "*" &&
-          r.action !== "allow",
-      )
-      .map((r) => r.pattern);
-    if (patterns.length === 0) return NO_PROMOTION;
-
-    const matchOptions = pathMatchOptions("path", this.flavor);
-    return (token) =>
-      patterns.some((pattern) => wildcardMatch(pattern, token, matchOptions));
   }
 
   /**

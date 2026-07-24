@@ -187,7 +187,6 @@ describe("ToolCallGatePipeline", () => {
       expect(mockBashProgramParse).toHaveBeenCalledWith(
         "echo hello",
         expect.any(PathNormalizer),
-        expect.any(Function),
         { workdir: undefined },
       );
     });
@@ -206,11 +205,9 @@ describe("ToolCallGatePipeline", () => {
       expect(mockBashProgramParse).not.toHaveBeenCalled();
     });
 
-    it("passes the session's promotable path-token matcher into BashProgram.parse (#509)", async () => {
+    it("parses a bash command with no policy input — candidacy is not rule-driven (#645)", async () => {
       const resolver = makeResolver(makeCheckResult());
-      const isPromotable = vi.fn((token: string) => token === "id_rsa");
-      const getPromotablePathTokenMatcher = vi.fn(() => isPromotable);
-      const inputs = makeGateInputs({ getPromotablePathTokenMatcher });
+      const inputs = makeGateInputs();
       const { runner } = makeGateRunner();
       const pipeline = new ToolCallGatePipeline(resolver, inputs);
 
@@ -223,11 +220,9 @@ describe("ToolCallGatePipeline", () => {
         runner,
       );
 
-      expect(getPromotablePathTokenMatcher).toHaveBeenCalledWith("my-agent");
       expect(mockBashProgramParse).toHaveBeenCalledWith(
         "cat id_rsa",
         expect.any(PathNormalizer),
-        isPromotable,
         { workdir: undefined },
       );
     });
@@ -265,7 +260,6 @@ describe("ToolCallGatePipeline", () => {
       expect(mockBashProgramParse).toHaveBeenCalledWith(
         "npm install",
         expect.any(PathNormalizer),
-        expect.any(Function),
         { workdir: undefined },
       );
     });
@@ -289,7 +283,6 @@ describe("ToolCallGatePipeline", () => {
       expect(mockBashProgramParse).toHaveBeenCalledWith(
         "cat file",
         expect.any(PathNormalizer),
-        expect.any(Function),
         { workdir: "/etc" },
       );
     });

@@ -17,7 +17,7 @@ import type { ScopedPermissionResolver } from "#src/permission-resolver";
 import type { SessionApprovalRecorder } from "#src/session-approval-recorder";
 import type { SkillPromptEntry } from "#src/skill-prompt-sanitizer";
 import type { ToolPreviewFormatterOptions } from "#src/tool-preview-formatter";
-import type { PathRuleTokenMatcher, PermissionCheckResult } from "#src/types";
+import type { PermissionCheckResult } from "#src/types";
 
 import { makeCheckResult } from "#test/helpers/handler-fixtures";
 
@@ -252,9 +252,6 @@ export function makeGateInputs(
     getInfrastructureReadDirs?: () => string[];
     getToolPreviewLimits?: () => ToolPreviewFormatterOptions;
     getPathNormalizer?: () => PathNormalizer;
-    getPromotablePathTokenMatcher?: (
-      agentName?: string,
-    ) => PathRuleTokenMatcher;
     getShellToolAliases?: () => ShellToolsConfig | undefined;
   } = {},
 ): ToolCallGateInputs {
@@ -280,9 +277,6 @@ export function makeGateInputs(
             "/test/cwd",
           ),
       ),
-    getPromotablePathTokenMatcher:
-      overrides.getPromotablePathTokenMatcher ??
-      vi.fn<(agentName?: string) => PathRuleTokenMatcher>(() => () => false),
     getShellToolAliases:
       overrides.getShellToolAliases ??
       vi.fn<() => ShellToolsConfig | undefined>(() => undefined),

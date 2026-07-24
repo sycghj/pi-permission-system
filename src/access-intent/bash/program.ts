@@ -9,7 +9,6 @@ import {
 } from "#src/access-intent/bash/command-enumeration";
 import { getParser } from "#src/access-intent/bash/parser";
 import type { PathNormalizer } from "#src/path-normalizer";
-import type { PathRuleTokenMatcher } from "#src/types";
 
 export type { BashCommand, BashPathRuleCandidate };
 
@@ -40,11 +39,10 @@ export class BashProgram {
    * Heredoc bodies, comments, and other non-argument content are skipped. An
    * unparseable command yields an empty program.
    *
-   * `isPromotablePathToken`, when supplied, promotes a bare filename token
-   * (e.g. `id_rsa`) into `pathRuleCandidates()` when it matches an active,
-   * specific `path` deny/ask rule (#509). Defaults to promoting nothing, so
-   * callers that only read `externalPaths()` (e.g. `bash-path-extractor.ts`)
-   * are unaffected.
+   * A bare token (e.g. `id_rsa`, `outside-link`) enters both slices when it
+   * names an existing filesystem entry — the existence probe the resolver owns
+   * (ADR 0009, #645). No policy is consulted, so every caller gets identical
+   * slices for a given command and working directory.
    *
    * `options.workdir`, when supplied (an aliased shell tool's working directory,
    * #574), seeds the initial effective base — as if the command were prefixed
@@ -54,7 +52,6 @@ export class BashProgram {
   static async parse(
     command: string,
     normalizer: PathNormalizer,
-    isPromotablePathToken?: PathRuleTokenMatcher,
     options?: { workdir?: string },
   ): Promise<BashProgram> {
     const parser = await getParser();
@@ -64,7 +61,6 @@ export class BashProgram {
     try {
       const { externalPaths, ruleCandidates } = new BashPathResolver(
         normalizer,
-        isPromotablePathToken,
         options?.workdir,
       ).resolve(tree.rootNode);
       return new BashProgram(

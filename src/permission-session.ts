@@ -20,7 +20,6 @@ import {
   resolveToolPreviewLimits,
   type ToolPreviewFormatterOptions,
 } from "./tool-preview-formatter";
-import type { PathRuleTokenMatcher } from "./types";
 
 /**
  * Encapsulates all mutable session state and exposes operations instead of
@@ -242,16 +241,5 @@ export class PermissionSession implements ToolCallGateInputs {
    */
   getPathNormalizer(): PathNormalizer {
     return this.pathNormalizer;
-  }
-
-  /**
-   * Predicate deciding whether a bare bash token should be promoted into the
-   * `path` rule-candidate surface (#509), scoped to the given agent.
-   *
-   * Straight delegate to `permissionManager.getPromotablePathTokenMatcher` —
-   * the manager owns the composed ruleset and the platform-correct match.
-   */
-  getPromotablePathTokenMatcher(agentName?: string): PathRuleTokenMatcher {
-    return this.permissionManager.getPromotablePathTokenMatcher(agentName);
   }
 }

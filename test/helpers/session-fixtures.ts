@@ -26,11 +26,7 @@ import { PermissionSession } from "#src/permission-session";
 import type { Ruleset } from "#src/rule";
 import type { SessionLogger } from "#src/session-logger";
 import { SessionRules } from "#src/session-rules";
-import type {
-  PathRuleTokenMatcher,
-  PermissionCheckResult,
-  PermissionState,
-} from "#src/types";
+import type { PermissionCheckResult, PermissionState } from "#src/types";
 
 // ── Per-collaborator fake factories ────────────────────────────────────────
 
@@ -114,9 +110,6 @@ export function makeFakePermissionManager() {
       .fn<(toolName: string, agentName?: string) => PermissionState>()
       .mockReturnValue("allow"),
     getConfigIssues: vi.fn((): string[] => []),
-    getPromotablePathTokenMatcher: vi
-      .fn<(agentName?: string) => PathRuleTokenMatcher>()
-      .mockReturnValue(() => false),
   };
 }
 

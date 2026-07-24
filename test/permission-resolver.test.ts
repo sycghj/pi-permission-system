@@ -7,11 +7,7 @@ import { PermissionResolver } from "#src/permission-resolver";
 import type { Ruleset } from "#src/rule";
 import { SessionApproval } from "#src/session-approval";
 import { SessionRules } from "#src/session-rules";
-import type {
-  PathRuleTokenMatcher,
-  PermissionCheckResult,
-  PermissionState,
-} from "#src/types";
+import type { PermissionCheckResult, PermissionState } from "#src/types";
 
 function makePermissionManager() {
   return {
@@ -33,9 +29,6 @@ function makePermissionManager() {
       .fn<(toolName: string, agentName?: string) => PermissionState>()
       .mockReturnValue("allow"),
     getConfigIssues: vi.fn((): string[] => []),
-    getPromotablePathTokenMatcher: vi
-      .fn<(agentName?: string) => PathRuleTokenMatcher>()
-      .mockReturnValue(() => false),
   };
 }
 

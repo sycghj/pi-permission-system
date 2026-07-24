@@ -15,7 +15,7 @@ import {
   ToolPreviewFormatter,
   type ToolPreviewFormatterOptions,
 } from "#src/tool-preview-formatter";
-import type { PathRuleTokenMatcher, PermissionCheckResult } from "#src/types";
+import type { PermissionCheckResult } from "#src/types";
 import { resolveBashCommandCheck } from "./bash-command";
 import { describeBashExternalDirectoryGate } from "./bash-external-directory";
 import { describeBashPathGate } from "./bash-path";
@@ -52,11 +52,6 @@ export interface ToolCallGateInputs {
    * tool is gated through the bash stack at parity with native `bash` (#574).
    */
   getShellToolAliases(): ShellToolsConfig | undefined;
-  /**
-   * Predicate deciding whether a bare bash token should be promoted into the
-   * `path` rule-candidate surface (#509), scoped to the given agent.
-   */
-  getPromotablePathTokenMatcher(agentName?: string): PathRuleTokenMatcher;
 }
 
 /**
@@ -93,12 +88,9 @@ export class ToolCallGatePipeline {
     );
     const normalizer = this.inputs.getPathNormalizer();
     const bashProgram = shell?.command
-      ? await BashProgram.parse(
-          shell.command,
-          normalizer,
-          this.inputs.getPromotablePathTokenMatcher(tcc.agentName ?? undefined),
-          { workdir: shell.workdir },
-        )
+      ? await BashProgram.parse(shell.command, normalizer, {
+          workdir: shell.workdir,
+        })
       : null;
 
     const formatter = new ToolPreviewFormatter(

@@ -18,17 +18,6 @@ export type {
 };
 
 /**
- * Predicate deciding whether a bare bash token should be promoted into the
- * `path` rule-candidate surface.
- *
- * Built by `PermissionManager.getPromotablePathTokenMatcher` from the
- * composed config ruleset (specific, non-`*` `path` deny/ask patterns) and
- * threaded through to `BashPathResolver` so promotion policy stays in the
- * manager while the bash layer only asks the predicate.
- */
-export type PathRuleTokenMatcher = (token: string) => boolean;
-
-/**
  * Per-scope permission config shape after loading and validation.
  * Holds only the flat permission map — all policy is expressed there.
  */

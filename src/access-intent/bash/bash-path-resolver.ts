@@ -18,10 +18,6 @@ import {
 import { normalizePathPolicyLiteral } from "#src/access-intent/path-normalization";
 import type { PathNormalizer } from "#src/path-normalizer";
 import { isSafeSystemPath } from "#src/safe-system-paths";
-import type { PathRuleTokenMatcher } from "#src/types";
-
-/** Default promotion predicate: promotes nothing (#509). */
-const NO_PROMOTION: PathRuleTokenMatcher = () => false;
 
 // ── Internal types ───────────────────────────────────────────────────────────
 
@@ -85,22 +81,20 @@ const UNKNOWN_BASE: EffectiveBase = { kind: "unknown" };
  * (`forPath`/`forLiteral`/`resolveBase`), and the outside-cwd boundary
  * decision — so no walk step re-reads the platform or threads the cwd.
  *
- * Also holds an `isPromotablePathToken` predicate (default: promotes nothing)
- * deciding whether a bare token that fails the broad rule-candidate shape gate
- * should still be promoted because it matches an active, specific `path` rule
- * (#509). The resolver never sees the rules themselves — the predicate is
- * built and owned by `PermissionManager.getPromotablePathTokenMatcher`.
+ * A bare token that fails both shape gates is admitted when the normalizer's
+ * existence probe says it names a real filesystem entry (ADR 0009, #645). The
+ * resolver consults no ruleset: candidacy is a filesystem question, and the
+ * policy decision belongs to the gates downstream.
  *
  * Tell-don't-ask: callers hand it a parsed tree and receive the resolved
  * {@link ResolvedBashPaths} slices in one {@link resolve} call; the AST walk,
  * the `cd`-folding state, and the intermediate path candidates stay private.
  * One instance per parse ({@link BashProgram.parse} constructs it with the
- * session normalizer and promotion predicate).
+ * session normalizer).
  */
 export class BashPathResolver {
   constructor(
     private readonly normalizer: PathNormalizer,
-    private readonly isPromotablePathToken: PathRuleTokenMatcher = NO_PROMOTION,
     private readonly workdir?: string,
   ) {}
 
@@ -502,10 +496,9 @@ export class BashPathResolver {
    * policy lookup values.
    *
    * Filters candidates through the broad path classifier
-   * (`classifyTokenAsRuleCandidate`), falling back to the rule-driven promoted
-   * classifier (`classifyPromotedRuleCandidate`, #509) for a bare token the
-   * broad classifier rejects for shape — promoted only when the injected
-   * `isPromotablePathToken` predicate matches an active, specific `path` rule.
+   * (`classifyTokenAsRuleCandidate`), falling back to {@link probeBareToken}
+   * for a bare token the broad classifier rejects for shape — admitted only
+   * when it names an existing filesystem entry (#645).
    * On win32 the broad classifier is told to treat a backslash as a path
    * separator, so a backslash-relative token (`dir\file`) is recognized as a
    * rule candidate the same as its forward-slash equivalent (#520); on POSIX
