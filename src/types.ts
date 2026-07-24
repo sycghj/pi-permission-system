@@ -34,6 +34,13 @@ export type PathRuleTokenMatcher = (token: string) => boolean;
  */
 export interface ScopeConfig {
   permission?: FlatPermissionConfig;
+  /**
+   * True when the scope's config file was present but failed to load or
+   * validate (JSON parse error or schema rejection). Absent and valid files
+   * leave this unset. Drives the fail-closed allow→ask clamp for non-global
+   * scopes (#646).
+   */
+  invalid?: boolean;
 }
 
 /**

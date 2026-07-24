@@ -232,8 +232,11 @@ export class FilePolicyLoader implements PolicyLoader {
     const { config, issues } = loadUnifiedConfig(this.projectGlobalConfigPath);
     this.accumulateConfigIssues(issues);
 
+    // A present-but-rejected file yields issues (parse error or schema
+    // rejection); an absent file yields none. Fail closed on the former.
     const value: ScopeConfig = {
       permission: config.permission,
+      ...(issues.length > 0 ? { invalid: true } : {}),
     };
 
     this.projectGlobalConfigCache = { stamp, value };
@@ -256,6 +259,14 @@ export class FilePolicyLoader implements PolicyLoader {
       return cached.value;
     }
 
+    // An absent file (stat failed) is a legitimately-empty scope, not invalid;
+    // only a present-but-unreadable file fails closed.
+    if (stamp === "missing") {
+      const value: ScopeConfig = {};
+      cache.set(agentName, { stamp, value });
+      return value;
+    }
+
     let value: ScopeConfig;
     try {
       const markdown = readFileSync(filePath, "utf-8");
@@ -273,7 +284,9 @@ export class FilePolicyLoader implements PolicyLoader {
         };
       }
     } catch {
-      value = {};
+      // The file exists (stat succeeded above) but could not be read or
+      // parsed — fail closed for this scope (#646).
+      value = { invalid: true };
     }
 
     cache.set(agentName, { stamp, value });

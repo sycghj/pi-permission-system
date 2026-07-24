@@ -107,9 +107,38 @@ describe("FilePolicyLoader.loadProjectConfig", () => {
       });
       const config = loader.loadProjectConfig();
       expect(config.permission).toEqual({ bash: "allow" });
+      expect(config.invalid).toBeUndefined();
     } finally {
       rmSync(baseDir, { recursive: true, force: true });
     }
+  });
+
+  it("marks the scope invalid when the project config file is rejected", () => {
+    const baseDir = makeTempDir();
+    try {
+      const projectConfigPath = join(baseDir, "project-config.json");
+      // Unrecognized key — schema rejection, the issue's "typo" scenario.
+      writeFileSync(projectConfigPath, JSON.stringify({ debugLo: true }));
+      const loader = new FilePolicyLoader({
+        globalConfigPath: "/nonexistent/config.json",
+        agentsDir: "/nonexistent/agents",
+        projectGlobalConfigPath: projectConfigPath,
+      });
+      const config = loader.loadProjectConfig();
+      expect(config.invalid).toBe(true);
+    } finally {
+      rmSync(baseDir, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves invalid unset when no project file is present", () => {
+    const loader = new FilePolicyLoader({
+      globalConfigPath: "/nonexistent/config.json",
+      agentsDir: "/nonexistent/agents",
+      projectGlobalConfigPath: "/nonexistent/project-config.json",
+    });
+    const config = loader.loadProjectConfig();
+    expect(config.invalid).toBeUndefined();
   });
 });
 
@@ -153,7 +182,29 @@ describe("FilePolicyLoader.loadAgentConfig", () => {
     const baseDir = makeTempDir();
     try {
       const loader = makeLoader(baseDir);
-      expect(loader.loadAgentConfig("nonexistent")).toEqual({});
+      const config = loader.loadAgentConfig("nonexistent");
+      expect(config).toEqual({});
+      expect(config.invalid).toBeUndefined();
+    } finally {
+      rmSync(baseDir, { recursive: true, force: true });
+    }
+  });
+
+  it("marks the scope invalid when an existing agent file cannot be read", () => {
+    const baseDir = makeTempDir();
+    try {
+      const agentsDir = join(baseDir, "agents");
+      mkdirSync(agentsDir, { recursive: true });
+      // A directory at the agent's file path exists (stat succeeds) but
+      // readFileSync throws EISDIR — a present-but-unreadable file.
+      mkdirSync(join(agentsDir, "coder.md"));
+      const loader = new FilePolicyLoader({
+        globalConfigPath: join(baseDir, "config.json"),
+        agentsDir,
+      });
+      writeFileSync(join(baseDir, "config.json"), "{}");
+      const config = loader.loadAgentConfig("coder");
+      expect(config.invalid).toBe(true);
     } finally {
       rmSync(baseDir, { recursive: true, force: true });
     }
