@@ -286,12 +286,20 @@ export interface MergedConfigResult {
  * Legacy files are detected and warned about. Their content is parsed with the
  * flat-format parser — legacy-format keys (defaultPolicy, tools, bash, etc.)
  * are not translated and contribute no permission rules.
+ *
+ * When `options.includeProjectScope` is `false`, the project-scope steps (4 and
+ * 5) are skipped entirely — neither the legacy project policy nor the new
+ * project config is read or merged. This gates project-local config on project
+ * trust: an untrusted repository cannot loosen the operator's global policy
+ * (#644). It defaults to `true`, preserving the trusted / caller-agnostic path.
  */
 export function loadAndMergeConfigs(
   agentDir: string,
   cwd: string,
   extensionRoot: string,
+  options: { includeProjectScope?: boolean } = {},
 ): MergedConfigResult {
+  const includeProjectScope = options.includeProjectScope !== false;
   const allIssues: string[] = [];
 
   const newGlobalPath = getGlobalConfigPath(agentDir);
@@ -339,8 +347,8 @@ export function loadAndMergeConfigs(
   const globalConfig = globalResult.config;
   merged = mergeUnifiedConfigs(merged, globalConfig);
 
-  // 4. Legacy project policy
-  if (existsSync(legacyProjectPolicyPath)) {
+  // 4. Legacy project policy — skipped when the project scope is withheld.
+  if (includeProjectScope && existsSync(legacyProjectPolicyPath)) {
     const legacy = loadUnifiedConfig(legacyProjectPolicyPath);
     allIssues.push(
       `Legacy project policy found at '${legacyProjectPolicyPath}'. ` +
@@ -351,8 +359,11 @@ export function loadAndMergeConfigs(
     merged = mergeUnifiedConfigs(merged, legacy.config);
   }
 
-  // 5. New project config
-  const projectResult = loadUnifiedConfig(newProjectPath);
+  // 5. New project config — skipped when the project scope is withheld, so an
+  // untrusted project contributes nothing and `project` reports empty.
+  const projectResult = includeProjectScope
+    ? loadUnifiedConfig(newProjectPath)
+    : { config: {}, issues: [] };
   allIssues.push(...projectResult.issues);
   const projectConfig = projectResult.config;
   merged = mergeUnifiedConfigs(merged, projectConfig);

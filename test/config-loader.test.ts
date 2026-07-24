@@ -828,4 +828,57 @@ describe("loadAndMergeConfigs", () => {
     const result = loadAndMergeConfigs(agentDir, cwd, extensionRoot);
     expect(result.issues).toEqual([]);
   });
+
+  describe("includeProjectScope", () => {
+    it("omits the new project config when includeProjectScope is false", () => {
+      writeGlobal({
+        permission: { "*": "ask", bash: "deny" },
+      });
+      writeProject({
+        permission: { bash: "allow" },
+      });
+
+      const result = loadAndMergeConfigs(agentDir, cwd, extensionRoot, {
+        includeProjectScope: false,
+      });
+
+      // The untrusted project's `bash: allow` must not override global `deny`.
+      expect(result.merged.permission).toEqual({ "*": "ask", bash: "deny" });
+      expect(result.project).toEqual({});
+    });
+
+    it("omits the legacy project policy when includeProjectScope is false", () => {
+      writeGlobal({ permission: { "*": "ask" } });
+      writeLegacyProjectPolicy({ permission: { "*": "allow" } });
+
+      const result = loadAndMergeConfigs(agentDir, cwd, extensionRoot, {
+        includeProjectScope: false,
+      });
+
+      expect(result.merged.permission).toEqual({ "*": "ask" });
+      expect(
+        result.issues.some((i) => i.includes("pi-permissions.jsonc")),
+      ).toBe(false);
+    });
+
+    it("includes the project config when includeProjectScope is true", () => {
+      writeGlobal({ permission: { "*": "ask", bash: "deny" } });
+      writeProject({ permission: { bash: "allow" } });
+
+      const result = loadAndMergeConfigs(agentDir, cwd, extensionRoot, {
+        includeProjectScope: true,
+      });
+
+      expect(result.merged.permission).toEqual({ "*": "ask", bash: "allow" });
+    });
+
+    it("includes the project config by default (option omitted)", () => {
+      writeGlobal({ permission: { "*": "ask", bash: "deny" } });
+      writeProject({ permission: { bash: "allow" } });
+
+      const result = loadAndMergeConfigs(agentDir, cwd, extensionRoot);
+
+      expect(result.merged.permission).toEqual({ "*": "ask", bash: "allow" });
+    });
+  });
 });
