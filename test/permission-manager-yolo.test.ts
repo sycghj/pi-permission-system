@@ -13,10 +13,12 @@ import { createInMemoryPolicyLoader } from "#test/helpers/manager-harness";
 function makeManager(
   global: Record<string, unknown>,
   isYoloEnabled: () => boolean,
+  project?: ScopeConfig,
 ): PermissionManager {
   return new PermissionManager({
     policyLoader: createInMemoryPolicyLoader({
       global: { permission: global } as ScopeConfig,
+      project,
     }),
     isYoloEnabled,
   });
