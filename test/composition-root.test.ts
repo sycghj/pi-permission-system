@@ -17,6 +17,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -604,14 +605,13 @@ describe("project trust gates project-scoped config (#644)", () => {
   });
 });
 
-describe("bash bare-filename path gating (#509)", () => {
-  // Before #509 a bash bare-filename argument (`cat id_rsa`) bypassed the
-  // `path` surface entirely: the broad classifier only accepted tokens
-  // starting with `.`, containing `/`, containing `..`, or a Windows
-  // drive-letter absolute path. The same file accessed via a prefixed path
-  // (`cat ./id_rsa`) or the `read` tool was already gated. Rule-driven
-  // promotion closes the gap for a bare token matching a specific, non-`*`
-  // `path` deny/ask rule — the literal repro from the issue.
+describe("bash bare-token path gating (#509, #645)", () => {
+  // A bash bare-filename argument (`cat id_rsa`) once bypassed the `path`
+  // surface entirely: the broad classifier accepted only tokens starting with
+  // `.`, containing `/` or `..`, or a Windows drive-letter absolute. #509
+  // closed that for a token whose *spelling* matched a specific `path` rule;
+  // #645 replaced spelling-matching with an existence probe, so candidacy comes
+  // from the filesystem and a symlink is matched by rules naming its target.
 
   async function fireBashToolCall(
     pi: ReturnType<typeof makeFakePi>,
@@ -625,8 +625,9 @@ describe("bash bare-filename path gating (#509)", () => {
     )) as { block?: true; reason?: string };
   }
 
-  it("denies a bare filename matching a specific path deny rule", async () => {
+  it("denies an existing bare filename matching a specific path deny rule", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "pi-perm-bare-token-cwd-"));
+    writeFileSync(join(cwd, "id_rsa"), "key");
     writeGlobalConfig({
       permission: { "*": "allow", path: { id_rsa: "deny" } },
     });
@@ -642,8 +643,9 @@ describe("bash bare-filename path gating (#509)", () => {
     rmSync(cwd, { recursive: true, force: true });
   });
 
-  it("denies a bare filename matching a wildcard path deny rule", async () => {
+  it("denies an existing bare filename matching a wildcard path deny rule", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "pi-perm-bare-token-cwd-"));
+    writeFileSync(join(cwd, "key.pem"), "key");
     writeGlobalConfig({
       permission: { "*": "allow", path: { "*.pem": "deny" } },
     });
@@ -654,6 +656,28 @@ describe("bash bare-filename path gating (#509)", () => {
     await fireSessionStart(pi, ctx);
 
     const result = await fireBashToolCall(pi, ctx, "cat key.pem");
+    expect(result.block).toBe(true);
+
+    rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("denies a bare symlink whose target matches a path deny rule (#645)", async () => {
+    // The operator's case: the rule names the target, not the link. Matching a
+    // token's spelling could never catch this; canonicalization after the probe
+    // does.
+    const cwd = mkdtempSync(join(tmpdir(), "pi-perm-bare-symlink-cwd-"));
+    writeFileSync(join(cwd, ".some.secret"), "s3cret");
+    symlinkSync(join(cwd, ".some.secret"), join(cwd, "a_sym"));
+    writeGlobalConfig({
+      permission: { "*": "allow", path: { "*.some.secret": "deny" } },
+    });
+
+    const pi = makeFakePi({ events: createEventBus() });
+    piPermissionSystemExtension(pi as unknown as ExtensionAPI);
+    const ctx = makeChildCtx(cwd, "bare-symlink-session-deny");
+    await fireSessionStart(pi, ctx);
+
+    const result = await fireBashToolCall(pi, ctx, "cat a_sym");
     expect(result.block).toBe(true);
 
     rmSync(cwd, { recursive: true, force: true });
@@ -674,6 +698,75 @@ describe("bash bare-filename path gating (#509)", () => {
     expect(result.block).toBeUndefined();
 
     rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("leaves a bare token naming no file unaffected even under a path deny rule (#645)", async () => {
+    // The probe's precision: `id_rsa` matches the rule by spelling, but names
+    // nothing here, so it is not an operand and is not gated.
+    const cwd = mkdtempSync(join(tmpdir(), "pi-perm-bare-absent-cwd-"));
+    writeGlobalConfig({
+      permission: { "*": "allow", path: { id_rsa: "deny" } },
+    });
+
+    const pi = makeFakePi({ events: createEventBus() });
+    piPermissionSystemExtension(pi as unknown as ExtensionAPI);
+    const ctx = makeChildCtx(cwd, "bare-token-session-absent");
+    await fireSessionStart(pi, ctx);
+
+    const result = await fireBashToolCall(pi, ctx, "cat id_rsa");
+    expect(result.block).toBeUndefined();
+
+    rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("leaves an existing bare file unrestricted when no explicit path rule matches (#58)", async () => {
+    // The universal-fallback guard is what keeps probe promotion from becoming
+    // a prompt firehose: a promoted token matching only the synthesized default
+    // is unrestricted, so a real file with no rule naming it stays allowed.
+    const cwd = mkdtempSync(join(tmpdir(), "pi-perm-bare-norule-cwd-"));
+    writeFileSync(join(cwd, "README"), "docs");
+    writeGlobalConfig({
+      permission: { "*": "allow", path: { id_rsa: "deny" } },
+    });
+
+    const pi = makeFakePi({ events: createEventBus() });
+    piPermissionSystemExtension(pi as unknown as ExtensionAPI);
+    const ctx = makeChildCtx(cwd, "bare-token-session-norule");
+    await fireSessionStart(pi, ctx);
+
+    const result = await fireBashToolCall(pi, ctx, "cat README");
+    expect(result.block).toBeUndefined();
+
+    rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("denies a bare symlink escaping the working tree under external_directory deny (#645)", async () => {
+    // The issue's headline repro:
+    //   printf 'test' > /tmp/…-secret ; ln -s /tmp/…-secret outside-link
+    //   cat outside-link            (under a permissive `cat *` bash rule)
+    const cwd = mkdtempSync(join(tmpdir(), "pi-perm-escape-cwd-"));
+    const outside = mkdtempSync(join(tmpdir(), "pi-perm-escape-target-"));
+    const secret = join(outside, "pi-permission-test-secret");
+    writeFileSync(secret, "test");
+    symlinkSync(secret, join(cwd, "outside-link"));
+    writeGlobalConfig({
+      permission: {
+        "*": "allow",
+        bash: { "cat *": "allow" },
+        external_directory: "deny",
+      },
+    });
+
+    const pi = makeFakePi({ events: createEventBus() });
+    piPermissionSystemExtension(pi as unknown as ExtensionAPI);
+    const ctx = makeChildCtx(cwd, "bare-escape-session-deny");
+    await fireSessionStart(pi, ctx);
+
+    const result = await fireBashToolCall(pi, ctx, "cat outside-link");
+    expect(result.block).toBe(true);
+
+    rmSync(cwd, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
   });
 });
 
