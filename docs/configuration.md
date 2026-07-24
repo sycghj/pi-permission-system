@@ -469,8 +469,12 @@ For bash commands, the extension extracts path-candidate tokens from the command
 The most restrictive result across all tokens determines the outcome.
 When the current working directory is known, relative bash tokens are matched with cwd-normalized policy values, resolved against the effective directory after literal `cd` commands; a token after a non-literal `cd` (e.g. `cd "$DIR"`) stays conservative and matches only its literal form.
 
-A bare filename with no path shape at all (e.g. `id_rsa` in `cat id_rsa`) is also gated when it matches an active, specific (non-`*`) `path` deny/ask rule — so `"id_rsa": "deny"` or `"*.pem": "deny"` blocks the file whether it is referenced by a bare name, a relative path, or the `read` tool.
-A bare token that matches no specific `path` rule (e.g. `status` in `git status`) is left alone, and this promotion never fires against a `"*"` catch-all — only a config that already declares a specific `path` rule is affected.
+A bare filename with no path shape at all (e.g. `id_rsa` in `cat id_rsa`) is also gated, provided it names a file that actually exists — so `"id_rsa": "deny"` or `"*.pem": "deny"` blocks the file whether it is referenced by a bare name, a relative path, or the `read` tool.
+Because the resolved path is matched, this covers a bare **symlink** whose target a rule names: with `".some.secret": "deny"`, `cat a_sym` is denied when `a_sym` points at `.some.secret`.
+A bare token that names nothing (e.g. `status` in `git status`, `build` in `npm run build`) is left alone, so ordinary subcommands and branch names never prompt.
+An existing file that matches no `path` rule is likewise left alone — the catch-all `"*"` entry alone does not gate it.
+
+A path embedded in a long option (e.g. `--file=/tmp/patterns` in `grep --file=/tmp/patterns target`) is extracted and gated like any other path token; an option value that is not path-shaped (e.g. `--format=json`) is ignored.
 
 On Windows, where a backslash is a path separator, a backslash-relative bash argument (e.g. `dir\file` in `cat dir\file`) is gated by a `path` rule the same as its forward-slash equivalent (`dir/file`) and the same as the file accessed through the `read` tool.
 On other platforms a backslash is a legal filename character, so such a token is not treated as a path.
