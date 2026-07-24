@@ -2,13 +2,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock node:fs so realpathSync (used by canonicalizePath) is controllable.
 // Default is identity so all existing lexical tests are unaffected.
+// Every other fs binding passes through to the real module, so filesystem-
+// backed helpers (lstatSync, mkdtempSync, symlinkSync, …) stay usable here.
 const realpathSync = vi.hoisted(() =>
   vi.fn<(path: string) => string>((p) => p),
 );
-vi.mock("node:fs", () => ({
-  realpathSync,
-  default: { realpathSync },
-}));
+vi.mock("node:fs", async () => {
+  const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
+  return {
+    ...actual,
+    realpathSync,
+    default: { ...actual, realpathSync },
+  };
+});
 
 import { BashProgram } from "#src/access-intent/bash/program";
 import { pathFlavorForPlatform, win32PathFlavor } from "#src/path/path-flavor";
