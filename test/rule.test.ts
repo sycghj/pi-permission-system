@@ -697,38 +697,40 @@ describe("evaluateMostRestrictive", () => {
   });
 });
 
-describe("rewriteAsksToYolo", () => {
-  const askBash: Rule = {
-    surface: "bash",
-    pattern: "*",
-    action: "ask",
-    layer: "config",
-    origin: "global",
-  };
-  const denyEnv: Rule = {
-    surface: "path",
-    pattern: ".env",
-    action: "deny",
-    layer: "config",
-    origin: "project",
-  };
-  const allowRead: Rule = {
-    surface: "read",
-    pattern: "*",
-    action: "allow",
-    layer: "config",
-    origin: "agent",
-  };
-  const askDefault: Rule = {
-    surface: "*",
-    pattern: "*",
-    action: "ask",
-    layer: "default",
-    origin: "builtin",
-  };
+// Shared Rule fixtures for the composition-stage overlay blocks
+// (rewriteAsksToYolo and floorAllowsToAsk), which mirror each other.
+const overlayAskBash: Rule = {
+  surface: "bash",
+  pattern: "*",
+  action: "ask",
+  layer: "config",
+  origin: "global",
+};
+const overlayDenyEnv: Rule = {
+  surface: "path",
+  pattern: ".env",
+  action: "deny",
+  layer: "config",
+  origin: "project",
+};
+const overlayAllowRead: Rule = {
+  surface: "read",
+  pattern: "*",
+  action: "allow",
+  layer: "config",
+  origin: "agent",
+};
+const overlayAskDefault: Rule = {
+  surface: "*",
+  pattern: "*",
+  action: "ask",
+  layer: "default",
+  origin: "builtin",
+};
 
+describe("rewriteAsksToYolo", () => {
   test("rewrites an ask rule to allow tagged origin 'yolo'", () => {
-    const result = rewriteAsksToYolo([askBash]);
+    const result = rewriteAsksToYolo([overlayAskBash]);
     expect(result).toEqual([
       {
         surface: "bash",
@@ -741,7 +743,7 @@ describe("rewriteAsksToYolo", () => {
   });
 
   test("preserves surface, pattern, and layer while flipping ask", () => {
-    const [rewritten] = rewriteAsksToYolo([askBash]);
+    const [rewritten] = rewriteAsksToYolo([overlayAskBash]);
     expect(rewritten.surface).toBe("bash");
     expect(rewritten.pattern).toBe("*");
     expect(rewritten.layer).toBe("config");
@@ -750,24 +752,29 @@ describe("rewriteAsksToYolo", () => {
   });
 
   test("rewrites the synthesized universal default ask rule", () => {
-    const result = rewriteAsksToYolo([askDefault]);
+    const result = rewriteAsksToYolo([overlayAskDefault]);
     expect(result[0]?.action).toBe("allow");
     expect(result[0]?.origin).toBe("yolo");
     expect(result[0]?.layer).toBe("default");
   });
 
   test("passes deny rules through untouched (preserves hard denies)", () => {
-    const result = rewriteAsksToYolo([denyEnv]);
-    expect(result).toEqual([denyEnv]);
+    const result = rewriteAsksToYolo([overlayDenyEnv]);
+    expect(result).toEqual([overlayDenyEnv]);
   });
 
   test("passes allow rules through untouched", () => {
-    const result = rewriteAsksToYolo([allowRead]);
-    expect(result).toEqual([allowRead]);
+    const result = rewriteAsksToYolo([overlayAllowRead]);
+    expect(result).toEqual([overlayAllowRead]);
   });
 
   test("rewrites only ask rules in a mixed ruleset, preserving order", () => {
-    const ruleset: Ruleset = [askDefault, allowRead, askBash, denyEnv];
+    const ruleset: Ruleset = [
+      overlayAskDefault,
+      overlayAllowRead,
+      overlayAskBash,
+      overlayDenyEnv,
+    ];
     const result = rewriteAsksToYolo(ruleset);
     expect(result.map((r) => r.action)).toEqual([
       "allow",
@@ -784,7 +791,7 @@ describe("rewriteAsksToYolo", () => {
   });
 
   test("does not mutate the input ruleset", () => {
-    const ruleset: Ruleset = [askBash];
+    const ruleset: Ruleset = [overlayAskBash];
     rewriteAsksToYolo(ruleset);
     expect(ruleset[0]?.action).toBe("ask");
     expect(ruleset[0]?.origin).toBe("global");
