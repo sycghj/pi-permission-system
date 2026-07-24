@@ -86,6 +86,20 @@ function writeGlobalConfig(config: Record<string, unknown>): void {
   );
 }
 
+/** Write a project config file under `<cwd>/.pi/extensions/pi-permission-system`. */
+function writeProjectConfig(
+  cwd: string,
+  config: Record<string, unknown>,
+): void {
+  const dir = join(cwd, ".pi", "extensions", "pi-permission-system");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, "config.json"),
+    `${JSON.stringify(config, null, 2)}\n`,
+    "utf8",
+  );
+}
+
 /** A `ui.select` implementation for a test ctx. */
 type CtxSelect = (
   title: string,
@@ -101,12 +115,17 @@ type CtxSelect = (
 function makeBaseCtx(
   cwd: string,
   sessionId: string,
-  options: { hasUI?: boolean; select?: CtxSelect } = {},
+  options: {
+    hasUI?: boolean;
+    select?: CtxSelect;
+    isProjectTrusted?: boolean;
+  } = {},
 ): unknown {
+  const trusted = options.isProjectTrusted ?? true;
   return {
     cwd,
     hasUI: options.hasUI ?? true,
-    isProjectTrusted: (): boolean => true,
+    isProjectTrusted: (): boolean => trusted,
     sessionManager: {
       getEntries: (): unknown[] => [],
       getSessionId: (): string => sessionId,
@@ -538,6 +557,48 @@ describe("service path queries evaluate the supplied path (#503)", () => {
 
     const result = getPermissionsService()!.checkPermission("path", target);
     expect(result.state).toBe("deny");
+
+    rmSync(cwd, { recursive: true, force: true });
+  });
+});
+
+describe("project trust gates project-scoped config (#644)", () => {
+  it("does not let an untrusted project's `bash: allow` override global `bash: deny`", async () => {
+    writeGlobalConfig({ permission: { "*": "ask", bash: "deny" } });
+    const cwd = mkdtempSync(join(tmpdir(), "pi-perm-untrusted-cwd-"));
+    writeProjectConfig(cwd, { permission: { bash: "allow" } });
+
+    const pi = makeFakePi({ events: createEventBus() });
+    piPermissionSystemExtension(pi as unknown as ExtensionAPI);
+    await fireSessionStart(
+      pi,
+      makeBaseCtx(cwd, "untrusted-session", { isProjectTrusted: false }),
+    );
+
+    // Global `deny` survives: the untrusted project scope was never loaded.
+    expect(
+      getPermissionsService()!.checkPermission("bash", "echo hi").state,
+    ).toBe("deny");
+
+    rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("lets a trusted project's `bash: allow` override global `bash: deny`", async () => {
+    writeGlobalConfig({ permission: { "*": "ask", bash: "deny" } });
+    const cwd = mkdtempSync(join(tmpdir(), "pi-perm-trusted-cwd-"));
+    writeProjectConfig(cwd, { permission: { bash: "allow" } });
+
+    const pi = makeFakePi({ events: createEventBus() });
+    piPermissionSystemExtension(pi as unknown as ExtensionAPI);
+    await fireSessionStart(
+      pi,
+      makeBaseCtx(cwd, "trusted-session", { isProjectTrusted: true }),
+    );
+
+    // The trusted project override applies (last-match-wins).
+    expect(
+      getPermissionsService()!.checkPermission("bash", "echo hi").state,
+    ).toBe("allow");
 
     rmSync(cwd, { recursive: true, force: true });
   });

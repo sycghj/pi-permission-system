@@ -18,6 +18,15 @@ interface ResourcesDiscoverPayload {
 }
 
 /**
+ * Shown when project config is skipped because the project is untrusted, so the
+ * reduced-scope state is never silent (#644). Exported for assertion in tests.
+ */
+export const UNTRUSTED_PROJECT_MESSAGE =
+  "pi-permission-system: project is not trusted — skipping project-scoped " +
+  "permission configuration. Only global policy applies. Grant project trust " +
+  "to load this project's permission rules.";
+
+/**
  * Handles session lifecycle events: start, reload, and shutdown.
  *
  * Constructor deps:
@@ -42,9 +51,13 @@ export class SessionLifecycleHandler {
     event: SessionStartPayload,
     ctx: ExtensionContext,
   ): Promise<void> {
-    this.session.refreshConfig(ctx);
-    this.session.resetForNewSession(ctx);
+    const projectTrusted = ctx.isProjectTrusted();
+    this.session.refreshConfig(ctx, projectTrusted);
+    this.session.resetForNewSession(ctx, projectTrusted);
     this.session.logResolvedConfigPaths();
+    if (!projectTrusted) {
+      this.warnProjectUntrusted(ctx, "session_start");
+    }
 
     const agentName = this.session.resolveAgentName(ctx);
     const policyIssues = this.resolver.getConfigIssues(agentName ?? undefined);
@@ -68,18 +81,37 @@ export class SessionLifecycleHandler {
     return Promise.resolve();
   }
 
-  handleResourcesDiscover(event: ResourcesDiscoverPayload): Promise<void> {
+  handleResourcesDiscover(
+    event: ResourcesDiscoverPayload,
+    ctx: ExtensionContext,
+  ): Promise<void> {
     if (event.reason !== "reload") {
       return Promise.resolve();
     }
 
-    this.session.reload();
+    const projectTrusted = ctx.isProjectTrusted();
+    this.session.reload(projectTrusted);
+    if (!projectTrusted) {
+      this.warnProjectUntrusted(ctx, "resources_discover");
+    }
     this.logger.debug("lifecycle.reload", {
       triggeredBy: "resources_discover",
       reason: event.reason,
       cwd: this.session.getRuntimeContext()?.cwd ?? null,
     });
     return Promise.resolve();
+  }
+
+  /**
+   * Record the project-trust skip in the review log and surface a loud warning
+   * to the user, so the reduced (global-only) scope is never silent (#644).
+   */
+  private warnProjectUntrusted(
+    ctx: ExtensionContext,
+    phase: "session_start" | "resources_discover",
+  ): void {
+    this.logger.review("project_trust.skipped", { cwd: ctx.cwd, phase });
+    this.logger.warn(UNTRUSTED_PROJECT_MESSAGE);
   }
 
   handleSessionShutdown(): Promise<void> {

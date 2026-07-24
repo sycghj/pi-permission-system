@@ -94,14 +94,24 @@ describe("PermissionSession", () => {
   });
 
   describe("resetForNewSession", () => {
-    it("configures the injected PermissionManager for the context cwd", () => {
+    it("configures the injected PermissionManager for the context cwd when trusted", () => {
       const pm = makePermissionManager();
       const { session } = createSession({ permissionManager: pm });
       const ctx = makeCtx({ cwd: "/new/project" });
 
-      session.resetForNewSession(ctx);
+      session.resetForNewSession(ctx, true);
 
       expect(pm.configureForCwd).toHaveBeenCalledWith("/new/project");
+    });
+
+    it("withholds the project cwd (global-only) when the project is untrusted", () => {
+      const pm = makePermissionManager();
+      const { session } = createSession({ permissionManager: pm });
+      const ctx = makeCtx({ cwd: "/new/project" });
+
+      session.resetForNewSession(ctx, false);
+
+      expect(pm.configureForCwd).toHaveBeenCalledWith(undefined);
     });
 
     it("clears skill entries", () => {
@@ -109,7 +119,7 @@ describe("PermissionSession", () => {
       session.setActiveSkillEntries([makeSkillEntry("test")]);
       expect(session.getActiveSkillEntries()).toHaveLength(1);
 
-      session.resetForNewSession(makeCtx());
+      session.resetForNewSession(makeCtx(), true);
 
       expect(session.getActiveSkillEntries()).toEqual([]);
     });
@@ -118,7 +128,7 @@ describe("PermissionSession", () => {
       const { session, forwarding } = createSession();
       const ctx = makeCtx();
 
-      session.resetForNewSession(ctx);
+      session.resetForNewSession(ctx, true);
 
       expect(forwarding.start).toHaveBeenCalledWith(ctx);
     });
@@ -127,7 +137,7 @@ describe("PermissionSession", () => {
       const { session } = createSession();
       const ctx = makeCtx();
 
-      session.resetForNewSession(ctx);
+      session.resetForNewSession(ctx, true);
 
       // Verify context is stored by calling resolveAgentName which needs it
       mockGetActiveAgentName.mockReturnValue("test-agent");
@@ -139,7 +149,7 @@ describe("PermissionSession", () => {
   describe("getPathNormalizer", () => {
     it("returns a normalizer bound to the reset session cwd", () => {
       const { session } = createSession();
-      session.resetForNewSession(makeCtx({ cwd: "/projects/app" }));
+      session.resetForNewSession(makeCtx({ cwd: "/projects/app" }), true);
 
       const ap = session.getPathNormalizer().forPath("src/foo.ts");
 
@@ -148,8 +158,8 @@ describe("PermissionSession", () => {
 
     it("rebinds the normalizer cwd on a subsequent reset", () => {
       const { session } = createSession();
-      session.resetForNewSession(makeCtx({ cwd: "/projects/app" }));
-      session.resetForNewSession(makeCtx({ cwd: "/projects/other" }));
+      session.resetForNewSession(makeCtx({ cwd: "/projects/app" }), true);
+      session.resetForNewSession(makeCtx({ cwd: "/projects/other" }), true);
 
       expect(session.getPathNormalizer().forPath("a.ts").value()).toBe(
         "/projects/other/a.ts",
@@ -169,7 +179,7 @@ describe("PermissionSession", () => {
 
     it("builds a win32 normalizer when constructed with the win32 flavor", () => {
       const { session } = createSession({ flavor: win32PathFlavor });
-      session.resetForNewSession(makeCtx({ cwd: "C:\\Projects\\App" }));
+      session.resetForNewSession(makeCtx({ cwd: "C:\\Projects\\App" }), true);
 
       expect(session.getPathNormalizer().forPath("src\\foo.ts").value()).toBe(
         "c:\\projects\\app\\src\\foo.ts",
@@ -285,11 +295,18 @@ describe("PermissionSession", () => {
   });
 
   describe("config delegation", () => {
-    it("refreshConfig delegates to configStore.refresh", () => {
+    it("refreshConfig delegates to configStore.refresh with the trust flag", () => {
       const { session, configStore } = createSession();
       const ctx = makeCtx();
-      session.refreshConfig(ctx);
-      expect(configStore.refresh).toHaveBeenCalledWith(ctx);
+      session.refreshConfig(ctx, true);
+      expect(configStore.refresh).toHaveBeenCalledWith(ctx, true);
+    });
+
+    it("refreshConfig forwards projectTrusted=false when untrusted", () => {
+      const { session, configStore } = createSession();
+      const ctx = makeCtx();
+      session.refreshConfig(ctx, false);
+      expect(configStore.refresh).toHaveBeenCalledWith(ctx, false);
     });
 
     it("logResolvedConfigPaths delegates to configStore.logResolvedPaths", () => {
@@ -330,22 +347,33 @@ describe("PermissionSession", () => {
   });
 
   describe("reload", () => {
-    it("configures PermissionManager for current context cwd", () => {
+    it("configures PermissionManager for current context cwd when trusted", () => {
       const pm = makePermissionManager();
       const { session } = createSession({ permissionManager: pm });
       const ctx = makeCtx({ cwd: "/project" });
       session.activate(ctx);
 
-      session.reload();
+      session.reload(true);
 
       expect(pm.configureForCwd).toHaveBeenCalledWith("/project");
+    });
+
+    it("withholds the project cwd (global-only) when the project is untrusted", () => {
+      const pm = makePermissionManager();
+      const { session } = createSession({ permissionManager: pm });
+      const ctx = makeCtx({ cwd: "/project" });
+      session.activate(ctx);
+
+      session.reload(false);
+
+      expect(pm.configureForCwd).toHaveBeenCalledWith(undefined);
     });
 
     it("clears skill entries", () => {
       const { session } = createSession();
       session.setActiveSkillEntries([makeSkillEntry("s")]);
 
-      session.reload();
+      session.reload(true);
 
       expect(session.getActiveSkillEntries()).toEqual([]);
     });

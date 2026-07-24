@@ -161,23 +161,36 @@ describe("ConfigStore", () => {
   // ── refresh() ─────────────────────────────────────────────────────────
 
   describe("refresh()", () => {
-    it("uses the passed ctx cwd for loadAndMergeConfigs", () => {
+    it("uses the passed ctx cwd for loadAndMergeConfigs and includes the project scope when trusted", () => {
       const { store } = makeStore();
-      store.refresh(makeCtx({ cwd: "/my/project" }));
+      store.refresh(makeCtx({ cwd: "/my/project" }), true);
       expect(mockLoadAndMergeConfigs).toHaveBeenCalledWith(
         "/test/agent",
         "/my/project",
         expect.any(String),
+        { includeProjectScope: true },
+      );
+    });
+
+    it("withholds the project scope when the project is untrusted", () => {
+      const { store } = makeStore();
+      store.refresh(makeCtx({ cwd: "/my/project" }), false);
+      expect(mockLoadAndMergeConfigs).toHaveBeenCalledWith(
+        "/test/agent",
+        "/my/project",
+        expect.any(String),
+        { includeProjectScope: false },
       );
     });
 
     it("uses empty string cwd when no ctx is provided", () => {
       const { store } = makeStore();
-      store.refresh();
+      store.refresh(undefined, true);
       expect(mockLoadAndMergeConfigs).toHaveBeenCalledWith(
         "/test/agent",
         "",
         expect.any(String),
+        { includeProjectScope: true },
       );
     });
 
@@ -187,14 +200,14 @@ describe("ConfigStore", () => {
         merged: { debugLog: true, permissionReviewLog: false, yoloMode: false },
         issues: [],
       });
-      store.refresh();
+      store.refresh(undefined, true);
       expect(store.current().debugLog).toBe(true);
       expect(store.current().permissionReviewLog).toBe(false);
     });
 
     it("writes config.loaded debug log", () => {
       const { store, logger } = makeStore();
-      store.refresh();
+      store.refresh(undefined, true);
       expect(logger.debug).toHaveBeenCalledWith(
         "config.loaded",
         expect.objectContaining({ debugLog: false }),
@@ -208,7 +221,7 @@ describe("ConfigStore", () => {
         merged: { ...DEFAULT_EXTENSION_CONFIG },
         issues: ["legacy config detected"],
       });
-      store.refresh(ctx);
+      store.refresh(ctx, true);
       // Verify the warning is tracked (next identical call should not re-notify)
       const mockNotify = vi.fn();
       const ctx2 = makeCtx({
@@ -219,7 +232,7 @@ describe("ConfigStore", () => {
         merged: { ...DEFAULT_EXTENSION_CONFIG },
         issues: ["legacy config detected"],
       });
-      store.refresh(ctx2);
+      store.refresh(ctx2, true);
       // Same warning — should not re-notify
       expect(mockNotify).not.toHaveBeenCalled();
     });
@@ -232,7 +245,7 @@ describe("ConfigStore", () => {
         merged: { ...DEFAULT_EXTENSION_CONFIG },
         issues: ["new warning"],
       });
-      store.refresh(ctx);
+      store.refresh(ctx, true);
       expect(mockNotify).toHaveBeenCalledWith("new warning", "warning");
     });
 
@@ -244,8 +257,8 @@ describe("ConfigStore", () => {
         merged: { ...DEFAULT_EXTENSION_CONFIG },
         issues: ["persistent warning"],
       });
-      store.refresh(ctx);
-      store.refresh(ctx);
+      store.refresh(ctx, true);
+      store.refresh(ctx, true);
       expect(mockNotify).toHaveBeenCalledTimes(1);
     });
 
@@ -261,26 +274,26 @@ describe("ConfigStore", () => {
         merged: { ...DEFAULT_EXTENSION_CONFIG },
         issues: ["warning"],
       });
-      store.refresh(ctxWithUI);
+      store.refresh(ctxWithUI, true);
       // Second call: no issues — warning should clear
       mockLoadAndMergeConfigs.mockReturnValue({
         merged: { ...DEFAULT_EXTENSION_CONFIG },
         issues: [],
       });
-      store.refresh();
+      store.refresh(undefined, true);
       // Third call: same warning reappears — should notify again (dedup cleared)
       mockLoadAndMergeConfigs.mockReturnValue({
         merged: { ...DEFAULT_EXTENSION_CONFIG },
         issues: ["warning"],
       });
-      store.refresh(ctxWithUI);
+      store.refresh(ctxWithUI, true);
       expect(mockNotify).toHaveBeenCalledTimes(2);
     });
 
     it("calls syncPermissionSystemStatus when hasUI is true", () => {
       const { store } = makeStore();
       const ctx = makeCtx({ hasUI: true });
-      store.refresh(ctx);
+      store.refresh(ctx, true);
       expect(mockSyncPermissionSystemStatus).toHaveBeenCalledWith(
         ctx,
         expect.any(Object),
@@ -290,7 +303,7 @@ describe("ConfigStore", () => {
     it("does not call syncPermissionSystemStatus when hasUI is false", () => {
       const { store } = makeStore();
       const ctx = makeCtx({ hasUI: false });
-      store.refresh(ctx);
+      store.refresh(ctx, true);
       expect(mockSyncPermissionSystemStatus).not.toHaveBeenCalled();
     });
 
@@ -300,7 +313,7 @@ describe("ConfigStore", () => {
         merged: { piInfrastructureReadPaths: ["/extra/path"] },
         issues: [],
       });
-      store.refresh();
+      store.refresh(undefined, true);
       expect(store.current().piInfrastructureReadPaths).toEqual([
         "/extra/path",
       ]);

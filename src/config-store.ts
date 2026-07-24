@@ -41,7 +41,7 @@ export interface ConfigReader {
  * coupling between the class and test doubles.
  */
 export interface SessionConfigStore extends ConfigReader {
-  refresh(ctx?: ExtensionContext): void;
+  refresh(ctx: ExtensionContext | undefined, projectTrusted: boolean): void;
   logResolvedPaths(cwd?: string): void;
 }
 
@@ -96,14 +96,17 @@ export class ConfigStore implements SessionConfigStore, CommandConfigStore {
    * Reload merged config from disk.
    *
    * If `ctx` is provided, uses it to derive the cwd and sync UI status.
-   * Equivalent to `refreshExtensionConfig(runtime, ctx?)`.
+   * When `projectTrusted` is `false`, the project scope is withheld so an
+   * untrusted repository's runtime config (`yoloMode`, `permissionReviewLog`,
+   * …) cannot loosen the operator's global config (#644).
    */
-  refresh(ctx?: ExtensionContext): void {
+  refresh(ctx: ExtensionContext | undefined, projectTrusted: boolean): void {
     const cwd = ctx?.cwd ?? null;
     const mergeResult = loadAndMergeConfigs(
       this.deps.agentDir,
       cwd ?? "",
       EXTENSION_ROOT,
+      { includeProjectScope: projectTrusted },
     );
     const runtimeConfig = normalizePermissionSystemConfig(mergeResult.merged);
     this.config = runtimeConfig;
@@ -127,6 +130,7 @@ export class ConfigStore implements SessionConfigStore, CommandConfigStore {
       debugLog: runtimeConfig.debugLog,
       permissionReviewLog: runtimeConfig.permissionReviewLog,
       yoloMode: runtimeConfig.yoloMode,
+      projectTrusted,
     });
   }
 

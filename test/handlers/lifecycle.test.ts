@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { SessionLifecycleHandler } from "#src/handlers/lifecycle";
+import {
+  SessionLifecycleHandler,
+  UNTRUSTED_PROJECT_MESSAGE,
+} from "#src/handlers/lifecycle";
 import type { ServiceLifecycle } from "#src/service-lifecycle";
 
 import { makeCtx } from "#test/helpers/handler-fixtures";
@@ -59,19 +62,53 @@ function makeSetup(opts?: { configIssues?: string[] }) {
 // ── handleSessionStart ─────────────────────────────────────────────────────
 
 describe("handleSessionStart", () => {
-  it("refreshes config with ctx", async () => {
+  it("refreshes config with ctx, trusted", async () => {
     const ctx = makeCtx();
     const { handler, configStore } = makeSetup();
     await handler.handleSessionStart({ reason: "startup" }, ctx);
-    expect(configStore.refresh).toHaveBeenCalledWith(ctx);
+    expect(configStore.refresh).toHaveBeenCalledWith(ctx, true);
   });
 
-  it("calls resetForNewSession with ctx", async () => {
+  it("calls resetForNewSession with ctx, trusted", async () => {
     const ctx = makeCtx();
     const { handler, session } = makeSetup();
     const spy = vi.spyOn(session, "resetForNewSession");
     await handler.handleSessionStart({ reason: "startup" }, ctx);
-    expect(spy).toHaveBeenCalledWith(ctx);
+    expect(spy).toHaveBeenCalledWith(ctx, true);
+  });
+
+  describe("project untrusted", () => {
+    function untrustedCtx(): ReturnType<typeof makeCtx> {
+      return makeCtx({
+        isProjectTrusted: vi.fn<() => boolean>().mockReturnValue(false),
+      });
+    }
+
+    it("withholds the project scope from refreshConfig and resetForNewSession", async () => {
+      const ctx = untrustedCtx();
+      const { handler, configStore, session } = makeSetup();
+      const spy = vi.spyOn(session, "resetForNewSession");
+      await handler.handleSessionStart({ reason: "startup" }, ctx);
+      expect(configStore.refresh).toHaveBeenCalledWith(ctx, false);
+      expect(spy).toHaveBeenCalledWith(ctx, false);
+    });
+
+    it("loudly warns and records a review entry when untrusted", async () => {
+      const ctx = untrustedCtx();
+      const { handler, logger } = makeSetup();
+      await handler.handleSessionStart({ reason: "startup" }, ctx);
+      expect(logger.warn).toHaveBeenCalledWith(UNTRUSTED_PROJECT_MESSAGE);
+      expect(logger.review).toHaveBeenCalledWith("project_trust.skipped", {
+        cwd: ctx.cwd,
+        phase: "session_start",
+      });
+    });
+
+    it("does not warn when the project is trusted", async () => {
+      const { handler, logger } = makeSetup();
+      await handler.handleSessionStart({ reason: "startup" }, makeCtx());
+      expect(logger.warn).not.toHaveBeenCalledWith(UNTRUSTED_PROJECT_MESSAGE);
+    });
   });
 
   it("logs resolved config paths", async () => {
@@ -147,22 +184,38 @@ describe("handleResourcesDiscover", () => {
   it("does nothing when reason is not reload", async () => {
     const { handler, session } = makeSetup();
     const spy = vi.spyOn(session, "reload");
-    await handler.handleResourcesDiscover({ reason: "startup" });
+    await handler.handleResourcesDiscover({ reason: "startup" }, makeCtx());
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("calls reload on the session on reload", async () => {
+  it("reloads the session with the trust flag on reload", async () => {
     const { handler, session } = makeSetup();
     const spy = vi.spyOn(session, "reload");
-    await handler.handleResourcesDiscover({ reason: "reload" });
-    expect(spy).toHaveBeenCalledOnce();
+    await handler.handleResourcesDiscover({ reason: "reload" }, makeCtx());
+    expect(spy).toHaveBeenCalledWith(true);
+  });
+
+  it("withholds the project scope and warns on an untrusted reload", async () => {
+    const ctx = makeCtx({
+      cwd: "/proj",
+      isProjectTrusted: vi.fn<() => boolean>().mockReturnValue(false),
+    });
+    const { handler, session, logger } = makeSetup();
+    const spy = vi.spyOn(session, "reload");
+    await handler.handleResourcesDiscover({ reason: "reload" }, ctx);
+    expect(spy).toHaveBeenCalledWith(false);
+    expect(logger.warn).toHaveBeenCalledWith(UNTRUSTED_PROJECT_MESSAGE);
+    expect(logger.review).toHaveBeenCalledWith("project_trust.skipped", {
+      cwd: "/proj",
+      phase: "resources_discover",
+    });
   });
 
   it("writes lifecycle.reload debug log on reload", async () => {
     const ctx = makeCtx({ cwd: "/proj" });
     const { handler, session, logger } = makeSetup();
     session.activate(ctx);
-    await handler.handleResourcesDiscover({ reason: "reload" });
+    await handler.handleResourcesDiscover({ reason: "reload" }, ctx);
     expect(logger.debug).toHaveBeenCalledWith("lifecycle.reload", {
       triggeredBy: "resources_discover",
       reason: "reload",
@@ -172,7 +225,7 @@ describe("handleResourcesDiscover", () => {
 
   it("logs cwd as null when runtimeContext is null on reload", async () => {
     const { handler, logger } = makeSetup();
-    await handler.handleResourcesDiscover({ reason: "reload" });
+    await handler.handleResourcesDiscover({ reason: "reload" }, makeCtx());
     expect(logger.debug).toHaveBeenCalledWith("lifecycle.reload", {
       triggeredBy: "resources_discover",
       reason: "reload",

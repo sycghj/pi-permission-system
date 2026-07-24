@@ -119,11 +119,20 @@ describe("AgentPrepHandler.handle", () => {
     expect(warmParser).toHaveBeenCalledTimes(1);
   });
 
-  it("refreshes config with ctx", async () => {
+  it("refreshes config with ctx, gated on project trust", async () => {
     const ctx = makeCtx();
     const { handler, configStore } = makeSetup();
     await handler.handle(makeEvent(), ctx);
-    expect(configStore.refresh).toHaveBeenCalledWith(ctx);
+    expect(configStore.refresh).toHaveBeenCalledWith(ctx, true);
+  });
+
+  it("withholds the project scope when the project is untrusted", async () => {
+    const ctx = makeCtx({
+      isProjectTrusted: vi.fn<() => boolean>().mockReturnValue(false),
+    });
+    const { handler, configStore } = makeSetup();
+    await handler.handle(makeEvent(), ctx);
+    expect(configStore.refresh).toHaveBeenCalledWith(ctx, false);
   });
 
   it("resolves agent name using systemPrompt", async () => {

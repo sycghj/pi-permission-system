@@ -171,7 +171,9 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
   // refresh() must run after `session` is assigned: a debug-write IO failure
   // triggers the logger's notify sink — `session.notify(m)` — which no-ops
   // on the null context but requires `session` to be bound.
-  configStore.refresh();
+  // No ctx/trust decision exists at factory init, so withhold the project
+  // scope (fail closed); session_start reloads with the real trust decision.
+  configStore.refresh(undefined, false);
 
   const configPath = getGlobalConfigPath(agentDir);
   registerPermissionSystemCommand(pi, {
@@ -258,8 +260,8 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
   pi.on("session_start", (event, ctx) =>
     lifecycle.handleSessionStart(event, ctx),
   );
-  pi.on("resources_discover", (event) =>
-    lifecycle.handleResourcesDiscover(event),
+  pi.on("resources_discover", (event, ctx) =>
+    lifecycle.handleResourcesDiscover(event, ctx),
   );
   pi.on("session_shutdown", () => lifecycle.handleSessionShutdown());
   pi.on("before_agent_start", (event, ctx) => agentPrep.handle(event, ctx));

@@ -76,6 +76,7 @@ export function makeCtx(
   return {
     cwd: "/test/project",
     hasUI: true,
+    isProjectTrusted: vi.fn<() => boolean>().mockReturnValue(true),
     ui: {
       setStatus: vi.fn(),
       notify: vi.fn(),

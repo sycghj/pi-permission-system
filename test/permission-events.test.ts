@@ -257,6 +257,7 @@ describe("piPermissionSystemExtension ready event wiring", () => {
     const ctx = {
       cwd: baseDir,
       hasUI: false,
+      isProjectTrusted: (): boolean => true,
       sessionManager: {
         getEntries: (): unknown[] => [],
         getSessionId: (): string => "top-session",

@@ -62,7 +62,11 @@ export class AgentPrepHandler {
     // to whole-string matching.
     this.warmParser();
     this.session.activate(ctx);
-    this.session.refreshConfig(ctx);
+    // Gate the mid-session runtime-config refresh on project trust too, so an
+    // untrusted project cannot slip its runtime config (e.g. `yoloMode`) in
+    // right before agent start after session_start withheld it (#644). The
+    // session_start handler already warned; do not re-warn on every start.
+    this.session.refreshConfig(ctx, ctx.isProjectTrusted());
 
     const agentName = this.session.resolveAgentName(ctx, event.systemPrompt);
     const activeTools = this.toolRegistry.getActive();

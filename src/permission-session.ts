@@ -99,11 +99,15 @@ export class PermissionSession implements ToolCallGateInputs {
   /**
    * Reset all mutable state for a new session.
    *
-   * Configures the injected PermissionManager for `ctx.cwd`, clears skill
+   * Configures the injected PermissionManager for `ctx.cwd` (or global-only
+   * when `projectTrusted` is `false`, withholding the project cwd so an
+   * untrusted project's policy scopes are not loaded, #644), clears skill
    * entries, and activates the new context.
    */
-  resetForNewSession(ctx: ExtensionContext): void {
-    this.permissionManager.configureForCwd(ctx.cwd);
+  resetForNewSession(ctx: ExtensionContext, projectTrusted: boolean): void {
+    this.permissionManager.configureForCwd(
+      projectTrusted ? ctx.cwd : undefined,
+    );
     this.skillEntries = [];
     this.activate(ctx);
   }
@@ -121,9 +125,15 @@ export class PermissionSession implements ToolCallGateInputs {
   /**
    * Reload permission manager and clear skill entries for the current context.
    * Used on config reload (e.g. `resources_discover` with reason "reload").
+   *
+   * When `projectTrusted` is `false` the project cwd is withheld, so a reload
+   * in an untrusted project reloads only global policy; a trust grant on a
+   * later reload re-includes the project scope (#644).
    */
-  reload(): void {
-    this.permissionManager.configureForCwd(this.context?.cwd);
+  reload(projectTrusted: boolean): void {
+    this.permissionManager.configureForCwd(
+      projectTrusted ? this.context?.cwd : undefined,
+    );
     this.skillEntries = [];
   }
 
@@ -168,9 +178,16 @@ export class PermissionSession implements ToolCallGateInputs {
 
   // ── Config ─────────────────────────────────────────────────────────────
 
-  /** Reload merged config from disk; optionally update the stored runtime context. */
-  refreshConfig(ctx?: ExtensionContext): void {
-    this.configStore.refresh(ctx);
+  /**
+   * Reload merged config from disk; optionally update the stored runtime
+   * context. When `projectTrusted` is `false`, the project scope is withheld
+   * so an untrusted project's runtime config is not merged (#644).
+   */
+  refreshConfig(
+    ctx: ExtensionContext | undefined,
+    projectTrusted: boolean,
+  ): void {
+    this.configStore.refresh(ctx, projectTrusted);
   }
 
   /** Write the resolved config path set to the review and debug logs. */

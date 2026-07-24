@@ -97,6 +97,7 @@ describe("session_start handler consolidation", () => {
     const mockCtx = {
       cwd: baseDir,
       hasUI: false,
+      isProjectTrusted: () => true,
       ui: { select: async () => "", input: async () => "" },
       agent: { name: "test-agent" },
       sessionManager: {
