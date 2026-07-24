@@ -107,6 +107,7 @@ Config lives in one JSON file per scope:
 | Project | `<cwd>/.pi/extensions/pi-permission-system/config.json`   |
 
 Project overrides global; per-agent YAML frontmatter overrides both.
+Project config (policy and runtime knobs) is loaded only once the project is trusted — in an untrusted directory only global config applies, so an untrusted repository cannot loosen your global policy (see [Upgrading](#2200--project-config-requires-project-trust)).
 
 Within a surface map like `bash` or `mcp`, **last matching rule wins** — put broad catch-alls first and specific overrides after.
 
@@ -119,6 +120,13 @@ A downstream extension registers a link via `getPermissionsService().registerAut
 For the full reference — all surfaces, runtime knobs, per-agent overrides, merge semantics, and common recipes — see [docs/configuration.md](docs/configuration.md).
 
 ## Upgrading
+
+### 22.0.0 — project config requires project trust
+
+Project-scoped configuration (the project `config.json` and project-agent frontmatter — both permission policy and runtime knobs such as `yoloMode`) is now loaded only when Pi reports the project as trusted.
+In an untrusted directory, only global config applies; a skip is surfaced with a warning and a `project_trust.skipped` review-log entry.
+Grant project trust (or set `defaultProjectTrust`) to load a project's config.
+See [docs/migration/0644-project-trust-gating.md](docs/migration/0644-project-trust-gating.md).
 
 ### 16.0.0 — the bash gate now fails closed
 
@@ -140,6 +148,7 @@ If you relied on the old permissive behavior for bash, set an explicit permissiv
 | [docs/troubleshooting.md](docs/troubleshooting.md)                                                                             | Common issues, diagnostic logging, threat model                                               |
 | [docs/migration/legacy-to-flat.md](docs/migration/legacy-to-flat.md)                                                           | Migration from pre-v2 config layout                                                           |
 | [docs/migration/strict-config-validation.md](docs/migration/strict-config-validation.md)                                       | Strict config validation (breaking) — rejected configs, and the cross-scope fail-closed clamp |
+| [docs/migration/0644-project-trust-gating.md](docs/migration/0644-project-trust-gating.md)                                     | Project-trust gating (breaking) — project config loads only after project trust               |
 
 ## Development
 

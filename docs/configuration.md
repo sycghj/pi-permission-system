@@ -11,6 +11,12 @@ One unified config file per scope:
 
 Project config overrides global config; per-agent frontmatter overrides both.
 
+**Project config requires project trust.**
+Project and project-agent scopes (both permission policy and runtime config such as `yoloMode`) are loaded only when Pi reports the project as trusted (`ctx.isProjectTrusted()`).
+In an untrusted directory, only global (and global-agent) config applies, so an untrusted repository cannot loosen your global policy; the extension surfaces a loud warning plus a `project_trust.skipped` review-log entry when it skips a project scope.
+Grant project trust (or configure `defaultProjectTrust`) to load the project's config; a trust grant reloads project policy on the next `resources_discover` reload.
+See [migration/0644-project-trust-gating.md](migration/0644-project-trust-gating.md).
+
 > **Coming from OpenCode?**
 > This extension's permission model was inspired by OpenCode's.
 > See [OpenCode Compatibility](opencode-compatibility.md) for shared concepts, divergences, and a porting guide.

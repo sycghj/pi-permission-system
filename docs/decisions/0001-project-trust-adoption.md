@@ -7,8 +7,10 @@ date: 2026-06-12
 
 ## Status
 
-Accepted — defer implementation to a follow-up issue.
-The gap is confirmed; the fix is scoped.
+Implemented in #644.
+The fix landed the guard in `handleSessionStart` and `handleResourcesDiscover` as decided below, and extended it beyond the originally-scoped permission-policy path: the extension **runtime** config load (`ConfigStore.refresh` → `loadAndMergeConfigs`, which merges project `yoloMode` / `permissionReviewLog` / …) is gated on trust too, and so is the `before_agent_start` mid-session `refreshConfig`.
+A skip is surfaced loudly (UI warning + a `project_trust.skipped` review-log entry).
+See `docs/migration/0644-project-trust-gating.md`.
 
 ## Context
 
@@ -68,8 +70,7 @@ It only needs to *observe* the outcome via `ctx.isProjectTrusted()`.
 
 ## Implementation scope
 
-Open a dedicated follow-up issue.
-This investigation confirms the gap and the fix direction; the implementation requires its own TDD cycles and a migration note.
+Implemented in #644 with its own TDD cycles and a migration note (`docs/migration/0644-project-trust-gating.md`).
 
 ## Alternatives considered
 
