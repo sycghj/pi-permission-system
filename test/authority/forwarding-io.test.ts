@@ -3,6 +3,7 @@ import {
   mkdirSync,
   mkdtempSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,6 +13,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   cleanupPermissionForwardingLocationIfEmpty,
+  ensureDirectoryExists,
   formatUnknownErrorMessage,
   isErrnoCode,
   logPermissionForwardingError,
@@ -147,6 +149,34 @@ describe("logPermissionForwardingError", () => {
 
   it("does not throw when logger is null", () => {
     expect(() => logPermissionForwardingError(null, "ignored")).not.toThrow();
+  });
+});
+
+// ── file permissions ───────────────────────────────────────────────────────
+
+describe("forwarding artifact permissions", () => {
+  let root: string;
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("writes a forwarded request owner-only", () => {
+    root = mkdtempSync(join(tmpdir(), "io-modes-"));
+    const filePath = join(root, "req.json");
+
+    writeJsonFileAtomic(null, filePath, { id: "req-1" });
+
+    expect(statSync(filePath).mode & 0o777).toBe(0o600);
+  });
+
+  it("creates a forwarding directory owner-only", () => {
+    root = mkdtempSync(join(tmpdir(), "io-modes-"));
+    const dirPath = join(root, "sessions", "parent", "requests");
+
+    expect(ensureDirectoryExists(null, dirPath, "requests")).toBe(true);
+
+    expect(statSync(dirPath).mode & 0o777).toBe(0o700);
   });
 });
 

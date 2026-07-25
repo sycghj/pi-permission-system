@@ -18,6 +18,10 @@ import {
   type ForwardedSessionApproval,
   type PermissionForwardingLocation,
 } from "#src/authority/permission-forwarding";
+import {
+  OWNER_ONLY_DIRECTORY_MODE,
+  OWNER_ONLY_FILE_MODE,
+} from "#src/log-file-permissions";
 import type { PermissionUiPromptSource } from "#src/permission-events";
 import type { DebugReviewLogger } from "#src/session-logger";
 
@@ -185,7 +189,7 @@ export function ensureDirectoryExists(
   description: string,
 ): boolean {
   try {
-    mkdirSync(path, { recursive: true });
+    mkdirSync(path, { recursive: true, mode: OWNER_ONLY_DIRECTORY_MODE });
     return true;
   } catch (error) {
     logPermissionForwardingError(
@@ -365,7 +369,12 @@ export function writeJsonFileAtomic(
   const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
 
   try {
-    writeFileSync(tempPath, JSON.stringify(value), "utf-8");
+    // `rename` preserves the temp file's mode, so setting it here is enough —
+    // a response overwriting an existing file also comes through a fresh temp.
+    writeFileSync(tempPath, JSON.stringify(value), {
+      encoding: "utf-8",
+      mode: OWNER_ONLY_FILE_MODE,
+    });
     renameSync(tempPath, filePath);
   } catch (error) {
     safeDeleteFile(logger, tempPath, "temporary permission-forwarding");
