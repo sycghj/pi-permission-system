@@ -98,16 +98,16 @@ This clamp is deny-preserving and, like `yoloMode`, applied at composition; when
 
 ## Runtime Knobs
 
-| Key                         | Default | Description                                                                                                                                                                |
-| --------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `debugLog`                  | `false` | Enables verbose diagnostic logging to `logs/pi-permission-system-debug.jsonl`                                                                                              |
-| `permissionReviewLog`       | `true`  | Enables the permission request/denial review log at `logs/pi-permission-system-permission-review.jsonl`                                                                    |
-| `yoloMode`                  | `false` | Auto-approves `ask` results instead of prompting when yolo mode is enabled                                                                                                 |
-| `doublePressToConfirm`      | `true`  | Requires a confirming second press of a decision hotkey in the inline TUI dialog (see below). TUI sessions only; set to `false` for single-press.                          |
-| `toolInputPreviewMaxLength` | `200`   | Max characters of inline JSON shown in permission prompts for tool inputs. Omit to use the default. Set to a large value to disable truncation.                            |
-| `toolTextSummaryMaxLength`  | `80`    | Max characters of inline pattern/path summaries (grep patterns, find globs, ls paths) in permission prompts. Omit to use the default.                                      |
-| `piInfrastructureReadPaths` | `[]`    | Extra directories to auto-allow for reads, bypassing the `external_directory` gate. Supports `~`/`$HOME` expansion and wildcard patterns (`*`, `?`).                       |
-| `authorizerChain`           | `[]`    | Ordered names of registered live-authority chain links to consult before the terminal authorizer (see [Authorizer chain](#authorizer-chain--case-by-case-decision-links)). |
+| Key                         | Default | Description                                                                                                                                                                                        |
+| --------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `debugLog`                  | `false` | Enables verbose diagnostic logging to `logs/pi-permission-system-debug.jsonl`                                                                                                                      |
+| `permissionReviewLog`       | `true`  | Enables the permission request/denial review log at `logs/pi-permission-system-permission-review.jsonl`. Records bash command strings verbatim — see [Log file sensitivity](#log-file-sensitivity) |
+| `yoloMode`                  | `false` | Auto-approves `ask` results instead of prompting when yolo mode is enabled                                                                                                                         |
+| `doublePressToConfirm`      | `true`  | Requires a confirming second press of a decision hotkey in the inline TUI dialog (see below). TUI sessions only; set to `false` for single-press.                                                  |
+| `toolInputPreviewMaxLength` | `200`   | Max characters of inline JSON shown in permission prompts for tool inputs. Omit to use the default. Set to a large value to disable truncation.                                                    |
+| `toolTextSummaryMaxLength`  | `80`    | Max characters of inline pattern/path summaries (grep patterns, find globs, ls paths) in permission prompts. Omit to use the default.                                                              |
+| `piInfrastructureReadPaths` | `[]`    | Extra directories to auto-allow for reads, bypassing the `external_directory` gate. Supports `~`/`$HOME` expansion and wildcard patterns (`*`, `?`).                                               |
+| `authorizerChain`           | `[]`    | Ordered names of registered live-authority chain links to consult before the terminal authorizer (see [Authorizer chain](#authorizer-chain--case-by-case-decision-links)).                         |
 
 Both logs write to `~/.pi/agent/extensions/pi-permission-system/logs/`.
 No debug output is printed to the terminal.
@@ -903,7 +903,36 @@ Additional behaviors:
 - The narrowed prompt is recomputed and returned on every turn but is byte-stable for a stable policy/agent, so the provider's prompt cache (tools + system prefix) is preserved rather than rewritten each turn
 - Extension-provided tools like `task`, `mcp`, and third-party tools are handled by exact registered name
 - Generic extension-tool approval prompts include a bounded input preview; built-in file tools use concise human-readable summaries
-- Permission review logs include bounded `toolInputPreview` values for non-bash/non-MCP tool calls
+- Permission review logs include bounded `toolInputPreview` values for non-bash/non-MCP tool calls, with sensitive-keyed values masked (see [Log file sensitivity](#log-file-sensitivity))
+
+---
+
+## Log file sensitivity
+
+The review log is enabled by default and records what the agent actually did, which means it records payload as well as decisions: the complete bash command string for every bash decision, and a bounded JSON preview of the tool input for other tools.
+The debug log carries the same payload when `debugLog` is on.
+
+Two protections apply.
+
+Both logs are created **owner-only** (`0600`, in a `0700` directory), and a log created by an earlier version is tightened on the next write.
+The permission-forwarding request and response files are written the same way.
+This closes the shared-host case: another user on the same machine cannot read them.
+
+Values bound to a **sensitive key name** — `authorization`, `token`, `secret`, `password`, `credential`, `cookie`, `api_key`, `private_key`, matched case-insensitively — are masked as `[redacted]` before anything is written.
+So a tool called with `{"authorization": "Bearer …"}` records `{"authorization": "[redacted]"}`.
+
+The boundary is worth stating exactly, because it is easy to over-read:
+
+> A value bound to a sensitive key name is masked; a secret embedded in a bash command string is not.
+
+A command string has no keys, so `deploy --token abc123` is logged verbatim.
+The extension deliberately does not try to guess which parts of a command look secret-shaped — see [ADR 0010](decisions/0010-permission-log-secret-exposure.md) for the measured reasoning.
+
+Practical guidance:
+
+- Treat both log files as sensitive when sharing them: scrub before pasting into an issue or a chat.
+- Set `"permissionReviewLog": false` (and leave `debugLog` off) for a session that will handle credentials on the command line.
+- Owner-only modes do not protect against anything running as you, including a backup or cloud-sync agent that copies your home directory.
 
 ---
 
