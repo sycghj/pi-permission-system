@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { ToolInputFormatterLookup } from "#src/tool-input-formatter-registry";
 
-// Mock logging collaborator before importing the module under test.
-vi.mock("../src/logging.js", () => ({
+// Mock the serialization collaborator before importing the module under test.
+vi.mock("../src/json-safe-stringify.js", () => ({
   safeJsonStringify: vi.fn((value: unknown) => JSON.stringify(value)),
 }));
 
-import { safeJsonStringify } from "#src/logging";
+import { safeJsonStringify } from "#src/json-safe-stringify";
 import {
   TOOL_INPUT_LOG_PREVIEW_MAX_LENGTH,
   TOOL_INPUT_PREVIEW_MAX_LENGTH,

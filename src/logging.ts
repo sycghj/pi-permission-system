@@ -4,35 +4,7 @@ import {
   EXTENSION_ID,
   type PermissionSystemExtensionConfig,
 } from "./extension-config";
-
-export function safeJsonStringify(value: unknown): string | undefined {
-  const seen = new WeakSet<object>();
-  return JSON.stringify(value, (_key, currentValue) => {
-    if (currentValue instanceof Error) {
-      return {
-        name: currentValue.name,
-        message: currentValue.message,
-        stack: currentValue.stack,
-      };
-    }
-
-    if (typeof currentValue === "bigint") {
-      return currentValue.toString();
-    }
-
-    if (typeof currentValue === "object" && currentValue !== null) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- JSON.stringify replacer receives any; currentValue is narrowed to object here
-      if (seen.has(currentValue)) {
-        return "[Circular]";
-      }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- same as above
-      seen.add(currentValue);
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return -- JSON.stringify replacer must return any
-    return currentValue;
-  });
-}
+import { safeJsonStringify } from "./json-safe-stringify";
 
 export interface PermissionSystemLogger {
   debug: (
