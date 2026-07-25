@@ -120,20 +120,12 @@ export class AccessPath {
    * unknown (a relative bash token after a non-literal `cd`).
    *
    * Carries no canonical alias and no absolute resolution — `matchValues()` is
-   * `[literal, ...matchAliases]` (or `[]` when empty) and `boundaryValue()` is
-   * `""` — so no spurious absolute or symlink-resolved rule can match (#393).
-   *
-   * `matchAliases` supplies extra match-only forms that do not change the
-   * display value: a win32 Git Bash POSIX absolute carries a backslash-separated
-   * alias so the separator-folding path matcher can match a `/tmp/*` rule (#533).
+   * `[literal]` (or `[]` when empty) and `boundaryValue()` is `""` — so no
+   * spurious absolute or symlink-resolved rule can match (#393).
    */
-  static forLiteral(
-    literal: string,
-    matchAliases: readonly string[] = [],
-  ): AccessPath {
+  static forLiteral(literal: string): AccessPath {
     if (!literal) return new AccessPath("", [], "");
-    const aliases = [...new Set([literal, ...matchAliases.filter(Boolean)])];
-    return new AccessPath(literal, aliases, "");
+    return new AccessPath(literal, [literal], "");
   }
 
   /**

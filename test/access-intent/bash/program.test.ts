@@ -355,10 +355,7 @@ describe("BashProgram", () => {
       it("keeps a non-mount POSIX absolute as a literal rule candidate", async () => {
         const program = await BashProgram.parse("cat /tmp/foo", winNormalizer);
         const candidate = program.pathRuleCandidates()[0];
-        expect(candidate.path.matchValues()).toEqual([
-          "/tmp/foo",
-          "\\tmp\\foo",
-        ]);
+        expect(candidate.path.matchValues()).toEqual(["/tmp/foo"]);
       });
 
       it("folds a drive-mount cd so a following traversal resolves under it", async () => {

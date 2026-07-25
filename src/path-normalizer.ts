@@ -62,8 +62,8 @@ export class PathNormalizer {
   }
 
   /** Build a literal-only AccessPath (unknown base after a non-literal `cd`). */
-  forLiteral(literal: string, matchAliases?: readonly string[]): AccessPath {
-    return AccessPath.forLiteral(literal, matchAliases);
+  forLiteral(literal: string): AccessPath {
+    return AccessPath.forLiteral(literal);
   }
 
   /**
@@ -86,17 +86,14 @@ export class PathNormalizer {
         return AccessPath.forDevice(token);
       case "drive-mount":
         return this.forPath(shape.windowsPath, options);
-      case "posix-absolute": {
+      case "posix-absolute":
         // A non-mount POSIX absolute (`/tmp`, `/usr`) has an install-dependent
         // Windows target this package cannot know, so it is kept literal: always
         // external, matched and displayed as typed, never fabricated into
-        // `c:\tmp` (#533). The win32 path matcher folds a rule's separators
-        // (`/` -> `\`), so a forward-slash value is unmatchable; carry a
-        // backslash match alias so a natural `/tmp/*` external_directory rule
-        // still resolves, while `value()` stays as typed for display.
-        const literal = normalizePathPolicyLiteral(token);
-        return this.forLiteral(literal, [literal.replaceAll("/", "\\")]);
-      }
+        // `c:\tmp` (#533). The win32 path matcher folds separators on both the
+        // rule and the value (#653), so a natural `/tmp/*` rule matches the
+        // as-typed literal directly.
+        return this.forLiteral(normalizePathPolicyLiteral(token));
       case "plain":
         return this.forPath(token, options);
     }

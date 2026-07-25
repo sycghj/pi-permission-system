@@ -250,11 +250,11 @@ describe("PathNormalizer", () => {
 
     test("forBashToken keeps a non-mount POSIX absolute as a literal", () => {
       const ap = normalizer.forBashToken("/tmp/foo");
-      // value() (display) stays as typed; matchValues() carries a backslash
-      // alias so the win32 separator-folding matcher can match a /tmp/* rule.
+      // Matched and displayed as typed: the matcher folds separators on both
+      // the rule and the value, so a /tmp/* rule resolves without an alias.
       expect(ap.value()).toBe("/tmp/foo");
       expect(ap.boundaryValue()).toBe("");
-      expect(ap.matchValues()).toEqual(["/tmp/foo", "\\tmp\\foo"]);
+      expect(ap.matchValues()).toEqual(["/tmp/foo"]);
     });
 
     test("interpretBashCdTarget translates a drive-mount target to absolute", () => {
