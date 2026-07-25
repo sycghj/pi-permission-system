@@ -47,8 +47,9 @@ Tool-input paths (`read`/`write`/`edit`) keep native win32 semantics: Node's `fs
 ## Consequences
 
 - Non-mount POSIX absolutes are always external on win32 and cannot resolve inside the working directory, so they always reach the `external_directory` gate — conservative by design.
-- Because the win32 path matcher folds a rule's separators (`/` → `\`), a forward-slash match value is unmatchable by a win32 rule.
-  A win32 POSIX-absolute literal therefore carries a backslash **match alias** (`\tmp\foo`) while its display value stays as typed (`/tmp/foo`), so a natural `external_directory` rule (`/tmp/*`) still suppresses the prompt.
+- A win32 POSIX-absolute literal is matched and displayed exactly as typed (`/tmp/foo`), so a natural `external_directory` rule (`/tmp/*`) suppresses the prompt.
+  This relies on the win32 path matcher folding separators on **both** the rule and the value ([#653]).
+  It originally carried a backslash match alias (`\tmp\foo`) instead, because the fold reached only the rule pattern; that alias was removed once the fold became symmetric.
 - `PathNormalizer` owns the win32/MSYS branching (`forBashToken`, `interpretBashCdTarget`, `isBoundaryOutsideWorkingDirectory`); the shape knowledge lives in the pure, separately-tested `msys-bash-tokens.ts`.
 - The `PermissionsService` RPC path-query surface is unchanged: an external query for a POSIX-shaped path on win32 still answers with win32 semantics, since a path query carries no bash-surface context.
   This is an accepted inconsistency, to revisit only if a consumer reports it.
@@ -56,4 +57,5 @@ Tool-input paths (`read`/`write`/`edit`) keep native win32 semantics: Node's `fs
 [#382]: https://github.com/gotgenes/pi-packages/issues/382
 [#508]: https://github.com/gotgenes/pi-packages/issues/508
 [#533]: https://github.com/gotgenes/pi-packages/issues/533
+[#653]: https://github.com/gotgenes/pi-packages/issues/653
 [earendil-works/pi#4731]: https://github.com/earendil-works/pi/issues/4731

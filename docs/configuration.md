@@ -618,15 +618,18 @@ Infrastructure directories include:
 Write tools (`write`, `edit`) to infrastructure paths are **not** auto-allowed and still go through the gate.
 
 On Windows, path matching for `external_directory`, `path`, and the path-bearing tools is case-insensitive and tolerant of either separator (`\` or `/`), matching the case-insensitive filesystem.
-A mixed-case allow override such as `~/AppData/Roaming/npm/node_modules/@earendil-works/pi-coding-agent/*` therefore matches a lowercased, backslash-normalized path value.
-POSIX matching remains case-sensitive.
+The separator folding applies to the rule pattern **and** to the value it is matched against, so either side may be written with either separator.
+A mixed-case allow override such as `~/AppData/Roaming/npm/node_modules/@earendil-works/pi-coding-agent/*` therefore matches a lowercased, backslash-normalized path value, and a forward-slash rule such as `"/dev/null"` matches a value that is also spelled with forward slashes.
+POSIX matching remains case-sensitive and does not fold separators.
 
 #### Git Bash / MSYS paths on Windows
 
 On Windows, Pi executes bash commands through Git Bash, so a bash token that looks like a POSIX absolute path carries MSYS mount semantics rather than native `node:path.win32` semantics.
 The `external_directory` and `path` gates interpret bash tokens accordingly (tool-input paths for `read`/`write`/`edit` keep native Windows semantics, since those tools resolve them through Node's filesystem):
 
-- The safe device paths (`/dev/null`, `/dev/stdin`, `/dev/stdout`, `/dev/stderr`) are recognized as MSYS devices and never trigger the gate — the same exclusion that holds on POSIX, so `echo hi > /dev/null` does not prompt.
+- The safe device paths (`/dev/null`, `/dev/stdin`, `/dev/stdout`, `/dev/stderr`) are recognized as MSYS devices rather than filesystem paths, so they never trigger the `external_directory` gate — the same exclusion that holds on POSIX.
+  The cross-cutting `path` surface still governs them on both platforms: if a `path` rule matches the token, it decides.
+  A device is therefore allow-listed the way any other path is, written as typed — `path: { "/dev/null": "allow" }`.
 - MSYS drive mounts (`/c/…`, `/d/…`) are translated to their Windows equivalent (`C:\…`), so a project file referenced through a mount is matched against its real Windows path and an in-CWD mount is not flagged.
 - Every other POSIX-absolute token (`/tmp/foo`, `/usr/bin`) has an install-dependent target this extension cannot resolve deterministically (Git Bash mounts `/tmp` to `%TEMP%`, MSYS2 to its own root), so it is treated as an external path matched and displayed exactly as typed, never rewritten to `C:\tmp\foo`.
 
