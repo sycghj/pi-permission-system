@@ -53,4 +53,6 @@ This makes it easy to verify which files the extension actually loaded:
 - This is a permission decision layer, not a sandbox — for true isolation see [Agent Sandboxes](https://engine.build/lab/agent-sandboxes)
 - The review log records bash command strings verbatim.
   Log files are created owner-only (`0600`), and values bound to a sensitive key name (`authorization`, `token`, `password`, …) are masked — but a secret embedded in a command string is not.
-  See [Log file sensitivity](configuration.md#log-file-sensitivity) and [ADR 0010](decisions/0010-permission-log-secret-exposure.md).
+  See [Log file sensitivity](configuration.md#log-file-sensitivity) and [ADR 0010].
+
+[ADR 0010]: https://github.com/gotgenes/pi-packages/blob/main/packages/pi-permission-system/docs/decisions/0010-permission-log-secret-exposure.md

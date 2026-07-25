@@ -926,13 +926,15 @@ The boundary is worth stating exactly, because it is easy to over-read:
 > A value bound to a sensitive key name is masked; a secret embedded in a bash command string is not.
 
 A command string has no keys, so `deploy --token abc123` is logged verbatim.
-The extension deliberately does not try to guess which parts of a command look secret-shaped — see [ADR 0010](decisions/0010-permission-log-secret-exposure.md) for the measured reasoning.
+The extension deliberately does not try to guess which parts of a command look secret-shaped — see [ADR 0010] for the measured reasoning.
 
 Practical guidance:
 
 - Treat both log files as sensitive when sharing them: scrub before pasting into an issue or a chat.
 - Set `"permissionReviewLog": false` (and leave `debugLog` off) for a session that will handle credentials on the command line.
 - Owner-only modes do not protect against anything running as you, including a backup or cloud-sync agent that copies your home directory.
+
+[ADR 0010]: https://github.com/gotgenes/pi-packages/blob/main/packages/pi-permission-system/docs/decisions/0010-permission-log-secret-exposure.md
 
 ---
 
