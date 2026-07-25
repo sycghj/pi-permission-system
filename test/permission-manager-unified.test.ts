@@ -76,8 +76,8 @@ describe("PermissionManager — injected platform (#510)", () => {
   it("win32: a /tmp* allow rule suppresses a Git Bash /tmp path (#533)", async () => {
     // End to end: parse `ls /tmp` under win32, take the token's match values,
     // and confirm a natural `/tmp*` external_directory allow rule matches them.
-    // The win32 matcher folds the rule's separators (/ -> \), so the literal
-    // carries a backslash match alias for this to resolve.
+    // The win32 matcher folds separators on both the rule and the value (#653),
+    // so the as-typed literal resolves without a backslash match alias.
     const program = await BashProgram.parse(
       "ls /tmp",
       new PathNormalizer(win32PathFlavor, "C:/projects/app"),
@@ -100,6 +100,36 @@ describe("PermissionManager — injected platform (#510)", () => {
       [],
     );
     expect(noRule.state).not.toBe("allow");
+  });
+
+  it("win32: a /dev/null path allow rule suppresses the Git Bash device prompt (#653)", async () => {
+    // The reported repro: `echo hi > /dev/null` reaches the `path` surface with
+    // the device spelled as typed, so a rule written the same way must win over
+    // a preceding universal ask.
+    const program = await BashProgram.parse(
+      "echo hi > /dev/null",
+      new PathNormalizer(win32PathFlavor, "C:\\projects\\app"),
+    );
+    const values = program.pathRuleCandidates()[0].path.matchValues();
+    expect(values).toEqual(["/dev/null"]);
+
+    const manager = new PermissionManager({
+      globalConfigPath: "/nonexistent/config.json",
+      agentsDir: "/nonexistent/agents",
+      flavor: win32PathFlavor,
+    });
+
+    const allowed = manager.check(
+      { kind: "path-values", surface: "path", values },
+      [sessionRule("path", "*", "ask"), sessionRule("path", "/dev/null")],
+    );
+    expect(allowed.state).toBe("allow");
+
+    const askedWithoutRule = manager.check(
+      { kind: "path-values", surface: "path", values },
+      [sessionRule("path", "*", "ask")],
+    );
+    expect(askedWithoutRule.state).toBe("ask");
   });
 });
 

@@ -327,6 +327,46 @@ describe("wildcardMatch", () => {
       ).toBe(true);
     });
   });
+
+  describe("windowsSeparators folds both operands (#653)", () => {
+    test("a forward-slash pattern matches a forward-slash value", () => {
+      expect(
+        wildcardMatch("/dev/null", "/dev/null", { windowsSeparators: true }),
+      ).toBe(true);
+    });
+
+    test("a forward-slash glob matches a forward-slash device value", () => {
+      expect(
+        wildcardMatch("/dev/*", "/dev/null", {
+          caseInsensitive: true,
+          windowsSeparators: true,
+        }),
+      ).toBe(true);
+    });
+
+    test("a forward-slash relative pattern matches a forward-slash value", () => {
+      expect(
+        wildcardMatch("src/*", "src/foo.ts", { windowsSeparators: true }),
+      ).toBe(true);
+    });
+
+    test("a backslash pattern matches a forward-slash value", () => {
+      expect(
+        wildcardMatch("src\\*", "src/foo.ts", { windowsSeparators: true }),
+      ).toBe(true);
+    });
+
+    test("the value fold is off by default", () => {
+      expect(wildcardMatch("src\\*", "src/foo.ts")).toBe(false);
+      expect(wildcardMatch("/dev/null", "\\dev\\null")).toBe(false);
+    });
+
+    test("folding separators does not make unrelated values match", () => {
+      expect(
+        wildcardMatch("/dev/null", "/dev/stdout", { windowsSeparators: true }),
+      ).toBe(false);
+    });
+  });
 });
 
 describe("? single-character wildcard", () => {

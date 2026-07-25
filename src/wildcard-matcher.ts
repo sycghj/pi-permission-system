@@ -17,8 +17,11 @@ export type WildcardPatternMatch<TState> = {
  *
  * - `caseInsensitive` compiles the pattern with the `i` flag so a mixed-case
  *   pattern matches a lowercased (canonicalized) path value.
- * - `windowsSeparators` rewrites `/` to `\` in the expanded pattern so a
- *   forward-slash pattern matches a backslash-separated path value.
+ * - `windowsSeparators` rewrites `/` to `\` in both the expanded pattern and
+ *   the matched value, so two spellings of the same path match regardless of
+ *   which separator either side was written with. Folding only the pattern
+ *   leaves every forward-slash value (a Git Bash device, an as-typed literal)
+ *   unmatchable (#653).
  */
 export interface WildcardMatchOptions {
   caseInsensitive?: boolean;
@@ -34,10 +37,7 @@ export function compileWildcardPattern<TState>(
   state: TState,
   options?: WildcardMatchOptions,
 ): CompiledWildcardPattern<TState> {
-  let expanded = expandHomePath(pattern);
-  if (options?.windowsSeparators) {
-    expanded = expanded.replaceAll("/", "\\");
-  }
+  const expanded = foldSeparators(expandHomePath(pattern), options);
   let escaped = expanded
     .split("*")
     .map((part) => escapeRegExp(part).replaceAll("\\?", "."))
@@ -95,7 +95,19 @@ export function wildcardMatch(
   value: string,
   options?: WildcardMatchOptions,
 ): boolean {
-  return compileWildcardPattern(pattern, null, options).regex.test(value);
+  return compileWildcardPattern(pattern, null, options).regex.test(
+    foldSeparators(value, options),
+  );
+}
+
+/**
+ * Apply the `windowsSeparators` half of the fold to one operand.
+ *
+ * Called for the pattern at compile time and for the value at match time —
+ * the fold is an equivalence relation, so both sides must pass through it.
+ */
+function foldSeparators(value: string, options?: WildcardMatchOptions): string {
+  return options?.windowsSeparators ? value.replaceAll("/", "\\") : value;
 }
 
 export function findCompiledWildcardMatchForNames<TState>(

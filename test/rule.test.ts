@@ -415,6 +415,49 @@ describe("evaluate", () => {
     expect(result.action).toBe("allow");
   });
 
+  test("win32: a forward-slash path pattern matches a forward-slash value (#653)", () => {
+    // A Git Bash device token reaches the `path` surface spelled as typed, so
+    // the fold has to normalize the value as well as the rule pattern.
+    const askAll: Rule = {
+      surface: "path",
+      pattern: "*",
+      action: "ask",
+      layer: "config",
+      origin: "global",
+    };
+    const allowDevice: Rule = {
+      surface: "path",
+      pattern: "/dev/null",
+      action: "allow",
+      layer: "config",
+      origin: "global",
+    };
+    const result = evaluate(
+      "path",
+      "/dev/null",
+      [askAll, allowDevice],
+      win32PathFlavor,
+    );
+    expect(result.action).toBe("allow");
+  });
+
+  test("win32: bash surface keeps its separators unfolded (not a path surface)", () => {
+    const result = evaluate(
+      "bash",
+      "cat \\tmp\\x",
+      [
+        {
+          surface: "bash",
+          pattern: "cat /tmp/x",
+          action: "allow",
+          origin: "global",
+        },
+      ],
+      win32PathFlavor,
+    );
+    expect(result.action).toBe("ask");
+  });
+
   test("win32: bash surface stays case-sensitive (not a path surface)", () => {
     const result = evaluate(
       "bash",
