@@ -45,6 +45,54 @@ describe("createPermissionSystemLogger", () => {
     });
   }
 
+  describe("redaction", () => {
+    test("masks sensitive-keyed values before they reach the review log", () => {
+      const logger = makeLogger();
+
+      logger.review("permission_request.waiting", {
+        toolName: "http",
+        headers: { authorization: "Bearer TEST_VALUE" },
+      });
+
+      const written = readFileSync(reviewLogPath, "utf8");
+      expect(written).not.toContain("TEST_VALUE");
+      expect(JSON.parse(written.trim())).toMatchObject({
+        toolName: "http",
+        headers: { authorization: "[redacted]" },
+      });
+    });
+
+    test("masks sensitive-keyed values in the debug log too", () => {
+      config.debugLog = true;
+      const logger = makeLogger();
+
+      logger.debug("permission.decision", {
+        toolName: "http",
+        apiKey: "sk-real-value",
+      });
+
+      const written = readFileSync(debugLogPath, "utf8");
+      expect(written).not.toContain("sk-real-value");
+      expect(JSON.parse(written.trim())).toMatchObject({
+        toolName: "http",
+        apiKey: "[redacted]",
+      });
+    });
+
+    test("leaves a bash command string unredacted, as documented", () => {
+      const logger = makeLogger();
+
+      logger.review("permission_request.waiting", {
+        toolName: "bash",
+        command: "deploy --token abc123",
+      });
+
+      expect(readFileSync(reviewLogPath, "utf8")).toContain(
+        "deploy --token abc123",
+      );
+    });
+  });
+
   test("respects debug toggle and keeps review log enabled by default", () => {
     const logger = makeLogger();
 

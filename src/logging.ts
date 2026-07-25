@@ -4,7 +4,7 @@ import {
   EXTENSION_ID,
   type PermissionSystemExtensionConfig,
 } from "./extension-config";
-import { safeJsonStringify } from "./json-safe-stringify";
+import { redactedJsonStringify } from "./log-redaction";
 
 export interface PermissionSystemLogger {
   debug: (
@@ -41,7 +41,7 @@ export function createPermissionSystemLogger(
     }
 
     try {
-      const line = safeJsonStringify({
+      const line = redactedJsonStringify({
         timestamp: new Date().toISOString(),
         extension: EXTENSION_ID,
         stream,
