@@ -7,27 +7,47 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
-import { DEFAULT_EXTENSION_CONFIG } from "#src/extension-config";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import {
+  DEFAULT_EXTENSION_CONFIG,
+  type PermissionSystemExtensionConfig,
+} from "#src/extension-config";
 import { createPermissionSystemLogger } from "#src/logging";
 
-test("Permission-system logger respects debug toggle and keeps review log enabled by default", () => {
-  const baseDir = mkdtempSync(join(tmpdir(), "pi-permission-system-logs-"));
-  const logsDir = join(baseDir, "logs");
-  const debugLogPath = join(logsDir, "debug.jsonl");
-  const reviewLogPath = join(logsDir, "review.jsonl");
-  const config = { ...DEFAULT_EXTENSION_CONFIG };
-  const logger = createPermissionSystemLogger({
-    getConfig: () => config,
-    debugLogPath,
-    reviewLogPath,
-    ensureLogsDirectory: () => {
-      mkdirSync(logsDir, { recursive: true });
-      return undefined;
-    },
+describe("createPermissionSystemLogger", () => {
+  let baseDir: string;
+  let logsDir: string;
+  let debugLogPath: string;
+  let reviewLogPath: string;
+  let config: PermissionSystemExtensionConfig;
+
+  beforeEach(() => {
+    baseDir = mkdtempSync(join(tmpdir(), "pi-permission-system-logs-"));
+    logsDir = join(baseDir, "logs");
+    debugLogPath = join(logsDir, "debug.jsonl");
+    reviewLogPath = join(logsDir, "review.jsonl");
+    config = { ...DEFAULT_EXTENSION_CONFIG };
   });
 
-  try {
+  afterEach(() => {
+    rmSync(baseDir, { recursive: true, force: true });
+  });
+
+  function makeLogger() {
+    return createPermissionSystemLogger({
+      getConfig: () => config,
+      debugLogPath,
+      reviewLogPath,
+      ensureLogsDirectory: () => {
+        mkdirSync(logsDir, { recursive: true });
+        return undefined;
+      },
+    });
+  }
+
+  test("respects debug toggle and keeps review log enabled by default", () => {
+    const logger = makeLogger();
+
     const initialDebugWarning = logger.debug("debug.disabled", {
       sample: true,
     });
@@ -45,7 +65,5 @@ test("Permission-system logger respects debug toggle and keeps review log enable
     expect(enabledDebugWarning).toBe(undefined);
     expect(existsSync(debugLogPath)).toBe(true);
     expect(readFileSync(debugLogPath, "utf8")).toMatch(/debug\.enabled/);
-  } finally {
-    rmSync(baseDir, { recursive: true, force: true });
-  }
+  });
 });
