@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, test } from "vitest";
 
 import type { PermissionSystemExtensionConfig } from "#src/extension-config";
 import {
   detectMisplacedPermissionKeys,
+  ensurePermissionSystemLogsDirectory,
   isYoloModeEnabled,
   normalizePermissionSystemConfig,
 } from "#src/extension-config";
@@ -174,6 +178,34 @@ describe("normalizePermissionSystemConfig", () => {
   it("omits authorizerChain when absent", () => {
     const result = normalizePermissionSystemConfig({});
     expect("authorizerChain" in result).toBe(false);
+  });
+});
+
+describe("ensurePermissionSystemLogsDirectory", () => {
+  let baseDir: string;
+
+  beforeEach(() => {
+    baseDir = mkdtempSync(join(tmpdir(), "pi-permission-system-logsdir-"));
+  });
+
+  afterEach(() => {
+    rmSync(baseDir, { recursive: true, force: true });
+  });
+
+  test("creates the logs directory owner-only", () => {
+    const logsDir = join(baseDir, "extensions", "pi-permission-system", "logs");
+
+    expect(ensurePermissionSystemLogsDirectory(logsDir)).toBe(undefined);
+    expect(statSync(logsDir).mode & 0o777).toBe(0o700);
+  });
+
+  test("tightens a directory inherited from an earlier version", () => {
+    const logsDir = join(baseDir, "logs");
+    mkdirSync(logsDir);
+    chmodSync(logsDir, 0o755);
+
+    expect(ensurePermissionSystemLogsDirectory(logsDir)).toBe(undefined);
+    expect(statSync(logsDir).mode & 0o777).toBe(0o700);
   });
 });
 

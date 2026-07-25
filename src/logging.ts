@@ -4,6 +4,10 @@ import {
   EXTENSION_ID,
   type PermissionSystemExtensionConfig,
 } from "./extension-config";
+import {
+  OWNER_ONLY_FILE_MODE,
+  restrictExistingPathToOwner,
+} from "./log-file-permissions";
 import { redactedJsonStringify } from "./log-redaction";
 
 export interface PermissionSystemLogger {
@@ -28,6 +32,10 @@ export function createPermissionSystemLogger(
   options: PermissionSystemLoggerOptions,
 ): PermissionSystemLogger {
   const { debugLogPath, reviewLogPath, ensureLogsDirectory } = options;
+  // Per-session, so a log inherited from an earlier version is tightened once
+  // rather than on every line. Lives in the closure because the factory is
+  // re-invoked per session, unlike module scope, which now outlives one.
+  const hardened = new Set<string>();
 
   const writeLine = (
     stream: "debug" | "review",
@@ -51,7 +59,14 @@ export function createPermissionSystemLogger(
       if (!line) {
         return `Failed to write permission-system ${stream} log '${path}': event could not be serialized.`;
       }
-      appendFileSync(path, `${line}\n`, "utf-8");
+      appendFileSync(path, `${line}\n`, {
+        encoding: "utf-8",
+        mode: OWNER_ONLY_FILE_MODE,
+      });
+      if (!hardened.has(path)) {
+        hardened.add(path);
+        restrictExistingPathToOwner(path, OWNER_ONLY_FILE_MODE);
+      }
       return undefined;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

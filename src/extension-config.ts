@@ -1,11 +1,14 @@
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-
 import type {
   ShellToolsConfig,
   UnifiedPermissionConfig,
 } from "./config-loader";
+import {
+  OWNER_ONLY_DIRECTORY_MODE,
+  restrictExistingPathToOwner,
+} from "./log-file-permissions";
 
 export const EXTENSION_ID = "pi-permission-system";
 
@@ -94,7 +97,11 @@ export function ensurePermissionSystemLogsDirectory(
   logsDir: string,
 ): string | undefined {
   try {
-    mkdirSync(logsDir, { recursive: true });
+    // `recursive` applies the mode to every directory this creates, so a fresh
+    // install also gets an owner-only extension config dir. Directories that
+    // already exist are untouched by `mkdirSync`, hence the explicit tighten.
+    mkdirSync(logsDir, { recursive: true, mode: OWNER_ONLY_DIRECTORY_MODE });
+    restrictExistingPathToOwner(logsDir, OWNER_ONLY_DIRECTORY_MODE);
     return undefined;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

@@ -1,9 +1,12 @@
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  statSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -44,6 +47,31 @@ describe("createPermissionSystemLogger", () => {
       },
     });
   }
+
+  describe("file permissions", () => {
+    test("creates the review log owner-only", () => {
+      makeLogger().review("permission_request.waiting", { toolName: "write" });
+
+      expect(statSync(reviewLogPath).mode & 0o777).toBe(0o600);
+    });
+
+    test("creates the debug log owner-only", () => {
+      config.debugLog = true;
+      makeLogger().debug("permission.decision", { toolName: "write" });
+
+      expect(statSync(debugLogPath).mode & 0o777).toBe(0o600);
+    });
+
+    test("tightens a log inherited from an earlier version on next write", () => {
+      mkdirSync(logsDir, { recursive: true });
+      writeFileSync(reviewLogPath, "{}\n", "utf-8");
+      chmodSync(reviewLogPath, 0o644);
+
+      makeLogger().review("permission_request.waiting", { toolName: "write" });
+
+      expect(statSync(reviewLogPath).mode & 0o777).toBe(0o600);
+    });
+  });
 
   describe("redaction", () => {
     test("masks sensitive-keyed values before they reach the review log", () => {
