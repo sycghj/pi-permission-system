@@ -186,8 +186,16 @@ describe("findCompiledWildcardMatchForNames", () => {
     const compiled = compileWildcardPattern("bash *", "ask");
     expect(compiled.pattern).toBe("bash *");
     expect(compiled.state).toBe("ask");
-    expect(compiled.regex.test("bash ls -la")).toBe(true);
-    expect(compiled.regex.test("echo hello")).toBe(false);
+    expect(compiled.matches("bash ls -la")).toBe(true);
+    expect(compiled.matches("echo hello")).toBe(false);
+  });
+
+  test("a compiled pattern folds the value it is handed (#653)", () => {
+    const compiled = compileWildcardPattern("/dev/*", "allow", {
+      windowsSeparators: true,
+    });
+    expect(compiled.matches("/dev/null")).toBe(true);
+    expect(compiled.matches("\\dev\\null")).toBe(true);
   });
 });
 
@@ -209,9 +217,9 @@ describe("wildcardMatch", () => {
     expect(wildcardMatch("node *", command)).toBe(true);
   });
 
-  test("compileWildcardPattern regex matches multiline string", () => {
+  test("compileWildcardPattern matches a multiline string", () => {
     const compiled = compileWildcardPattern("*", "allow");
-    expect(compiled.regex.test("a\nb")).toBe(true);
+    expect(compiled.matches("a\nb")).toBe(true);
   });
 
   test("exact pattern matches identical value", () => {
@@ -451,10 +459,10 @@ describe("home path expansion in patterns", () => {
     expect(compiled.pattern).toBe("$HOME/dev/*");
   });
 
-  test("compileWildcardPattern expanded regex matches the expanded path", () => {
+  test("compileWildcardPattern expanded pattern matches the expanded path", () => {
     const compiled = compileWildcardPattern("~/dev/*", "allow");
     const expandedFile = join(FAKE_HOME, "dev/file.ts");
-    expect(compiled.regex.test(expandedFile)).toBe(true);
+    expect(compiled.matches(expandedFile)).toBe(true);
   });
 
   test("non-home pattern is unaffected", () => {
