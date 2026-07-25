@@ -2,8 +2,11 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { ToolInputFormatterLookup } from "#src/tool-input-formatter-registry";
 
-// Mock the serialization collaborator before importing the module under test.
-vi.mock("../src/json-safe-stringify.js", () => ({
+// Mock the prompt-path serializer before importing the module under test.
+// The rest of the module stays real — log-redaction.ts builds on
+// createJsonSafeReplacer, and a literal factory would blank it out.
+vi.mock("../src/json-safe-stringify.js", async (importActual) => ({
+  ...(await importActual<typeof import("../src/json-safe-stringify.js")>()),
   safeJsonStringify: vi.fn((value: unknown) => JSON.stringify(value)),
 }));
 
@@ -277,27 +280,73 @@ describe("ToolPreviewFormatter.formatToolInputForPrompt — custom formatter sea
 // ── formatGenericToolInputForLog ──────────────────────────────────────────
 
 describe("ToolPreviewFormatter.formatGenericToolInputForLog", () => {
+  // The log path serializes through redactedJsonStringify, not the mocked
+  // prompt-path serializer, so these exercise real serialization.
   test("returns undefined when serialization yields empty string", () => {
-    mockedStringify.mockReturnValue(undefined);
     const f = makeFormatter();
     expect(f.formatGenericToolInputForLog({})).toBeUndefined();
   });
 
   test("returns prefixed input preview", () => {
-    mockedStringify.mockReturnValue('{"k":"v"}');
     const f = makeFormatter();
     expect(f.formatGenericToolInputForLog({ k: "v" })).toBe('input {"k":"v"}');
   });
 
   test("truncates at constructor toolInputLogPreviewMaxLength", () => {
-    const longJson = `{"k":"${"x".repeat(50)}"}`;
-    mockedStringify.mockReturnValue(longJson);
     const f = makeFormatter({ toolInputLogPreviewMaxLength: 10 });
-    const result = f.formatGenericToolInputForLog({});
+    const result = f.formatGenericToolInputForLog({ k: "x".repeat(50) });
     expect(result).toBeDefined();
     const preview = result!.slice("input ".length);
     expect(preview.length).toBe(11); // 10 + "…"
     expect(preview.endsWith("…")).toBe(true);
+  });
+
+  test("masks a sensitive-keyed value in the logged preview", () => {
+    const f = makeFormatter();
+    expect(
+      f.formatGenericToolInputForLog({
+        url: "https://example.test",
+        authorization: "Bearer TEST_VALUE",
+      }),
+    ).toBe('input {"url":"https://example.test","authorization":"[redacted]"}');
+  });
+});
+
+// ── prompt-vs-log redaction boundary ──────────────────────────────────────
+
+describe("ToolPreviewFormatter redaction boundary", () => {
+  // Both paths serialize for real here: the invariant is about what each one
+  // emits, so asserting against a stubbed serializer would prove nothing.
+  beforeEach(() => {
+    mockedStringify.mockImplementation((value: unknown) =>
+      JSON.stringify(value),
+    );
+  });
+
+  const input = { authorization: "Bearer TEST_VALUE" };
+
+  test("masks the value in the log preview but not in the ask-prompt", () => {
+    const f = makeFormatter();
+
+    expect(f.formatGenericToolInputForLog(input)).toBe(
+      'input {"authorization":"[redacted]"}',
+    );
+    // The user must see the real input to make a permission decision.
+    expect(f.formatToolInputForPrompt("http", input)).toBe(
+      'with input {"authorization":"Bearer TEST_VALUE"}',
+    );
+  });
+
+  test("masks a generic tool's input reaching the review log", () => {
+    const f = makeFormatter();
+
+    expect(
+      f.getToolInputPreviewForLog(
+        makeResult("http"),
+        input,
+        new Set(["read", "write", "edit"]),
+      ),
+    ).toBe('input {"authorization":"[redacted]"}');
   });
 });
 

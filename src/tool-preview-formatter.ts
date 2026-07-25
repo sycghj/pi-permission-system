@@ -2,6 +2,7 @@ import { classifyToolKind, isMcpCheck } from "./access-intent/tool-kind";
 import type { PermissionSystemExtensionConfig } from "./extension-config";
 import type { ToolInputFormatterLookup } from "./tool-input-formatter-registry";
 import {
+  serializeRedactedToolInputPreview,
   serializeToolInputPreview,
   TOOL_INPUT_LOG_PREVIEW_MAX_LENGTH,
   TOOL_INPUT_PREVIEW_MAX_LENGTH,
@@ -145,9 +146,12 @@ export class ToolPreviewFormatter {
 
   // ── Log formatting ──────────────────────────────────────────────────────
 
-  /** Serialize `input` to inline JSON and truncate at `toolInputLogPreviewMaxLength`. */
+  /**
+   * Serialize `input` to inline JSON and truncate at
+   * `toolInputLogPreviewMaxLength`, masking sensitive-keyed values.
+   */
   formatGenericToolInputForLog(input: unknown): string | undefined {
-    const inline = serializeToolInputPreview(input);
+    const inline = serializeRedactedToolInputPreview(input);
     return inline
       ? `input ${truncateInlineText(inline, this.options.toolInputLogPreviewMaxLength)}`
       : undefined;
