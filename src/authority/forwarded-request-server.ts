@@ -5,6 +5,7 @@ import {
 } from "#src/authority/forwarder-context";
 import type { PermissionPromptDecision } from "#src/authority/permission-dialog";
 import {
+  type ForwardedAccessFacts,
   type ForwardedAccessIntent,
   type ForwardedPermissionRequest,
   type ForwardedPermissionResponse,
@@ -93,7 +94,14 @@ function formatForwardedPermissionPrompt(
 /**
  * Map a forwarded request onto the escalated ask's details, carrying the
  * forwarded provenance (requester agent/session + the child's original display
- * projection) so `LocalUserAuthorizer` emits a non-degraded broadcast (#292).
+ * projection) so `LocalUserAuthorizer` emits a non-degraded broadcast (#292),
+ * plus the child-fixed access facts so the serving node's `Authorizer` chain
+ * judges a forwarded ask on the same evidence as a local one (ADR 0008; #635).
+ *
+ * The display `surface` and the fact `surface` are distinct and both belong
+ * here: the former is the child's tool name (what the UI shows), the latter the
+ * gate surface the rule fired on (what the bounded-delegation checkpoint
+ * excludes on).
  */
 function buildForwardedAskDetails(
   request: ForwardedPermissionRequest,
@@ -114,6 +122,33 @@ function buildForwardedAskDetails(
     ...(request.sessionApproval
       ? { sessionApproval: request.sessionApproval }
       : {}),
+    // Absent for a version-skew request that carried no intent — which the
+    // delegation envelope reads as "surface undetermined" and fail-safes to
+    // excluded, so absence must stay absence rather than become `undefined`.
+    ...(request.accessIntent
+      ? { accessIntent: toAccessFacts(request.accessIntent) }
+      : {}),
+  };
+}
+
+/**
+ * Project the wire intent down to the child-fixed access facts an `Authorizer`
+ * may see.
+ *
+ * Field-by-field rather than a spread, because this is a disclosure boundary:
+ * `requesterCwd` and `principal` are requester identity for the serving node's
+ * own resolution (ADR 0008 §3) and stay off the ask details. A link that needs
+ * requester identity reads `details.forwarding`. `ForwardedAccessIntent`
+ * extends `ForwardedAccessFacts`, so a spread would type-check while widening
+ * disclosure at runtime; the explicit return type makes any future field on
+ * `ForwardedAccessFacts` a compile error here until it is deliberately
+ * projected or deliberately withheld.
+ */
+function toAccessFacts(intent: ForwardedAccessIntent): ForwardedAccessFacts {
+  return {
+    surface: intent.surface,
+    matchValues: intent.matchValues,
+    boundaryValue: intent.boundaryValue,
   };
 }
 

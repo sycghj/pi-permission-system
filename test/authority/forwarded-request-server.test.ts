@@ -1,8 +1,17 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
+import type { Authorizer } from "#src/authority/authorizer";
+import { encloseInDelegationEnvelope } from "#src/authority/delegation-envelope";
 import { ForwardedRequestServer } from "#src/authority/forwarded-request-server";
-import type { ForwardedPermissionResponse } from "#src/authority/permission-forwarding";
+import type { PermissionPromptDecision } from "#src/authority/permission-dialog";
+import type {
+  ForwardedPermissionRequest,
+  ForwardedPermissionResponse,
+} from "#src/authority/permission-forwarding";
+import type { PromptPermissionDetails } from "#src/authority/permission-prompter";
+import type { PermissionQuery } from "#src/service";
+import { makeAuthorizerLog } from "#test/helpers/authorizer-log-fixtures";
 import {
   createForwardingTempDir,
   type ForwardingTempDir,
@@ -30,6 +39,57 @@ function readResponse(
     "utf-8",
   );
   return JSON.parse(raw) as ForwardedPermissionResponse;
+}
+
+/**
+ * An approving `AskEscalator` that records the details it was handed.
+ *
+ * The reconstructed `PromptPermissionDetails` is itself the subject of the
+ * access-facts and bounded-delegation cases below: they assert its exact shape,
+ * and hand it to the real delegation envelope — a collaborator the server never
+ * touches, but one that reads the details the server builds.
+ */
+function makeCapturingEscalator() {
+  const escalated: PromptPermissionDetails[] = [];
+  return {
+    escalate: vi.fn((details: PromptPermissionDetails) => {
+      escalated.push(details);
+      return Promise.resolve<PermissionPromptDecision>({
+        approved: true,
+        state: "approved",
+      });
+    }),
+    /** The details of the most recent escalation. */
+    lastDetails(): PromptPermissionDetails {
+      const details = escalated.at(-1);
+      if (!details) {
+        throw new Error("no ask was escalated");
+      }
+      return details;
+    },
+  };
+}
+
+/** Drive one forwarded ask to escalation and return the details the server built. */
+async function escalateForwardedAsk(
+  request: Partial<ForwardedPermissionRequest>,
+): Promise<PromptPermissionDetails> {
+  temp = createForwardingTempDir("parent-session");
+  temp.writeRequest(request);
+  const escalator = makeCapturingEscalator();
+  const server = new ForwardedRequestServer(
+    makeServerDeps({
+      forwardingDir: temp.forwardingDir,
+      policy: { resolve: vi.fn(() => makeCheckResult({ state: "ask" })) },
+      escalator,
+    }),
+  );
+
+  await server.processInbox(
+    makeForwarderContext({ hasUI: true, sessionId: "parent-session" }),
+  );
+
+  return escalator.lastDetails();
 }
 
 describe("processInbox — recorded-authority resolution", () => {
@@ -160,6 +220,11 @@ describe("processInbox — recorded-authority resolution", () => {
         requesterAgentName: "Explore",
         requesterSessionId: "child-session",
       },
+      accessIntent: {
+        surface: "bash",
+        matchValues: ["git push"],
+        boundaryValue: null,
+      },
     });
     expect(readResponse(temp, "req-ask")).toMatchObject({
       approved: true,
@@ -275,6 +340,99 @@ describe("processInbox — recorded-authority resolution", () => {
         message: expect.stringContaining("escalate"),
       }),
     );
+  });
+});
+
+describe("processInbox — child-fixed access facts on the escalated ask", () => {
+  test("carries the request's access facts onto the escalated ask details", async () => {
+    const details = await escalateForwardedAsk({
+      id: "req-path-facts",
+      source: "tool_call",
+      // The display projection is the child's *tool* name, which is what the UI
+      // shows — never the gate surface the rule fired on.
+      surface: "write",
+      value: "/worktree/issue-42/src/foo.ts",
+      accessIntent: makeForwardedAccessIntent({
+        surface: "path",
+        matchValues: [
+          "/worktree/issue-42/src/foo.ts",
+          "src/foo.ts",
+          "/canonical/src/foo.ts",
+        ],
+        boundaryValue: "/canonical/src/foo.ts",
+      }),
+    });
+
+    // Exactly the three fact fields: `requesterCwd` and `principal` stay on the
+    // wire object and never reach an Authorizer. A link that needs requester
+    // identity reads `details.forwarding`.
+    expect(details.accessIntent).toEqual({
+      surface: "path",
+      matchValues: [
+        "/worktree/issue-42/src/foo.ts",
+        "src/foo.ts",
+        "/canonical/src/foo.ts",
+      ],
+      boundaryValue: "/canonical/src/foo.ts",
+    });
+  });
+
+  test("omits accessIntent entirely for a version-skew request that carried none", async () => {
+    const details = await escalateForwardedAsk({
+      id: "req-skew-facts",
+      source: "tool_call",
+      surface: "bash",
+      value: "git push",
+    });
+
+    // Absence, not an explicit `undefined`: the delegation envelope's
+    // `accessIntent?.surface ?? surface` fallback reads the display surface only
+    // when the key is genuinely absent.
+    expect(details).not.toHaveProperty("accessIntent");
+  });
+});
+
+describe("processInbox — bounded delegation over forwarded asks", () => {
+  const query: PermissionQuery = {
+    checkPermission: vi.fn(),
+    getToolPermission: vi.fn(),
+  };
+  const log = makeAuthorizerLog();
+  const allowingLink: Authorizer["authorize"] = () =>
+    Promise.resolve({ kind: "allow" });
+
+  test("caps a link's allow on a forwarded path ask to defer", async () => {
+    const details = await escalateForwardedAsk({
+      id: "req-envelope-path",
+      source: "tool_call",
+      surface: "write",
+      value: "/worktree/issue-42/.ssh/config",
+      accessIntent: makeForwardedAccessIntent({
+        surface: "path",
+        matchValues: ["/worktree/issue-42/.ssh/config"],
+        boundaryValue: "/worktree/issue-42/.ssh/config",
+      }),
+    });
+
+    const enclosed = encloseInDelegationEnvelope(allowingLink);
+
+    // The gate surface, not the displayed tool name, decides exclusion — so a
+    // forwarded path ask is capped exactly like the same ask made locally.
+    expect(await enclosed(details, query, log)).toEqual({ kind: "defer" });
+  });
+
+  test("passes a link's allow on a forwarded bash ask through", async () => {
+    const details = await escalateForwardedAsk({
+      id: "req-envelope-bash",
+      source: "tool_call",
+      surface: "bash",
+      value: "npm test",
+      accessIntent: makeForwardedAccessIntent({ matchValues: ["npm test"] }),
+    });
+
+    const enclosed = encloseInDelegationEnvelope(allowingLink);
+
+    expect(await enclosed(details, query, log)).toEqual({ kind: "allow" });
   });
 });
 
