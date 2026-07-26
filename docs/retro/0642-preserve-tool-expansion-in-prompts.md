@@ -127,3 +127,31 @@ Release is **ship independently**: a grep of `docs/architecture/architecture.md`
   `authorizer.test.ts` and `authorizer-selection.test.ts` build theirs behind `as unknown as ExtensionContext` casts and never reach `custom`, so they break neither at compile time nor at runtime — the package skill's warning about cast-masked ctx literals applied, and the answer here was "no update needed".
 - **No follow-up issues filed.**
   The one deferred item (an expand hint in the prompt's hint line) is an operator-declined non-goal, not concretely named future work; filing it would be speculative.
+
+## Stage: Implementation — TDD (2026-07-26T13:50:20Z)
+
+### Session summary
+
+Implemented the plan in two commits (`6a0d2412` `fix:`, `f4098d33` `docs:`), forwarding Pi's `app.tools.expand` action through a narrow `(data: string) => boolean` seam consulted only in the `decision` and `scope` steps.
+Test count for `pi-permission-system` went 2665 → 2668 (+3, all in `test/authority/permission-prompt-component.test.ts`).
+Pre-completion reviewer: **PASS** — ready for `/ship-issue`.
+
+### Observations
+
+- **Deviation: folded the plan's `test:` red step into the `fix:` commit** (2 commits, not 3).
+  Rationale: the widened `PermissionPromptUi` breaks `local-user-authorizer.test.ts` at the type level in the same commit regardless, so a standalone red commit would have left the tree failing `tsc` *and* the suite.
+  The Red→Green cycle still ran — the red was measured (2 failed / 17 passed) before any `src/` edit.
+  The reviewer independently endorsed the call on two grounds: the `testing` skill's interface-change rule mandates bundling, and this repo's history shows `fix:` commits routinely carry their own tests rather than landing a separate red commit.
+- **The `tidy-first-assessor` returned "no preparatory tidying warranted"** and independently confirmed the plan's decision to keep the positional constructor.
+  It added an argument the plan had not made: the three callback parameters have mutually incompatible signatures (`(data: string) => boolean`, `() => void`, `(decision) => void`), so a transposition at the single call site fails `tsc` rather than silently misbehaving — which is what makes 7 positional params acceptable here.
+  It also correctly declined to split the `makePromptUi()` extraction into a separate prep commit, noting it is not separable from the widening.
+- **The precedence guard test is load-bearing, and the reviewer proved it more sharply than planning did.**
+  Planning argued it "discriminates"; the reviewer traced the actual failure mode: hoisting the check above the `reason` branch makes `"e"` never reach `reasonBuffer`, so `ENTER` submits an *empty* reason, the decision model rejects it, the promise never resolves, and the test hangs to timeout.
+  Worth remembering as a pattern — an "absence of interception" assertion can look weak while actually pinning ordering that no lint rule or type constrains.
+- **Binding the fake action to a printable key was the whole trick.**
+  A test asserting on the default `Ctrl+O` would have false-greened, because `isPrintable` drops `\u000f` in the reason editor whether or not the seam intercepts it.
+  The plan called this out in advance and it held up exactly as predicted.
+- **The `Pick<KeybindingsManager, "matches">` narrowing needed no rework**, because it was compiled as a throwaway `tsc` probe during planning rather than assumed.
+  Same for the no-`requestRender()` decision, which came from reading `interactive-mode.ts:3815` in the sibling `../pi` checkout rather than the bundled `dist`.
+- **Blast radius matched the plan exactly**: only `local-user-authorizer.test.ts` broke at `tsc` (cascading to 10 call sites through `makeDeps`), while the cast-masked ctx literals in `authorizer.test.ts` / `authorizer-selection.test.ts` were correctly predicted to need nothing.
+  No unplanned file was touched.
