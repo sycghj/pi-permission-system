@@ -155,3 +155,76 @@ Pre-completion reviewer: **PASS** — ready for `/ship-issue`.
   Same for the no-`requestRender()` decision, which came from reading `interactive-mode.ts:3815` in the sibling `../pi` checkout rather than the bundled `dist`.
 - **Blast radius matched the plan exactly**: only `local-user-authorizer.test.ts` broke at `tsc` (cascading to 10 call sites through `makeDeps`), while the cast-masked ctx literals in `authorizer.test.ts` / `authorizer-selection.test.ts` were correctly predicted to need nothing.
   No unplanned file was touched.
+
+## Stage: Final Retrospective (2026-07-26T15:22:34Z)
+
+### Session summary
+
+All five stages — PR review, planning, TDD, ship, retro — ran in a single session, taking third-party PR #643 from triage through `pi-permission-system-v23.0.3`.
+The capability (Pi's `app.tools.expand` staying live during an inline permission prompt) was adopted with a narrower design than the PR proposed, with @0xbentang credited via `Co-authored-by:` trailers and a close comment on both #642 and #643.
+One user correction (retro keyed to the PR number instead of the issue) and one multi-hop SDK spelunk were the only real friction.
+
+### Observations
+
+#### What went well
+
+- **Measuring a type-level assumption at planning time.**
+  Before designing around `Pick<KeybindingsManager, "matches">`, planning wrote a throwaway `src/__kbprobe.ts`, ran `pnpm run check`, and deleted it.
+  The `testing` skill says to confirm export claims with `tsc` rather than a runtime symptom, and the plan template says to *measure* quantitative invariants — this generalized both to a type-level design assumption, and the narrowing needed no rework at implementation.
+- **The plan's skepticism about its own test design was the highest-value planning output.**
+  Planning noticed that a precedence test using the default `Ctrl+O` would false-green, because `isPrintable` drops `\u000f` in the reason editor whether or not the seam intercepts it, and specified binding the fake action to the printable key `e` instead.
+  The pre-completion reviewer independently confirmed the test is load-bearing by tracing the failure mode: hoisting the check above the `reason` branch makes `ENTER` submit an empty reason, which the model rejects, so the promise never resolves and the test hangs to timeout.
+- **The plan predicted the `tsc` blast radius exactly.**
+  It named `local-user-authorizer.test.ts` as the only type-level break and correctly predicted that the cast-masked ctx literals in `authorizer.test.ts` / `authorizer-selection.test.ts` would need nothing — an application of the package skill's cast-masking warning that held on contact.
+- **The `tidy-first-assessor` earned its dispatch by sharpening an argument rather than adding work.**
+  It returned "no preparatory tidying warranted" and confirmed the plan's decision to keep the positional constructor, adding a point planning had not made: the three callback parameters have mutually incompatible signatures, so a transposition fails `tsc` rather than silently misbehaving.
+
+#### What caused friction (agent side)
+
+- `missing-context` — keyed the PR-review triage note to the **PR** number (`0643-…`) instead of the issue it addresses (`0642-…`), and told the operator to run `/plan-issue #643`.
+  The prompt at `.pi/prompts/pr-review.md:88` does say `NNNN` matches the PR number, but issue #642 had been read at the start of the session *and* a directory listing two turns earlier showed the issue-keyed convention (`0645-`, `0646-`, `0647-`, `0653-`) — neither signal was reconciled against the prompt's rule.
+  **User-caught** ("Note, this is also about Issue #642").
+  Impact: `git mv` + an `Edit` + a `commit --amend` (4 tool calls of rework) and a wrong handoff already printed.
+  The mis-keyed file would also not have been found by `/plan-issue`, which looks the retro up by issue number.
+- `rabbit-hole` — spent roughly 8 consecutive tool calls in the sibling `../pi` checkout hunting where `ui.custom` passes its keybindings argument to the factory: `grep "async custom"` → `grep "custom:"` → an `awk` line-range → `grep keybindingsManager` → `grep showCustomComponent` → a tab-literal grep that finally hit line 2161 → `showExtensionCustom` → the `factory(...)` call.
+  Impact: no rework and the answer was correct and load-bearing, but the whole multi-hop trace burned planning-session context that an `Explore` subagent dispatch would have kept off it.
+- `other` (tool-selection slip) — the retro stage's skill load pulled `github-voice` instead of the `ask-user` skill the prompt names.
+  Self-identified and corrected on the next turn.
+  Impact: one wasted file read, no rework.
+- `other` (plan/template mismatch) — the plan specified a standalone `test:` red commit, while `/tdd-plan` states test-only commits are "rare; usually folded into the feat."
+  Implementation folded them, which the pre-completion reviewer endorsed on two independent grounds.
+  Impact: no rework; a deviation that had to be justified in a commit body and to the reviewer.
+
+#### What caused friction (user side)
+
+- Nothing that cost rework.
+  The single correction ("Note, this is also about Issue #642") was five words delivered at the earliest possible moment — immediately after the mis-keyed handoff was printed, before any downstream stage consumed it.
+  That is the ideal shape for this intervention, and the fix belongs in the prompt rather than in operator vigilance.
+- Invoking `/pr-review 643` without the issue number was reasonable; the prompt should derive the issue from the PR body, and the proposal below makes it do so.
+- "Everything ready to ship?"
+  before `/ship-issue` was a useful checkpoint: it found nothing wrong but forced an explicit state verification (clean tree, 6 unpushed commits, nothing through CI yet) before an irreversible action.
+
+### Diagnostic details
+
+- **Model-performance correlation** — PR review, planning, and TDD ran on `anthropic/claude-opus-5`; the ship stage ran on `anthropic/claude-sonnet-5`; the retro returned to opus-5.
+  Both subagents (`tidy-first-assessor`, `pre-completion-reviewer`) are pinned to `anthropic/claude-sonnet-5` in their frontmatter.
+  No mismatch found in either direction.
+  The sonnet ship stage handled the one judgment call it met correctly — distinguishing a genuinely `IN_PROGRESS` check from the empty-rollup `GITHUB_TOKEN` case on the release PR, and waiting rather than falling back to `gh pr merge` — which is the `/ship-issue` runbook doing its job on a cheaper model.
+- **Escalation-delay tracking** — the `../pi` spelunk above ran ~8 consecutive tool calls on one question, past the 5-call threshold.
+  It should have been an `Explore` subagent dispatch.
+- **Unused-tool detection** — `Explore` was never dispatched despite two read-only, multi-hop exploration tasks (the `../pi` trace; the initial survey of `permission-prompt-component.ts` and its test-fixture blast radius).
+  `colgrep` was also never used; every search was exact-symbol `grep`, which was defensible here since the targets were known identifiers.
+- **Feedback-loop gap analysis** — no gap.
+  Verification ran incrementally: `vitest` on the single file at red and again at green, `pnpm run check` immediately after the shared-interface change and before the commit, the `authority/` directory suite next, then the full suite plus `lint` and `fallow dead-code` before the docs commit.
+
+### Changes made
+
+1. `.pi/prompts/pr-review.md` — the triage note is now keyed to the **issue** the PR addresses, not the PR number.
+   Three spots: the path rule (read the PR body for `Refs #N` / `Closes #N`, fall back to the PR number only when there is no issue), the frontmatter block (`issue:` takes the issue number and a new `pr:` field carries the PR), and the direction-1 handoff line, which now names `/plan-issue #<issue>` rather than `#$1`.
+2. `AGENTS.md` — extended the `../pi` sibling-checkout rule to name the dispatch mechanism: an `Explore` subagent with `model: "sonnet-5"` for a multi-hop trace, inline reads for a known file.
+   The explicit model pin is deliberate — `Explore` defaults to `claude-haiku-4-5`, which is the reasoning-weak-model-on-judgment-work mismatch this retro's own model lens is meant to catch.
+3. Declined a third proposal (noting in `/plan-issue` that a red test and its green land in one commit).
+   The deviation it targets cost no rework, and the plan-vs-template inconsistency is documented here instead.
+
+Not done, available as a follow-up: pinning `Explore` to sonnet-5 **globally** via a `.pi/agents/Explore.md` override.
+The change above scopes the pin to `../pi` SDK tracing only; a global override would change every `Explore` dispatch in the repo and is a larger call than a retro should make unasked.
