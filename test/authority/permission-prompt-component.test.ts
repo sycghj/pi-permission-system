@@ -31,15 +31,23 @@ interface CapturedComponent {
 type PromptFactory = (
   tui: { requestRender: () => void },
   theme: ReturnType<typeof plainTheme>,
-  keybindings: undefined,
+  keybindings: { matches(data: string, action: string): boolean },
   done: (decision: PermissionPromptDecision) => void,
 ) => CapturedComponent;
 
-function makeFakeView(doublePressToConfirm: boolean) {
+/** Pi's default binding for the `app.tools.expand` action. */
+const CTRL_O = "\u000f";
+
+function makeFakeView(doublePressToConfirm: boolean, expandKey = CTRL_O) {
   const captured: {
     component?: CapturedComponent;
     options?: unknown;
   } = {};
+  let toolsExpanded = false;
+  const getToolsExpanded = vi.fn(() => toolsExpanded);
+  const setToolsExpanded = vi.fn((expanded: boolean) => {
+    toolsExpanded = expanded;
+  });
   const custom = (
     factory: PromptFactory,
     options: unknown,
@@ -49,7 +57,10 @@ function makeFakeView(doublePressToConfirm: boolean) {
       captured.component = factory(
         { requestRender: vi.fn() },
         plainTheme(),
-        undefined,
+        {
+          matches: (data, action) =>
+            action === "app.tools.expand" && data === expandKey,
+        },
         resolve,
       );
     });
@@ -57,9 +68,15 @@ function makeFakeView(doublePressToConfirm: boolean) {
   const view = {
     mode: "tui",
     doublePressToConfirm,
-    ui: { select: vi.fn(), input: vi.fn(), custom },
+    ui: {
+      select: vi.fn(),
+      input: vi.fn(),
+      custom,
+      getToolsExpanded,
+      setToolsExpanded,
+    },
   } as unknown as PermissionPromptView;
-  return { view, captured };
+  return { view, captured, getToolsExpanded, setToolsExpanded };
 }
 
 const ARROW_DOWN = "\u001b[B";
@@ -275,6 +292,78 @@ describe("presentInlinePermissionPrompt", () => {
       expect(await runPrompt(false, ["s", ARROW_DOWN, ENTER], options)).toEqual(
         { approved: true, state: "approved_for_serving_session" },
       );
+    });
+  });
+
+  describe("tool expansion", () => {
+    const scopeOptions: RequestPermissionOptions = {
+      sessionScope: {
+        subagentLabel: "This subagent only",
+        servingSessionLabel: "The whole session",
+      },
+    };
+
+    it("toggles tool expansion without settling the decision", async () => {
+      const { view, captured, getToolsExpanded, setToolsExpanded } =
+        makeFakeView(true);
+      const promise = presentInlinePermissionPrompt(view, "Title", "Message");
+      let settled = false;
+      void promise.then(() => {
+        settled = true;
+      });
+
+      captured.component?.handleInput(CTRL_O);
+      await Promise.resolve();
+      expect(setToolsExpanded).toHaveBeenNthCalledWith(1, true);
+      expect(settled).toBe(false);
+
+      captured.component?.handleInput(CTRL_O);
+      await Promise.resolve();
+      expect(setToolsExpanded).toHaveBeenNthCalledWith(2, false);
+      expect(settled).toBe(false);
+      expect(getToolsExpanded).toHaveBeenCalledTimes(2);
+
+      captured.component?.handleInput("y");
+      captured.component?.handleInput("y");
+      expect(await promise).toEqual({ approved: true, state: "approved" });
+    });
+
+    it("toggles during the scope step without committing the grant", async () => {
+      const { view, captured, setToolsExpanded } = makeFakeView(false);
+      const promise = presentInlinePermissionPrompt(
+        view,
+        "Title",
+        "Message",
+        scopeOptions,
+      );
+
+      captured.component?.handleInput("s"); // decision -> scope
+      captured.component?.handleInput(CTRL_O);
+      expect(setToolsExpanded).toHaveBeenNthCalledWith(1, true);
+
+      captured.component?.handleInput(ENTER);
+      expect(await promise).toEqual({
+        approved: true,
+        state: "approved_for_session",
+      });
+    });
+
+    it("does not intercept the expand key while a denial reason is typed", async () => {
+      // Bound to a printable key on purpose: the default Ctrl+O is dropped by
+      // the reason editor's isPrintable guard anyway, so it cannot discriminate.
+      const { view, captured, setToolsExpanded } = makeFakeView(false, "e");
+      const promise = presentInlinePermissionPrompt(view, "Title", "Message");
+
+      captured.component?.handleInput("r"); // decision -> reason
+      captured.component?.handleInput("e"); // typed literally, not an app action
+      captured.component?.handleInput(ENTER);
+
+      expect(await promise).toEqual({
+        approved: false,
+        state: "denied_with_reason",
+        denialReason: "e",
+      });
+      expect(setToolsExpanded).not.toHaveBeenCalled();
     });
   });
 });

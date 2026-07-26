@@ -1,6 +1,7 @@
 import type {
   ExtensionContext,
   ExtensionUIContext,
+  KeybindingsManager,
 } from "@earendil-works/pi-coding-agent";
 import {
   type Component,
@@ -35,8 +36,11 @@ import {
 /** The subset of the session UI surface the inline dialog needs. */
 export type PermissionPromptUi = Pick<
   ExtensionUIContext,
-  "select" | "input" | "custom"
+  "select" | "input" | "custom" | "getToolsExpanded" | "setToolsExpanded"
 >;
+
+/** The keybindings surface the dialog consults; only `matches` is read (ISP). */
+type PromptKeybindings = Pick<KeybindingsManager, "matches">;
 
 /** The resolved presentation context selected once per activation. */
 export interface PermissionPromptView {
@@ -97,12 +101,13 @@ export function presentInlinePermissionPrompt(
     sessionScope: options?.sessionScope,
   };
   return view.ui.custom<PermissionPromptDecision>(
-    (tui, theme, _keybindings, done) =>
+    (tui, theme, keybindings, done) =>
       new PermissionPromptComponent(
         theme,
         config,
         title,
         message,
+        (data) => handleToolsExpandAction(data, keybindings, view.ui),
         () => {
           tui.requestRender();
         },
@@ -110,6 +115,31 @@ export function presentInlinePermissionPrompt(
       ),
     { overlay: false },
   );
+}
+
+/**
+ * Forward Pi's tool-expansion action while the dialog holds keyboard focus.
+ *
+ * A focused `ctx.ui.custom` component consumes every keystroke, so `Ctrl+O`
+ * would otherwise be dead for the duration of an ask — exactly when the user
+ * most needs to see the full pending tool invocation. Returns `true` when the
+ * keystroke was the action (and was handled), so the caller stops before
+ * mapping it to a {@link PromptEvent}; expansion is a display concern and must
+ * never reach the decision model.
+ *
+ * Deliberately does not request a render: `setToolsExpanded` re-renders the
+ * host itself, and the dialog's own lines are unaffected by tool expansion.
+ */
+function handleToolsExpandAction(
+  data: string,
+  keybindings: PromptKeybindings,
+  ui: PermissionPromptUi,
+): boolean {
+  if (!keybindings.matches(data, "app.tools.expand")) {
+    return false;
+  }
+  ui.setToolsExpanded(!ui.getToolsExpanded());
+  return true;
 }
 
 class PermissionPromptComponent implements Component {
@@ -121,6 +151,7 @@ class PermissionPromptComponent implements Component {
     private readonly config: PromptModelConfig,
     private readonly title: string,
     private readonly message: string,
+    private readonly handleAppAction: (data: string) => boolean,
     private readonly requestRender: () => void,
     private readonly done: (decision: PermissionPromptDecision) => void,
   ) {
@@ -149,6 +180,9 @@ class PermissionPromptComponent implements Component {
   handleInput(data: string): void {
     if (this.state.step === "reason") {
       this.handleReasonInput(data);
+      return;
+    }
+    if (this.handleAppAction(data)) {
       return;
     }
     const event = this.toEvent(data);
