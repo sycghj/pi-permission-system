@@ -35,3 +35,30 @@ Plan committed at `packages/pi-permission-system/docs/plans/0635-forwarded-acces
   That gap is exactly why the forwarded escape went unnoticed, so the plan adds a composition test rather than two more unit assertions.
 - Only one exact-object assertion on `escalate` exists in the suite (`grep -rn "escalate).toHaveBeenCalledWith({" test/` → 1 hit), so the red step is well bounded.
 - No follow-up issues filed — #610 and #620 already exist and cover the deferred work.
+
+## Stage: Implementation — TDD (2026-07-26T17:41:26Z)
+
+### Session summary
+
+Implemented both planned steps in two commits: `c0790ad6` (`fix!`) landed the `toAccessFacts` projection in `buildForwardedAskDetails`, the corrected `PromptPermissionDetails.accessIntent` doc comment, four tests, the migration note, and the `docs/configuration.md` sentence; `08164e85` (`docs`) landed the architecture doc's new "Reconstruction fidelity at the serving node" subsection, the `forwarded-request-server.ts` module-tree clause, and the package skill update.
+Production change was ~20 lines (one new module-private function plus a conditional spread).
+Test count 2668 → 2672 (+4); `check`, root `lint`, full `test`, and `fallow dead-code` all green.
+
+### Observations
+
+- The `tidy-first-assessor` returned "no preparatory tidying warranted" and explicitly declined to extract the file-local `makeQuery`/`makeLink`/`makeDetails` helpers from `delegation-envelope.test.ts` and `authorizer-selection.test.ts`, reasoning that the change touches neither file and that the new composition test deliberately uses the *real* captured details rather than a synthetic `makeDetails`.
+  That is the correct scope boundary, and a useful data point for the assessor's first-live-use checkpoint.
+- The red step was strong evidence rather than ceremony: the envelope-composition test failed with `expected { kind: 'allow' } to deeply equal { kind: 'defer' }`, which *demonstrated* the checkpoint escape rather than merely asserting the plan's claim about it.
+  The plan predicted three of the five new/edited assertions would fail; exactly those three did, and the two written as guards (forwarded `bash` passes through; version-skew absence) passed from the start, confirming they guard rather than drive.
+- Deviation from the plan, deliberate: the plan's invariants table proposed pinning the disclosure boundary with `Object.keys(details.accessIntent).sort()`.
+  A whole-object `toEqual` on `details.accessIntent` is strictly stronger — `toEqual` requires matching key sets for non-`undefined` values, so it rejects a leaked `requesterCwd`/`principal` *and* pins the values — and matches the testing skill's "prefer strong assertions that match the entire expected value".
+  The pre-completion reviewer independently endorsed this.
+- `rumdl`'s `MD057` false-positived on the new `docs/configuration.md` migration link when it sat inside a parenthetical at the end of a very long line (column 321), reporting the target "does not exist" although it did.
+  Splitting the line into three sentences (the project's one-sentence-per-line convention anyway) cleared it.
+  Worth remembering: an `MD057` "does not exist" on a link whose target demonstrably exists is a line-length/parse artifact, not a broken path — fix the line, do not go hunting the path.
+- No production change was needed in `delegation-envelope.ts`.
+  Its existing `details.accessIntent?.surface ?? details.surface` already preferred the gate-authoritative surface; it simply never had one for a forwarded ask.
+  The fix is entirely upstream of the checkpoint, which is why the blast radius stayed as narrow as the plan predicted.
+- Pre-completion reviewer: **PASS** — ready for `/ship-issue`.
+  No warnings.
+  It independently verified all five invariants (including grepping `buildUiPrompt` to confirm it never reads `accessIntent`, rather than accepting the plan's claim) and confirmed zero diff on `delegation-envelope.ts`, `permission-ui-prompt.ts`, and `forwarding-io.ts`.
