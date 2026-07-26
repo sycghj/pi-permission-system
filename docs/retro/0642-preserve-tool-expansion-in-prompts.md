@@ -93,3 +93,37 @@ Close-out at ship time closes **both**:
 
 - Issue **#642** — `issue_close` as `completed`, with the behavior summary and the implementing SHA(s).
 - PR **#643** — closed as superseded, with a comment thanking **@0xbentang** by name, explaining that we adopted the capability with a simplified design, and linking the implementing SHA(s).
+
+## Stage: Planning (2026-07-26T01:26:47Z)
+
+### Session summary
+
+Wrote `docs/plans/0642-preserve-tool-expansion-in-prompts.md` implementing the PR-review stage's recorded decision — adopt the capability, simplify the seam — in three TDD cycles (red test, `fix:` green, `docs:`).
+The `Decide` gate was already satisfied by the PR Review stage above, so this session planned around the recorded direction rather than re-litigating it.
+Release is **ship independently**: a grep of `docs/architecture/architecture.md` for `#642`/`#643` returns nothing, so the issue is in no roadmap batch and its `fix:` commit cuts a release on its own.
+
+### Observations
+
+- **Verified the SDK against `../pi`, not the bundled `dist`.**
+  Two facts changed the design rather than merely confirming it.
+  `setToolsExpanded` ends with `this.ui.requestRender()` (`interactive-mode.ts:3815`), so the component must *not* call `requestRender()` after toggling — the omission is load-bearing, and the plan records why so a future reader does not "fix" it.
+  `custom`'s third factory argument is a non-optional `KeybindingsManager` invoked as `factory(this.ui, theme, this.keybindings, close)` (`interactive-mode.ts:2490`), so no undefined guard is needed despite the existing test passing `undefined` behind a cast.
+- **Measured the ISP narrowing instead of asserting it.**
+  Compiled a throwaway probe (`Pick<KeybindingsManager, "matches">` satisfied by a bare object literal) under `tsc` before planning around it.
+  This is the skill's "confirm what a module exports with `tsc`, not a runtime symptom" rule applied at planning time.
+- **Rejected the params-object constructor refactor.**
+  The PR review flagged constructor width, and collapsing the PR's two new parameters into one seam addresses the agreed scope (8 → 7 params).
+  A full params-object conversion would replace `this.theme` with `this.deps.theme` across all three render methods of a private, single-call-site class — trading one readability problem for another inside a bug-fix commit.
+  Left explicitly to the `tidy-first-assessor` at `/tdd-plan` start rather than pre-empted.
+- **The precedence choice is what protects a #573 invariant.**
+  Intercepting keystrokes during the `reason` step could make a *required* denial reason untypeable.
+  The plan pins this with a test that binds `app.tools.expand` to the printable key `e` — asserting on the default Ctrl+O would false-green, since `isPrintable` drops it regardless of the seam.
+  This was the sharpest planning insight: the obvious test proves nothing.
+- **Alternative precedence considered and rejected.**
+  Consulting the app action only *after* local mapping declines is marginally safer against a pathological rebinding (e.g. binding expand to `y`), but diverges from Pi's own `ExtensionSelectorComponent`, which checks the action first.
+  Host-convention consistency won; the residual risk is bounded because arrow/`j`/`k` + `enter` still commits every option, so no decision becomes unreachable.
+- **Enumerated the widening's blast radius by type, not by grep alone.**
+  Only `local-user-authorizer.test.ts` (two `ui` literals) breaks at `tsc`, because it is typed through `LocalUserAuthorizerDeps`.
+  `authorizer.test.ts` and `authorizer-selection.test.ts` build theirs behind `as unknown as ExtensionContext` casts and never reach `custom`, so they break neither at compile time nor at runtime — the package skill's warning about cast-masked ctx literals applied, and the answer here was "no update needed".
+- **No follow-up issues filed.**
+  The one deferred item (an expand hint in the prompt's hint line) is an operator-declined non-goal, not concretely named future work; filing it would be speculative.
