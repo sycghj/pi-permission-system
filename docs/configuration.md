@@ -127,6 +127,10 @@ Arrow keys / `j`/`k` move the highlight, `enter` confirms the highlighted option
 With `doublePressToConfirm` enabled (the default), a letter hotkey **arms** its action and shows a `Press y again to approve.` hint; press the same key again to commit.
 Set `doublePressToConfirm` to `false` to commit on the first press.
 
+Pi's tool-expansion binding (`app.tools.expand`, `Ctrl+O` by default) stays live while the dialog is open, so you can expand a truncated tool preview before deciding.
+It only toggles the display — it never resolves, commits, or arms the pending decision.
+While you are typing a denial reason it is not intercepted, so a rebound printable key still reaches the reason editor.
+
 Non-TUI contexts (RPC / frontend-driven sessions) keep the single-select prompt and are unaffected by `doublePressToConfirm`.
 
 ### `piInfrastructureReadPaths` patterns
