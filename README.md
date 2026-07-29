@@ -2,14 +2,14 @@
   <img src="docs/assets/logo.png" alt="pi-permission-system logo">
 </p>
 
-# @gotgenes/pi-permission-system
+# @sycghj/pi-permission-system
 
-[![npm version](https://img.shields.io/npm/v/@gotgenes/pi-permission-system?style=flat&logo=npm&logoColor=white)](https://www.npmjs.com/package/@gotgenes/pi-permission-system) [![CI](https://img.shields.io/github/actions/workflow/status/gotgenes/pi-packages/ci.yml?style=flat&logo=github&label=CI)](https://github.com/gotgenes/pi-packages/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat)](https://opensource.org/licenses/MIT) [![TypeScript](https://img.shields.io/badge/TypeScript-6.x-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/) [![pnpm](https://img.shields.io/badge/pnpm-%3E%3D11-F69220?style=flat&logo=pnpm&logoColor=white)](https://pnpm.io/) [![Pi Package](https://img.shields.io/badge/Pi-Package-6366F1?style=flat)](https://pi.mariozechner.at/)
+[![npm version](https://img.shields.io/npm/v/@sycghj/pi-permission-system?style=flat&logo=npm&logoColor=white)](https://www.npmjs.com/package/@sycghj/pi-permission-system) [![CI](https://img.shields.io/github/actions/workflow/status/sycghj/pi-packages/ci.yml?style=flat&logo=github&label=CI)](https://github.com/sycghj/pi-packages/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat)](https://opensource.org/licenses/MIT) [![TypeScript](https://img.shields.io/badge/TypeScript-6.x-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/) [![pnpm](https://img.shields.io/badge/pnpm-%3E%3D11-F69220?style=flat&logo=pnpm&logoColor=white)](https://pnpm.io/) [![Pi Package](https://img.shields.io/badge/Pi-Package-6366F1?style=flat)](https://pi.mariozechner.at/)
 
 Permission enforcement extension for the [Pi](https://pi.mariozechner.at/) coding agent that provides centralized, deterministic permission gates over tool, bash, MCP, skill, and special operations.
 
-> **Fork notice:** This package is a full fork of [MasuRii/pi-permission-system](https://github.com/MasuRii/pi-permission-system), published to npm as `@gotgenes/pi-permission-system`.
-> It has diverged substantially from upstream in config format, internal architecture, and permission model.
+> **Fork notice:** This package is a full fork of [MasuRii/pi-permission-system](https://github.com/MasuRii/pi-permission-system), re-based onto [`gotgenes/pi-packages`](https://github.com/gotgenes/pi-packages) `upstream/main` (v24.0.0) and published to npm as `@sycghj/pi-permission-system`.
+> It has diverged substantially from upstream in config format, internal architecture, and permission model — see [docs/RELEASE_STATUS.md](docs/RELEASE_STATUS.md) for the release-slice boundary and known Windows test gaps.
 
 ## What It Does
 
@@ -27,7 +27,7 @@ Permission enforcement extension for the [Pi](https://pi.mariozechner.at/) codin
 ## Install
 
 ```bash
-pi install npm:@gotgenes/pi-permission-system
+pi install npm:@sycghj/pi-permission-system
 ```
 
 ## Quick Start
@@ -117,6 +117,36 @@ The optional `shellTools` field records which non-`bash` tools carry shell seman
 The optional `authorizerChain` field names registered case-by-case decision links (e.g. a light model judge) to consult when a request lands on `ask`, ahead of the interactive prompt.
 A downstream extension registers a link via `getPermissionsService().registerAuthorizer(name, authorize)`; it decides nothing until you name it here (opt-in), config order fixes the chain order, and the chain owner caps any link's `allow` on `external_directory`/`path` to keep it within your policy — see [docs/configuration.md](docs/configuration.md#authorizer-chain--case-by-case-decision-links).
 [`@gotgenes/pi-permission-model-judge`](https://github.com/gotgenes/pi-packages/tree/main/packages/pi-permission-model-judge) is a first-party reference implementation of such a link — a deny-first reviewer that auto-denies mistyped out-of-directory paths.
+
+The optional `autoMode` field can resolve `ask` decisions with an LLM classifier before the UI prompt appears.
+Deterministic `allow` and `deny` policy results bypass the classifier entirely, so tool safety, path safety, extension-tool extraction, and hard denials remain policy-driven by this permission system rather than by a hardcoded tool allowlist.
+It is disabled by default:
+
+```jsonc
+{
+  "autoMode": {
+    "enabled": false,
+    "provider": "new-provider",
+    "modelId": "deepseek-v4-flash",
+    "maxTokens": 256,
+    "maxRetries": 2,
+    "fallback": "ask"
+  }
+}
+```
+
+When enabled, classifier output `<block>no</block>` auto-approves the pending `ask`; `<block>yes</block>` denies it.
+Transient HTTP failures and malformed classifier output retry up to `maxRetries` times.
+If the classifier cannot start (missing model/auth) or all attempts fail, `fallback: "ask"` returns to the normal UI prompt, while `fallback: "deny"` blocks with a fail-closed denial.
+
+For runtime diagnosis, enable `debugLog` and/or `permissionReviewLog`.
+Auto mode records `auto_mode.started`, `auto_mode.retry`, `auto_mode.allowed`, `auto_mode.denied`, `auto_mode.setup_failure`, `auto_mode.http_failure`, `auto_mode.parse_failure`, `auto_mode.fallback_ask`, and `auto_mode.fallback_deny` events under `~/.pi/agent/extensions/pi-permission-system/logs`.
+Events use safe metadata only; they do not log API keys, auth headers, full prompts, full transcripts, or full tool input.
+
+The golden corpus and offline eval harness are deterministic development tools for this ask-branch boundary.
+The corpus contains 100 cases, and `src/auto-mode-eval.ts` evaluates them only through a caller-supplied classifier capability.
+Unit tests use fake classifiers; live model eval is not a default test path and must be explicitly approved before use.
+See [docs/auto-mode-progress.md](docs/auto-mode-progress.md) for corpus categories, eval notes, and Stage 2 limitations.
 
 For the full reference — all surfaces, runtime knobs, per-agent overrides, merge semantics, and common recipes — see [docs/configuration.md](docs/configuration.md).
 

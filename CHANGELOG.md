@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [24.1.0] — sycghj fork n-day release (2026-07-29)
+
+> **Fork notice:** `@sycghj/pi-permission-system` 24.1.0 is a fork of `gotgenes/pi-packages` `upstream/main` @ 24.0.0 rebased with the ask-branch `autoMode` feature (`fbdcbc1`). It is published under the `@sycghj` scope on the `sycghj/pi-packages` GitHub fork. npm publication is deferred (no npm account yet). See `docs/RELEASE_STATUS.md` for the full slice boundary, path-handling resolution, and pre-existing Windows test gaps.
+
+### Added (fork-only, not in upstream gotgenes)
+
+- **ask-branch `autoMode`** — optional LLM classifier that resolves `ask` decisions before the UI prompt. Deterministic `allow`/`deny` bypass the classifier entirely. Default `enabled: false`; `fallback: "ask"`. No hardcoded safe-tool allowlist.
+- **`autoMode.twoStage`** — optional thinking-review second stage on deny/malformed first-stage output. Default `enabled: false` (opt-in only).
+- **Worktree portable-path forwarding** (`ForwardedPortablePath`) + same-repo worktree `external_directory` suppression via git common-dir detection.
+- **Observability** — `auto_mode.*` and `learning.*` review-log events (no secrets / full transcript dump).
+- **Offline eval** — golden corpus (~100 cases) + `auto-mode-eval` with injected fake classifier.
+- **Path-handling fixes** — separator-preserving `expandHomePath` and `pi-infrastructure-read` flavor routing (fixes `PathFlavor` injection violations present in upstream on Windows).
+
+### Kept (default-off, not marketed)
+
+- **Learning / capability grants** (`src/learning/**`, `learning` + `riskOverrides` config) — kept as dead code (default `enabled: false`, `mode: "shadow"`). Learning modules are shared infrastructure for worktree/tool-call-gate-pipeline; physically excluding them is a high-risk refactor. Runtime `learningEnabled` guards all paths.
+
+### Compatibility
+
+- `Symbol.for("@gotgenes/pi-permission-system:...")` process-global keys are **kept** for interop with upstream-compatible extensions that look up the permissions service.
+- `authorizerChain` (upstream 24.0.0) and `autoMode` coexist; both are opt-in and default off.
+
+### Known gaps (not introduced by this fork)
+
+- 17 Windows-environment test failures inherited from upstream (upstream CI is Linux-only). Categories: chmod owner-only (9), bash/program symlink + case-folding (5), permission-manager real-home (3). See `docs/RELEASE_STATUS.md`.
+
 ## [24.0.0](https://github.com/gotgenes/pi-packages/compare/pi-permission-system-v23.0.3...pi-permission-system-v24.0.0) (2026-07-26)
 
 
