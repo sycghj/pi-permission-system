@@ -3,7 +3,11 @@ import { posixPathFlavor } from "#src/path/path-flavor";
 import { evaluate } from "#src/rule";
 import { SessionApproval } from "#src/session-approval";
 import type { SessionApprovalRecorder } from "#src/session-approval-recorder";
-import { deriveApprovalPattern, SessionRules } from "#src/session-rules";
+import {
+  deriveApprovalPattern,
+  derivePortableApprovalPattern,
+  SessionRules,
+} from "#src/session-rules";
 
 // ── SessionRules ───────────────────────────────────────────────────────────
 
@@ -244,6 +248,15 @@ describe("SessionRules", () => {
 // ── deriveApprovalPattern ──────────────────────────────────────────────────
 
 describe("deriveApprovalPattern", () => {
+  it("derives a project-scoped portable pattern for worktree project paths", () => {
+    expect(
+      derivePortableApprovalPattern({
+        parentCwd: "D:/code/VisionNext",
+        projectRelative: "src/App.ts",
+      }),
+    ).toBe("project://D%3A%2Fcode%2FVisionNext/src/*");
+  });
+
   it("returns parent directory glob for a file path", () => {
     expect(deriveApprovalPattern("/other/project/src/foo.ts")).toBe(
       "/other/project/src/*",

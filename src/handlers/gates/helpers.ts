@@ -3,6 +3,7 @@ import { classifyToolKind } from "#src/access-intent/tool-kind";
 import type { ForwardedAccessFacts } from "#src/authority/permission-forwarding";
 import type {
   PermissionDecisionEvent,
+  PermissionDecisionReason,
   PermissionDecisionResolution,
 } from "#src/permission-events";
 import type { PermissionCheckResult } from "#src/types";
@@ -74,6 +75,7 @@ export function buildDecisionEvent(
   agentName: string | null,
   result: "allow" | "deny",
   resolution: PermissionDecisionResolution,
+  reason?: PermissionDecisionReason | null,
 ): PermissionDecisionEvent {
   return {
     surface: decision.surface,
@@ -84,6 +86,7 @@ export function buildDecisionEvent(
     origin: check.origin ?? null,
     agentName: agentName ?? null,
     matchedPattern: check.matchedPattern ?? null,
+    reason: reason ?? null,
   };
 }
 

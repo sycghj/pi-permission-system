@@ -1,5 +1,3 @@
-import { dirname, sep } from "node:path";
-
 import type { Ruleset } from "./rule";
 import type { SessionApproval } from "./session-approval";
 import type { SessionApprovalRecorder } from "./session-approval-recorder";
@@ -49,6 +47,22 @@ export class SessionRules implements SessionApprovalRecorder {
   }
 }
 
+export function derivePortableApprovalPattern(options: {
+  parentCwd: string;
+  projectRelative: string;
+}): string {
+  const project = encodeURIComponent(normalizePortable(options.parentCwd));
+  const relative = normalizePortable(options.projectRelative);
+  return `project://${project}/${deriveApprovalPattern(relative)}`;
+}
+
+function normalizePortable(pathValue: string): string {
+  return pathValue
+    .trim()
+    .replaceAll("\\", "/")
+    .replace(/^\/+|\/+$/g, "");
+}
+
 /**
  * Derive the wildcard glob pattern to approve from a normalized path.
  *
@@ -65,15 +79,28 @@ export class SessionRules implements SessionApprovalRecorder {
  * path to that form first; the function itself stays free of cwd state.
  */
 export function deriveApprovalPattern(normalizedPath: string): string {
-  // If the path already ends with a separator, it's a directory — glob its contents.
-  if (normalizedPath.endsWith(sep)) {
-    return `${normalizedPath}*`;
-  }
-  const dir = dirname(normalizedPath);
-  if (dir === normalizedPath) {
-    // Root path — dirname('/') === '/'
-    return `${dir}*`;
-  }
+  const sep = pathSeparator(normalizedPath);
+  if (normalizedPath.endsWith(sep)) return `${normalizedPath}*`;
+
+  const dir = parentDirectory(normalizedPath, sep);
+  if (dir === normalizedPath) return `${dir}*`;
+
   const prefix = dir.endsWith(sep) ? dir : `${dir}${sep}`;
   return `${prefix}*`;
+}
+
+function pathSeparator(pathValue: string): "/" | "\\" {
+  return pathValue.includes("/") ? "/" : "\\";
+}
+
+function parentDirectory(pathValue: string, sep: "/" | "\\"): string {
+  const trimmed = trimTrailingSeparator(pathValue, sep);
+  const index = trimmed.lastIndexOf(sep);
+  if (index <= 0) return sep;
+  return trimmed.slice(0, index);
+}
+
+function trimTrailingSeparator(pathValue: string, sep: "/" | "\\"): string {
+  if (pathValue === sep) return pathValue;
+  return pathValue.endsWith(sep) ? pathValue.slice(0, -1) : pathValue;
 }

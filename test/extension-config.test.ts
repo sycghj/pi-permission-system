@@ -2,6 +2,7 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, test } from "vitest";
+import "./extension-config-auto-mode.test";
 
 import type { PermissionSystemExtensionConfig } from "#src/extension-config";
 import {
@@ -98,6 +99,25 @@ describe("normalizePermissionSystemConfig", () => {
       permissionReviewLog: false,
       yoloMode: true,
       doublePressToConfirm: true,
+      autoMode: {
+        enabled: false,
+        provider: "new-provider",
+        modelId: "deepseek-v4-flash",
+        maxTokens: 256,
+        maxRetries: 2,
+        fallback: "ask",
+        twoStage: {
+          enabled: false,
+          thinkingBudgetTokens: 1024,
+        },
+      },
+      learning: {
+        enabled: false,
+        mode: "shadow",
+        maxTtlMinutes: 120,
+        maxUses: 30,
+        autoActivateTiers: ["R0", "R1"],
+      },
     });
   });
 

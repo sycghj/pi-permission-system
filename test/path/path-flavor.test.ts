@@ -1,12 +1,12 @@
 import { posix as posixPath, win32 as winPath } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import {
-  pathFlavorForPlatform,
-  posixPathFlavor,
-  win32PathFlavor,
-} from "#src/path/path-flavor";
+import { posixPathFlavor, win32PathFlavor } from "#src/path/path-flavor";
+
+const { pathFlavorForPlatform } = await vi.importActual<
+  typeof import("#src/path/path-flavor")
+>("#src/path/path-flavor");
 
 describe("win32PathFlavor", () => {
   it("exposes the win32 path implementation", () => {

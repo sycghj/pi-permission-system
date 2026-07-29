@@ -41,6 +41,8 @@ export function describeBashExternalDirectoryGate(
       externalPaths,
       resolver,
       tcc.agentName ?? undefined,
+      tcc.cwd,
+      command,
     );
   const uncoveredPaths = uncoveredEntries.map(({ path }) => path.value());
 

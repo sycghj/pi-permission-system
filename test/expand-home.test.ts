@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 const mockHomedir = vi.hoisted(() => vi.fn(() => "/home/testuser"));
@@ -24,17 +23,17 @@ describe("expandHomePath", () => {
 
     test("~/path expands to homedir()/path", () => {
       expect(expandHomePath("~/dev/project")).toBe(
-        join(FAKE_HOME, "dev/project"),
+        "/home/testuser/dev/project",
       );
     });
 
     test("~/path/* expands to homedir()/path/*", () => {
-      expect(expandHomePath("~/dev/*")).toBe(join(FAKE_HOME, "dev/*"));
+      expect(expandHomePath("~/dev/*")).toBe("/home/testuser/dev/*");
     });
 
     test("~\\ (Windows separator) expands to homedir() + rest", () => {
       expect(expandHomePath("~\\dev\\project")).toBe(
-        join(FAKE_HOME, "dev\\project"),
+        "/home/testuser\\dev\\project",
       );
     });
 
@@ -50,17 +49,17 @@ describe("expandHomePath", () => {
 
     test("$HOME/path expands to homedir()/path", () => {
       expect(expandHomePath("$HOME/dev/project")).toBe(
-        join(FAKE_HOME, "dev/project"),
+        "/home/testuser/dev/project",
       );
     });
 
     test("$HOME/path/* expands to homedir()/path/*", () => {
-      expect(expandHomePath("$HOME/dev/*")).toBe(join(FAKE_HOME, "dev/*"));
+      expect(expandHomePath("$HOME/dev/*")).toBe("/home/testuser/dev/*");
     });
 
     test("$HOME\\ (Windows separator) expands to homedir() + rest", () => {
       expect(expandHomePath("$HOME\\dev\\project")).toBe(
-        join(FAKE_HOME, "dev\\project"),
+        "/home/testuser\\dev\\project",
       );
     });
 

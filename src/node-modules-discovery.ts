@@ -1,7 +1,5 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { basename, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 
 /**
  * Walk up the directory tree from the given file URL until a directory
@@ -12,18 +10,26 @@ import { fileURLToPath } from "node:url";
  */
 function walkUpToNodeModules(fromUrl: string): string | null {
   try {
-    const thisFile = fileURLToPath(fromUrl);
-    let dir = dirname(thisFile);
-    while (dir !== dirname(dir)) {
-      if (basename(dir) === "node_modules") {
-        return dir;
-      }
-      dir = dirname(dir);
+    let dir = parentPath(new URL(fromUrl).pathname);
+    while (dir !== parentPath(dir)) {
+      if (baseName(dir) === "node_modules") return dir;
+      dir = parentPath(dir);
     }
     return null;
   } catch {
     return null;
   }
+}
+
+function baseName(pathValue: string): string {
+  const index = pathValue.lastIndexOf("/");
+  return index === -1 ? pathValue : pathValue.slice(index + 1);
+}
+
+function parentPath(pathValue: string): string {
+  const trimmed = pathValue.replace(/\/+$/, "");
+  const index = trimmed.lastIndexOf("/");
+  return index <= 0 ? "/" : trimmed.slice(0, index);
 }
 
 /**

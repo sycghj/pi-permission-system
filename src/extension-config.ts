@@ -2,6 +2,8 @@ import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
+  AutoModeConfig,
+  LearningConfig,
   ShellToolsConfig,
   UnifiedPermissionConfig,
 } from "./config-loader";
@@ -9,6 +11,14 @@ import {
   OWNER_ONLY_DIRECTORY_MODE,
   restrictExistingPathToOwner,
 } from "./log-file-permissions";
+
+export type NormalizedAutoModeConfig = Required<
+  Omit<AutoModeConfig, "twoStage">
+> & {
+  twoStage?: AutoModeConfig["twoStage"];
+};
+
+export type NormalizedLearningConfig = Required<LearningConfig>;
 
 export const EXTENSION_ID = "pi-permission-system";
 
@@ -24,6 +34,10 @@ export interface PermissionSystemExtensionConfig {
   toolInputPreviewMaxLength?: number;
   /** Max length of inline pattern/path summaries (grep/find/ls) in permission prompts. Defaults to 80. */
   toolTextSummaryMaxLength?: number;
+  /** Optional LLM auto-classifier for ask-state checks. Disabled by default. */
+  autoMode: NormalizedAutoModeConfig;
+  /** Session-scoped learned capability grant settings. Disabled by default. */
+  learning: NormalizedLearningConfig;
   /** Non-bash tools that carry shell semantics, keyed by tool name. */
   shellTools?: ShellToolsConfig;
   /** Ordered names of registered live-authority chain links to consult before the terminal authorizer. */
@@ -35,6 +49,25 @@ export const DEFAULT_EXTENSION_CONFIG: PermissionSystemExtensionConfig = {
   permissionReviewLog: true,
   yoloMode: false,
   doublePressToConfirm: true,
+  autoMode: {
+    enabled: false,
+    provider: "new-provider",
+    modelId: "deepseek-v4-flash",
+    maxTokens: 256,
+    maxRetries: 2,
+    fallback: "ask",
+    twoStage: {
+      enabled: false,
+      thinkingBudgetTokens: 1024,
+    },
+  },
+  learning: {
+    enabled: false,
+    mode: "shadow",
+    maxTtlMinutes: 120,
+    maxUses: 30,
+    autoActivateTiers: ["R0", "R1"],
+  },
 };
 
 function resolveExtensionRoot(moduleUrl = import.meta.url): string {
@@ -67,6 +100,26 @@ export function normalizePermissionSystemConfig(
     permissionReviewLog: raw.permissionReviewLog !== false,
     yoloMode: raw.yoloMode === true,
     doublePressToConfirm: raw.doublePressToConfirm !== false,
+    autoMode: {
+      enabled: raw.autoMode?.enabled === true,
+      provider: raw.autoMode?.provider ?? "new-provider",
+      modelId: raw.autoMode?.modelId ?? "deepseek-v4-flash",
+      maxTokens: raw.autoMode?.maxTokens ?? 256,
+      maxRetries: raw.autoMode?.maxRetries ?? 2,
+      fallback: raw.autoMode?.fallback ?? "ask",
+      twoStage: {
+        enabled: raw.autoMode?.twoStage?.enabled === true,
+        thinkingBudgetTokens:
+          raw.autoMode?.twoStage?.thinkingBudgetTokens ?? 1024,
+      },
+    },
+    learning: {
+      enabled: raw.learning?.enabled === true,
+      mode: raw.learning?.mode ?? "shadow",
+      maxTtlMinutes: raw.learning?.maxTtlMinutes ?? 120,
+      maxUses: raw.learning?.maxUses ?? 30,
+      autoActivateTiers: raw.learning?.autoActivateTiers ?? ["R0", "R1"],
+    },
   };
   if (raw.piInfrastructureReadPaths !== undefined) {
     result.piInfrastructureReadPaths = raw.piInfrastructureReadPaths;

@@ -93,11 +93,27 @@ export type PermissionDecisionResolution =
   | "policy_deny"
   | "session_approved"
   | "infrastructure_auto_allowed"
+  | "same_repo_worktree_allowed"
+  | "learned_grant"
   | "user_approved"
   | "user_approved_for_session"
   | "user_denied"
   | "auto_approved"
   | "confirmation_unavailable";
+
+/** Structured reason metadata attached to a permission decision, when known. */
+export interface PermissionDecisionReason {
+  /** High-level source of the decision pressure. */
+  kind:
+    | "policy"
+    | "session"
+    | "learned_grant"
+    | "auto_mode"
+    | "manual_prompt"
+    | "confirmation_unavailable";
+  /** Optional human-readable detail for logs and diagnostics. */
+  detail?: string;
+}
 
 /** Payload emitted on `permissions:decision`. */
 export interface PermissionDecisionEvent {
@@ -115,6 +131,8 @@ export interface PermissionDecisionEvent {
   agentName: string | null;
   /** Matched pattern from the winning rule (when available). */
   matchedPattern: string | null;
+  /** Optional structured reason metadata. */
+  reason?: PermissionDecisionReason | null;
 }
 
 // ── Emit helpers ───────────────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+import "./runner-auto-mode.test";
 import { describe, expect, it, vi } from "vitest";
 
 import type { DenialContext } from "#src/denial-messages";
@@ -24,6 +25,7 @@ describe("GateRunner — descriptor path", () => {
         value: "read",
         result: "allow",
         resolution: "policy_allow",
+        reason: null,
       }),
     );
   });
@@ -74,6 +76,7 @@ describe("GateRunner — descriptor path", () => {
       expect.objectContaining({
         resolution: "session_approved",
         matchedPattern: "git *",
+        reason: null,
       }),
     );
   });
@@ -98,6 +101,7 @@ describe("GateRunner — descriptor path", () => {
         result: "allow",
         resolution: "auto_approved",
         origin: "yolo",
+        reason: { kind: "auto_mode", detail: "yolo-origin allow" },
       }),
     );
   });
@@ -115,6 +119,7 @@ describe("GateRunner — descriptor path", () => {
       expect.objectContaining({
         result: "allow",
         resolution: "user_approved",
+        reason: { kind: "manual_prompt" },
       }),
     );
   });
@@ -134,6 +139,7 @@ describe("GateRunner — descriptor path", () => {
     expect(deps.reporter.emitDecision).toHaveBeenCalledWith(
       expect.objectContaining({
         resolution: "user_approved_for_session",
+        reason: { kind: "manual_prompt" },
       }),
     );
     expect(deps.recordSessionApproval).toHaveBeenCalledWith(
@@ -170,6 +176,7 @@ describe("GateRunner — descriptor path", () => {
       expect.objectContaining({
         result: "deny",
         resolution: "user_denied",
+        reason: { kind: "manual_prompt" },
       }),
     );
   });
@@ -189,6 +196,7 @@ describe("GateRunner — descriptor path", () => {
       expect.objectContaining({
         result: "deny",
         resolution: "confirmation_unavailable",
+        reason: { kind: "confirmation_unavailable" },
       }),
     );
   });

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/sycghj/pi-packages/main/packages/pi-permission-system/schemas/permissions.schema.json",
+
+  // autoMode is disabled by default. When enabled, an LLM classifier resolves
+  // `ask` decisions before the UI prompt; deterministic allow/deny bypass it.
+  // Set `fallback` to "ask" (recommended) or "deny" for classifier failures.
+  // twoStage (default off) adds a thinking-review second stage.
+  // Project config MUST NOT enable autoMode — only user/global config may.
+  "autoMode": {
+    "enabled": true,
+    "provider": "anthropic",
+    "modelId": "claude-sonnet-4-5",
+    "maxTokens": 256,
+    "maxRetries": 2,
+    "fallback": "ask",
+    "twoStage": { "enabled": false, "thinkingBudgetTokens": 1024 }
+  }
+}

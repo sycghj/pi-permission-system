@@ -1,5 +1,4 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 // Hoisted stub so the vi.mock factory can reference it.
@@ -93,7 +92,7 @@ describe("discoverGlobalNodeModulesRoot", () => {
       "file:///opt/homebrew/lib/node_modules/pi-permission-system/dist/external-directory.js";
     const root = discoverGlobalNodeModulesRoot(url);
     expect(root).not.toBeNull();
-    expect(join(root!, "pi-permission-system")).toBe(
+    expect(`${root!}/pi-permission-system`).toBe(
       "/opt/homebrew/lib/node_modules/pi-permission-system",
     );
   });

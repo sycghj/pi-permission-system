@@ -12,7 +12,7 @@
 import { describe, expect, it } from "vitest";
 import { BashProgram } from "#src/access-intent/bash/program";
 import { resolveBashCommandCheck } from "#src/handlers/gates/bash-command";
-import { pathFlavorForPlatform } from "#src/path/path-flavor";
+import { posixPathFlavor } from "#src/path/path-flavor";
 import { PathNormalizer } from "#src/path-normalizer";
 import type { ScopedPermissionResolver } from "#src/permission-resolver";
 import type { PermissionState } from "#src/types";
@@ -52,7 +52,7 @@ async function decide(
 ): Promise<PermissionState> {
   const program = await BashProgram.parse(
     command,
-    new PathNormalizer(pathFlavorForPlatform(process.platform), "/cwd"),
+    new PathNormalizer(posixPathFlavor, "/cwd"),
   );
   return resolveBashCommandCheck(
     command,

@@ -6,12 +6,13 @@ import type { AskEscalator } from "#src/authority/authorizer-selection";
 import type { ShellToolsConfig } from "#src/config-schema";
 import type { DecisionReporter } from "#src/decision-reporter";
 import type { DenialContext } from "#src/denial-messages";
+import type { AutoAskDecider } from "#src/handlers/gates/auto-ask-decider";
 import type { GateDescriptor } from "#src/handlers/gates/descriptor";
 import { GateRunner } from "#src/handlers/gates/runner";
 import type { SkillInputGateInputs } from "#src/handlers/gates/skill-input-gate-pipeline";
 import type { ToolCallGateInputs } from "#src/handlers/gates/tool-call-gate-pipeline";
 import type { ToolCallContext } from "#src/handlers/gates/types";
-import { pathFlavorForPlatform } from "#src/path/path-flavor";
+import { posixPathFlavor } from "#src/path/path-flavor";
 import { PathNormalizer } from "#src/path-normalizer";
 import type { ScopedPermissionResolver } from "#src/permission-resolver";
 import type { SessionApprovalRecorder } from "#src/session-approval-recorder";
@@ -97,6 +98,7 @@ export function makeGateRunner(
     resolve?: ScopedPermissionResolver["resolve"];
     recordSessionApproval?: SessionApprovalRecorder["recordSessionApproval"];
     escalate?: AskEscalator["escalate"];
+    autoDecide?: AutoAskDecider["decide"];
     reporter?: Partial<DecisionReporter>;
   } = {},
 ) {
@@ -121,12 +123,14 @@ export function makeGateRunner(
     { recordSessionApproval },
     { escalate },
     reporter,
+    overrides.autoDecide ? { decide: overrides.autoDecide } : undefined,
   );
   return {
     runner,
     deps: {
       resolve,
       recordSessionApproval,
+      autoDecide: overrides.autoDecide,
       escalate,
       reporter,
     },
@@ -271,11 +275,7 @@ export function makeGateInputs(
     getPathNormalizer:
       overrides.getPathNormalizer ??
       vi.fn<() => PathNormalizer>(
-        () =>
-          new PathNormalizer(
-            pathFlavorForPlatform(process.platform),
-            "/test/cwd",
-          ),
+        () => new PathNormalizer(posixPathFlavor, "/test/cwd"),
       ),
     getShellToolAliases:
       overrides.getShellToolAliases ??

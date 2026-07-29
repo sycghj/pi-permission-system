@@ -6,10 +6,14 @@ import {
   formatUnavailableReason,
   formatUserDeniedReason,
 } from "#src/denial-messages";
+import type { EvidenceRecorder } from "#src/learning/evidence-recorder";
+import type { LearnedGrantEvaluator } from "#src/learning/learned-grant-evaluator";
+import type { PermissionDecisionReason } from "#src/permission-events";
 import { applyPermissionGate } from "#src/permission-gate";
 import type { ScopedPermissionResolver } from "#src/permission-resolver";
 import type { SessionApprovalRecorder } from "#src/session-approval-recorder";
 import type { PermissionCheckResult } from "#src/types";
+import type { AutoAskDecider } from "./auto-ask-decider";
 import type { GateDescriptor, GateResult } from "./descriptor";
 import { isGateBypass } from "./descriptor";
 import { buildDecisionEvent, deriveResolution } from "./helpers";
@@ -32,6 +36,12 @@ export class GateRunner {
     private readonly recorder: SessionApprovalRecorder,
     private readonly prompter: AskEscalator,
     private readonly reporter: DecisionReporter,
+    private readonly autoDecider?: AutoAskDecider,
+    private readonly learnedEvaluator?: Pick<
+      LearnedGrantEvaluator,
+      "evaluateAsk"
+    >,
+    private readonly evidenceRecorder?: EvidenceRecorder,
   ) {}
 
   /**
@@ -122,6 +132,7 @@ export class GateRunner {
           agentName,
           "allow",
           deriveResolution(check.state, "allow", false, false, true),
+          { kind: "auto_mode", detail: "yolo-origin allow" },
         ),
       );
       return { action: "allow" };
@@ -138,21 +149,57 @@ export class GateRunner {
         formatUserDeniedReason(descriptor.denialContext, decision.denialReason),
     };
 
+    const learnedAttempt = this.tryLearnedDecide(
+      descriptor,
+      check,
+      agentName,
+      toolCallId,
+    );
+    if (learnedAttempt.action === "allow") {
+      return { action: "allow" };
+    }
+
     let autoApproved = false;
     let confirmationUnavailable = false;
+    let decisionReason: PermissionDecisionReason | null = null;
+    const autoAttempt = await this.tryAutoDecide(
+      descriptor,
+      check,
+      agentName,
+      toolCallId,
+    );
+    const autoDecision = autoAttempt.decision;
     const gateResult = await applyPermissionGate({
       state: check.state,
       sessionApproval: descriptor.sessionApproval?.toGateApproval(),
       promptForApproval: async () => {
+        if (autoDecision) {
+          autoApproved = autoDecision.autoApproved === true;
+          confirmationUnavailable =
+            autoDecision.confirmationUnavailable === true;
+          decisionReason = reasonForAutoDecision(autoDecision);
+          return autoDecision;
+        }
+        if (autoAttempt.fallbackReason) {
+          this.reporter.writeReviewLog("auto_mode.fallback_to_prompt", {
+            ...descriptor.logContext,
+            agentName,
+            reason: autoAttempt.fallbackReason,
+          });
+        }
         const decision = await this.prompter.escalate({
           requestId: toolCallId,
           ...descriptor.promptDetails,
           ...(descriptor.sessionApproval
-            ? { sessionApproval: descriptor.sessionApproval.toForwardedData() }
+            ? {
+                sessionApproval: descriptor.sessionApproval.toForwardedData(),
+              }
             : {}),
         });
+        this.recordPromptEvidence(descriptor, decision, agentName, toolCallId);
         autoApproved = decision.autoApproved === true;
         confirmationUnavailable = decision.confirmationUnavailable === true;
+        decisionReason = reasonForPromptDecision(decision);
         return decision;
       },
       writeLog: (event, details) =>
@@ -179,6 +226,7 @@ export class GateRunner {
           confirmationUnavailable,
           autoApproved,
         ),
+        decisionReason,
       ),
     );
 
@@ -194,4 +242,168 @@ export class GateRunner {
 
     return { action: "allow" };
   }
+
+  private recordPromptEvidence(
+    descriptor: GateDescriptor,
+    decision: PermissionPromptDecision,
+    agentName: string | null,
+    toolCallId: string,
+  ): void {
+    if (!this.evidenceRecorder) return;
+    this.evidenceRecorder.record({
+      toolCallId,
+      agentName,
+      surface: descriptor.decision.surface,
+      value: descriptor.decision.value,
+      decision: decision.approved ? "approved" : "denied",
+      independentlyUserApproved: decision.approved,
+      denialReason: decision.denialReason,
+    });
+    this.reporter.writeReviewLog("learning.evidence_recorded", {
+      ...descriptor.logContext,
+      agentName,
+      decision: decision.approved ? "approved" : "denied",
+      independentlyUserApproved: decision.approved,
+    });
+  }
+
+  private tryLearnedDecide(
+    descriptor: GateDescriptor,
+    check: PermissionCheckResult,
+    agentName: string | null,
+    toolCallId: string,
+  ): { action: "allow" | "miss" } {
+    if (check.state !== "ask" || !this.learnedEvaluator)
+      return { action: "miss" };
+    this.reporter.writeReviewLog("learning.evaluated", {
+      ...descriptor.logContext,
+      agentName,
+      surface: descriptor.surface,
+      intentFingerprint:
+        descriptor.learning?.intentFingerprint ?? descriptor.decision.value,
+    });
+    const askCheck = check as PermissionCheckResult & { state: "ask" };
+    const result = this.learnedEvaluator.evaluateAsk({
+      check: askCheck,
+      intentFingerprint:
+        descriptor.learning?.intentFingerprint ?? descriptor.decision.value,
+      gateSurface: descriptor.surface as "bash" | "path" | "external_directory",
+      source: "tool_call",
+      agentName,
+      toolCallId,
+    });
+    if (result.action !== "allow") {
+      this.reporter.writeReviewLog("learning.missed", {
+        ...descriptor.logContext,
+        agentName,
+        surface: descriptor.surface,
+        action: result.action,
+      });
+      return { action: "miss" };
+    }
+    this.reporter.writeReviewLog("learning.allowed", {
+      ...descriptor.logContext,
+      agentName,
+      surface: descriptor.surface,
+      resolution: "learned_grant",
+      learnedGrantId: result.grantId,
+    });
+    this.reporter.writeReviewLog("permission_request.learned_approved", {
+      ...descriptor.logContext,
+      agentName,
+      resolution: "learned_grant",
+      learnedGrantId: result.grantId,
+    });
+    this.reporter.emitDecision(
+      buildDecisionEvent(
+        descriptor.decision,
+        check,
+        agentName,
+        "allow",
+        "learned_grant",
+        { kind: "learned_grant", detail: result.grantId },
+      ),
+    );
+    return { action: "allow" };
+  }
+
+  private async tryAutoDecide(
+    descriptor: GateDescriptor,
+    check: PermissionCheckResult,
+    agentName: string | null,
+    toolCallId: string,
+  ): Promise<{
+    decision: PermissionPromptDecision | null;
+    fallbackReason?: string;
+  }> {
+    if (check.state !== "ask") {
+      return { decision: null };
+    }
+    if (descriptor.autoMode?.classifierApprovable === false) {
+      const reason = descriptor.autoMode.reason ?? "not_classifier_approvable";
+      this.reporter.writeReviewLog("auto_mode.skipped", {
+        ...descriptor.logContext,
+        agentName,
+        reason,
+        classifierApprovable: false,
+      });
+      return { decision: null, fallbackReason: reason };
+    }
+    if (!this.autoDecider) {
+      this.reporter.writeReviewLog("auto_mode.skipped", {
+        ...descriptor.logContext,
+        agentName,
+        reason: "missing_auto_decider",
+      });
+      return { decision: null, fallbackReason: "missing_auto_decider" };
+    }
+    try {
+      const decision = await this.autoDecider.decide({
+        agentName,
+        check,
+        input: descriptor.input,
+        prompt: descriptor.promptDetails,
+        toolCallId,
+      });
+      if (!decision) {
+        this.reporter.writeReviewLog("auto_mode.unresolved", {
+          ...descriptor.logContext,
+          agentName,
+          reason: "no_decision",
+        });
+        return { decision: null, fallbackReason: "no_decision" };
+      }
+      return { decision };
+    } catch (error) {
+      this.reporter.writeReviewLog("auto_mode.unresolved", {
+        ...descriptor.logContext,
+        agentName,
+        reason: "decider_error",
+        error: errorMessage(error),
+      });
+      return { decision: null, fallbackReason: "decider_error" };
+    }
+  }
+}
+
+function reasonForAutoDecision(
+  decision: PermissionPromptDecision,
+): PermissionDecisionReason {
+  return {
+    kind: "auto_mode",
+    detail: decision.approved ? "classifier_allow" : decision.denialReason,
+  };
+}
+
+function reasonForPromptDecision(
+  decision: PermissionPromptDecision,
+): PermissionDecisionReason {
+  if (decision.confirmationUnavailable) {
+    return { kind: "confirmation_unavailable" };
+  }
+  return { kind: "manual_prompt", detail: decision.denialReason };
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

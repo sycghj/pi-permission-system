@@ -1,7 +1,10 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getAgentDir, getPackageDir } from "@earendil-works/pi-coding-agent";
 import { warmBashParser } from "./access-intent/bash/parser";
-import { buildResolvedIntentFromMatchValues } from "./access-intent/input-normalizer";
+import {
+  buildAccessIntentForSurface,
+  buildResolvedIntentFromMatchValues,
+} from "./access-intent/input-normalizer";
 import { AuthorizerRegistry } from "./authority/authorizer-registry";
 import { AuthorizerSelection } from "./authority/authorizer-selection";
 import {
@@ -14,6 +17,7 @@ import { PermissionPrompter } from "./authority/permission-prompter";
 import { SubagentDetection } from "./authority/subagent-detection";
 import { subscribeSubagentLifecycle } from "./authority/subagent-lifecycle-events";
 import { getSubagentSessionRegistry } from "./authority/subagent-registry";
+import { createAutoAskDecider } from "./auto-mode-composition";
 import { registerBuiltinToolInputFormatters } from "./builtin-tool-input-formatters";
 import { registerPermissionSystemCommand } from "./config-modal";
 import { getGlobalConfigPath } from "./config-paths";
@@ -31,6 +35,9 @@ import { GateRunner } from "./handlers/gates/runner";
 import { SkillInputGatePipeline } from "./handlers/gates/skill-input-gate-pipeline";
 import { ToolCallGatePipeline } from "./handlers/gates/tool-call-gate-pipeline";
 import { createFailClosedToolCall } from "./handlers/tool-call-boundary";
+import { InMemoryEvidenceRecorder } from "./learning/evidence-recorder";
+import { LearnedGrantEvaluator } from "./learning/learned-grant-evaluator";
+import { SessionLearningStore } from "./learning/session-learning-store";
 import { pathFlavorForPlatform } from "./path/path-flavor";
 import { PermissionManager } from "./permission-manager";
 import { PermissionResolver } from "./permission-resolver";
@@ -236,11 +243,32 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
   );
 
   const reporter = new GateDecisionReporter(logger, pi.events);
+  const autoAskDecider = createAutoAskDecider(
+    configStore,
+    session,
+    undefined,
+    (event, details) => {
+      logger.debug(event, details);
+      logger.review(event, details);
+    },
+  );
+  const learningEnabled = configStore.current().learning.enabled;
+  const learnedEvaluator = learningEnabled
+    ? new LearnedGrantEvaluator(
+        new SessionLearningStore({ now: () => Date.now() }),
+      )
+    : undefined;
+  const evidenceRecorder = learningEnabled
+    ? new InMemoryEvidenceRecorder()
+    : undefined;
   const gateRunner = new GateRunner(
     resolver,
     sessionRules,
     authorizerSelection,
     reporter,
+    autoAskDecider,
+    learnedEvaluator,
+    evidenceRecorder,
   );
   const toolCallGatePipeline = new ToolCallGatePipeline(
     resolver,

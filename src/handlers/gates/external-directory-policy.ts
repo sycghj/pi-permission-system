@@ -1,6 +1,11 @@
 import type { AccessPath } from "#src/access-intent/access-path";
 import type { ScopedPermissionResolver } from "#src/permission-resolver";
 import type { PermissionCheckResult } from "#src/types";
+import {
+  isGitWorktreeAddTarget,
+  isSameRepositoryWorktreePath,
+  type RunGit,
+} from "#src/worktree-runtime-context";
 import { pickMostRestrictive } from "./candidate-check";
 
 /** An external path whose resolved `external_directory` state is not "allow". */
@@ -51,16 +56,33 @@ export function selectUncoveredExternalPaths(
   paths: readonly AccessPath[],
   resolver: ScopedPermissionResolver,
   agentName: string | undefined,
+  cwd?: string,
+  command?: string,
+  runGit?: RunGit,
 ): UncoveredExternalPaths {
   const uncovered: UncoveredExternalPath[] = [];
   for (const path of paths) {
     const check = resolveExternalDirectoryPolicy(path, resolver, agentName);
-    if (check.state !== "allow") {
-      uncovered.push({ path, check });
+    if (check.state === "allow") continue;
+    if (
+      isImplicitAsk(check) &&
+      cwd &&
+      (isSameRepositoryWorktreePath(cwd, path.value(), runGit) ||
+        isGitWorktreeAddTarget(cwd, path.value(), command, runGit))
+    ) {
+      continue;
     }
+    uncovered.push({ path, check });
   }
   return {
     uncovered,
     worstCheck: pickMostRestrictive(uncovered.map(({ check }) => check)),
   };
+}
+
+function isImplicitAsk(check: PermissionCheckResult): boolean {
+  return (
+    check.state === "ask" &&
+    (!check.matchedPattern || check.matchedPattern === "*")
+  );
 }

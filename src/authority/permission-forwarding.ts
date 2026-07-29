@@ -106,6 +106,16 @@ export interface ForwardedAccessIntent extends ForwardedAccessFacts {
   };
 }
 
+/**
+ * Portable path identity from a child worktree. The serving node may prefer
+ * `parentEquivalent` for recorded-authority checks when present, so a temp
+ * worktree path is not reinterpreted as an external path.
+ */
+export interface ForwardedPortablePath {
+  projectRelative?: string;
+  parentEquivalent?: string;
+}
+
 export type ForwardedPermissionRequest = {
   id: string;
   createdAt: number;
@@ -135,6 +145,12 @@ export type ForwardedPermissionRequest = {
    * (Step 3). Present on a current child's request for every gate surface.
    */
   accessIntent?: ForwardedAccessIntent;
+  /**
+   * Portable path identity from a child worktree. Optional for version-skew;
+   * serving nodes prefer `parentEquivalent` for recorded-authority checks when
+   * present so a temp worktree path is not reinterpreted as an external path.
+   */
+  portablePath?: ForwardedPortablePath;
 };
 
 export type ForwardedPermissionResponse = {

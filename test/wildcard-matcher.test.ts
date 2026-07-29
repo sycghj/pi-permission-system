@@ -426,12 +426,12 @@ describe("? single-character wildcard", () => {
 
 describe("home path expansion in patterns", () => {
   test("wildcardMatch expands ~ prefix in pattern before matching", () => {
-    const expandedPath = join(FAKE_HOME, "dev/project");
+    const expandedPath = `${FAKE_HOME}/dev/project`;
     expect(wildcardMatch("~/dev/project", expandedPath)).toBe(true);
   });
 
   test("wildcardMatch expands ~/glob in pattern", () => {
-    const expandedFile = join(FAKE_HOME, "dev/project/file.ts");
+    const expandedFile = `${FAKE_HOME}/dev/project/file.ts`;
     expect(wildcardMatch("~/dev/*", expandedFile)).toBe(true);
   });
 
@@ -440,12 +440,12 @@ describe("home path expansion in patterns", () => {
   });
 
   test("wildcardMatch expands $HOME prefix in pattern before matching", () => {
-    const expandedPath = join(FAKE_HOME, "dev/project");
+    const expandedPath = `${FAKE_HOME}/dev/project`;
     expect(wildcardMatch("$HOME/dev/project", expandedPath)).toBe(true);
   });
 
   test("wildcardMatch expands $HOME/glob in pattern", () => {
-    const expandedFile = join(FAKE_HOME, "work/file.ts");
+    const expandedFile = `${FAKE_HOME}/work/file.ts`;
     expect(wildcardMatch("$HOME/work/*", expandedFile)).toBe(true);
   });
 
@@ -461,7 +461,7 @@ describe("home path expansion in patterns", () => {
 
   test("compileWildcardPattern expanded pattern matches the expanded path", () => {
     const compiled = compileWildcardPattern("~/dev/*", "allow");
-    const expandedFile = join(FAKE_HOME, "dev/file.ts");
+    const expandedFile = `${FAKE_HOME}/dev/file.ts`;
     expect(compiled.matches(expandedFile)).toBe(true);
   });
 

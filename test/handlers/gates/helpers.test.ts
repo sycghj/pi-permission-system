@@ -125,6 +125,7 @@ describe("buildDecisionEvent", () => {
       origin: "global",
       agentName: "test-agent",
       matchedPattern: "read",
+      reason: null,
     });
   });
 

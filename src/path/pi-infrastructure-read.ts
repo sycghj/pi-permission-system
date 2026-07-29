@@ -1,6 +1,5 @@
-import { join } from "node:path";
+import { normalizePathForComparison } from "#src/access-intent/path-normalization";
 import { READ_ONLY_PATH_BEARING_TOOLS } from "#src/access-intent/path-surfaces";
-import { expandHomePath } from "#src/expand-home";
 import type { PathFlavor } from "#src/path/path-flavor";
 import { wildcardMatch } from "#src/wildcard-matcher";
 
@@ -34,24 +33,31 @@ export function isPiInfrastructureRead(
     return false;
   }
 
+  const comparablePath = normalizePathForComparison(
+    normalizedPath,
+    cwd,
+    flavor,
+  );
+
   // On Windows the path value is canonicalized + lowercased; the flavor's match
   // options fold case (and separators) so mixed-case infra dirs and glob
   // patterns still match.
   for (const dir of infrastructureDirs) {
     if (containsGlobChars(dir)) {
-      if (wildcardMatch(dir, normalizedPath, flavor.matchOptions)) return true;
+      if (wildcardMatch(dir, comparablePath, flavor.matchOptions)) return true;
     } else {
-      if (flavor.isWithin(normalizedPath, expandHomePath(dir))) return true;
+      const comparableDir = normalizePathForComparison(dir, cwd, flavor);
+      if (flavor.isWithin(comparablePath, comparableDir)) return true;
     }
   }
 
   // Project-local Pi packages — checked fresh every call so CWD changes work.
-  const projectNpmDir = join(cwd, ".pi", "npm");
-  const projectGitDir = join(cwd, ".pi", "git");
-  if (flavor.isWithin(normalizedPath, projectNpmDir)) {
+  const projectNpmDir = flavor.impl.join(cwd, ".pi", "npm");
+  const projectGitDir = flavor.impl.join(cwd, ".pi", "git");
+  if (flavor.isWithin(comparablePath, projectNpmDir)) {
     return true;
   }
-  if (flavor.isWithin(normalizedPath, projectGitDir)) {
+  if (flavor.isWithin(comparablePath, projectGitDir)) {
     return true;
   }
 

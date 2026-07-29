@@ -26,6 +26,7 @@ export function canonicalizePath(
     const candidate = root + parts.slice(0, i).join(impl.sep);
     try {
       const real = realpathSync(candidate);
+      if (isHostDriveAlias(absolutePath, real, flavor)) return absolutePath;
       const tail = parts.slice(i);
       return tail.length === 0 ? real : impl.join(real, ...tail);
     } catch (error) {
@@ -34,4 +35,16 @@ export function canonicalizePath(
     }
   }
   return absolutePath;
+}
+
+function isHostDriveAlias(
+  absolutePath: string,
+  realPath: string,
+  flavor: PathFlavor,
+): boolean {
+  return (
+    flavor.impl.sep === "/" &&
+    absolutePath.startsWith("/") &&
+    /^[a-zA-Z]:[\\/]/.test(realPath)
+  );
 }

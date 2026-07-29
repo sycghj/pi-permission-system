@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { pathFlavorForPlatform } from "#src/path/path-flavor";
 
 // Mock node:fs so realpathSync (used by canonicalizePath) is controllable.
 // Default is identity so all existing lexical tests are unaffected.
@@ -18,17 +19,14 @@ vi.mock("node:fs", async () => {
 });
 
 import { BashProgram } from "#src/access-intent/bash/program";
-import { pathFlavorForPlatform, win32PathFlavor } from "#src/path/path-flavor";
+import { posixPathFlavor, win32PathFlavor } from "#src/path/path-flavor";
 import { PathNormalizer } from "#src/path-normalizer";
 import { createTmpFixture } from "#test/helpers/tmp-fixture";
 
 describe("BashProgram", () => {
   describe("pathRuleCandidates", () => {
     const cwd = "/projects/my-app";
-    const normalizer = new PathNormalizer(
-      pathFlavorForPlatform(process.platform),
-      cwd,
-    );
+    const normalizer = new PathNormalizer(posixPathFlavor, cwd);
 
     beforeEach(() => {
       realpathSync.mockReset();
@@ -232,10 +230,7 @@ describe("BashProgram", () => {
 
   describe("externalPaths", () => {
     const cwd = "/projects/my-app";
-    const normalizer = new PathNormalizer(
-      pathFlavorForPlatform(process.platform),
-      cwd,
-    );
+    const normalizer = new PathNormalizer(posixPathFlavor, cwd);
 
     beforeEach(() => {
       realpathSync.mockReset();
@@ -679,7 +674,7 @@ describe("BashProgram", () => {
       });
       const program = await BashProgram.parse(
         "cat /tmp/workspace/file.ts",
-        new PathNormalizer(pathFlavorForPlatform(process.platform), symlinkCwd),
+        new PathNormalizer(posixPathFlavor, symlinkCwd),
       );
       expect(program.externalPaths()).toHaveLength(0);
     });
@@ -687,10 +682,7 @@ describe("BashProgram", () => {
 
   describe("commands", () => {
     const cwd = "/projects/my-app";
-    const normalizer = new PathNormalizer(
-      pathFlavorForPlatform(process.platform),
-      cwd,
-    );
+    const normalizer = new PathNormalizer(posixPathFlavor, cwd);
 
     it("returns a single-element list for a lone command", async () => {
       const program = await BashProgram.parse("npm install pkg", normalizer);
@@ -980,10 +972,7 @@ describe("BashProgram", () => {
 
   it("derives both slices from a single parse", async () => {
     const cwd = "/projects/my-app";
-    const normalizer = new PathNormalizer(
-      pathFlavorForPlatform(process.platform),
-      cwd,
-    );
+    const normalizer = new PathNormalizer(posixPathFlavor, cwd);
     const program = await BashProgram.parse("cat .env /etc/hosts", normalizer);
     expect(program.pathRuleCandidates().map(({ token }) => token)).toEqual([
       ".env",
@@ -996,10 +985,7 @@ describe("BashProgram", () => {
 
   describe("workdir seed (#574)", () => {
     const cwd = "/projects/my-app";
-    const normalizer = new PathNormalizer(
-      pathFlavorForPlatform(process.platform),
-      cwd,
-    );
+    const normalizer = new PathNormalizer(posixPathFlavor, cwd);
 
     beforeEach(() => {
       realpathSync.mockReset();

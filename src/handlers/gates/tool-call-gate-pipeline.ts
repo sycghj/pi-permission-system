@@ -6,6 +6,8 @@ import {
   type ShellInvocation,
 } from "#src/access-intent/tool-kind";
 import type { ShellToolsConfig } from "#src/config-schema";
+import { extractBashCapability } from "#src/learning/bash-capability-extractor";
+import { gitProjectIdentity } from "#src/learning/capability-fingerprint";
 import type { PathNormalizer } from "#src/path-normalizer";
 import type { ScopedPermissionResolver } from "#src/permission-resolver";
 import type { SkillPromptEntry } from "#src/skill-prompt-sanitizer";
@@ -22,6 +24,7 @@ import { describeBashPathGate } from "./bash-path";
 import type { GateResult } from "./descriptor";
 import { describeExternalDirectoryGate } from "./external-directory";
 import { describePathGate } from "./path";
+import { isSameRepoReadonlyGitCommand } from "./readonly-git-worktree";
 import type { GateRunner } from "./runner";
 import { describeSkillReadGate } from "./skill-read";
 import { describeToolGate } from "./tool";
@@ -97,6 +100,15 @@ export class ToolCallGatePipeline {
       this.inputs.getToolPreviewLimits(),
       this.customFormatters,
     );
+    const bashCapability = bashProgram
+      ? extractBashCapability({
+          program: bashProgram,
+          cwd: tcc.cwd,
+          source: "tool_call",
+          agentName: tcc.agentName,
+          projectIdentity: gitProjectIdentity(`${tcc.cwd}/.git`),
+        })
+      : undefined;
 
     const infraDirs = this.inputs.getInfrastructureReadDirs();
 
@@ -131,7 +143,16 @@ export class ToolCallGatePipeline {
           accessPath,
           shell,
         );
-        toolDescriptor.preCheck = toolCheck;
+        if (bashCapability) {
+          toolDescriptor.learning = {
+            intentFingerprint: bashCapability.fingerprint,
+          };
+        }
+        toolDescriptor.preCheck = sameRepoReadonlyGitCheck(
+          tcc.cwd,
+          bashProgram,
+          toolCheck,
+        );
         return toolDescriptor;
       },
     ];
@@ -213,4 +234,26 @@ export class ToolCallGatePipeline {
       }),
     };
   }
+}
+
+function sameRepoReadonlyGitCheck(
+  cwd: string,
+  bashProgram: BashProgram | null,
+  fallback: PermissionCheckResult,
+): PermissionCheckResult {
+  if (
+    fallback.state === "ask" &&
+    bashProgram &&
+    isSameRepoReadonlyGitCommand(bashProgram.commandText(), cwd)
+  ) {
+    return {
+      state: "allow",
+      toolName: "bash",
+      source: "bash",
+      origin: "builtin",
+      command: bashProgram.commandText(),
+      matchedPattern: "<same-repo-readonly-git>",
+    };
+  }
+  return fallback;
 }

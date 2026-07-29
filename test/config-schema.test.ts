@@ -1,3 +1,4 @@
+import "./config-schema-auto-mode.test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 

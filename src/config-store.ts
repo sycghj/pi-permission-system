@@ -131,6 +131,12 @@ export class ConfigStore implements SessionConfigStore, CommandConfigStore {
       permissionReviewLog: runtimeConfig.permissionReviewLog,
       yoloMode: runtimeConfig.yoloMode,
       projectTrusted,
+      autoModeEnabled: runtimeConfig.autoMode.enabled,
+      autoModeProvider: runtimeConfig.autoMode.provider,
+      autoModeModelId: runtimeConfig.autoMode.modelId,
+      autoModeFallback: runtimeConfig.autoMode.fallback,
+      autoModeTwoStageEnabled:
+        runtimeConfig.autoMode.twoStage?.enabled === true,
     });
   }
 
@@ -214,13 +220,22 @@ export class ConfigStore implements SessionConfigStore, CommandConfigStore {
       legacyProjectPolicyDetected,
       legacyExtensionConfigDetected,
     });
-    this.deps.logger.review(
-      "config.resolved",
-      entry as unknown as Record<string, unknown>,
-    );
-    this.deps.logger.debug(
-      "config.resolved",
-      entry as unknown as Record<string, unknown>,
-    );
+    const configDetails = {
+      autoModeEnabled: this.config.autoMode.enabled,
+      autoModeProvider: this.config.autoMode.provider,
+      autoModeModelId: this.config.autoMode.modelId,
+      autoModeFallback: this.config.autoMode.fallback,
+      autoModeTwoStageEnabled: this.config.autoMode.twoStage?.enabled === true,
+      learningEnabled: this.config.learning.enabled,
+      learningMode: this.config.learning.mode,
+    };
+    this.deps.logger.review("config.resolved", {
+      ...(entry as unknown as Record<string, unknown>),
+      ...configDetails,
+    });
+    this.deps.logger.debug("config.resolved", {
+      ...(entry as unknown as Record<string, unknown>),
+      ...configDetails,
+    });
   }
 }

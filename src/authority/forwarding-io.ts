@@ -15,6 +15,7 @@ import {
   type ForwardedAccessIntent,
   type ForwardedPermissionRequest,
   type ForwardedPermissionResponse,
+  type ForwardedPortablePath,
   type ForwardedSessionApproval,
   type PermissionForwardingLocation,
 } from "#src/authority/permission-forwarding";
@@ -131,6 +132,20 @@ function asForwardedAccessIntent(
   };
 }
 
+function asForwardedPortablePath(
+  value: unknown,
+): ForwardedPortablePath | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const candidate = value as Partial<ForwardedPortablePath>;
+  return {
+    projectRelative: optionalString(candidate.projectRelative),
+    parentEquivalent: optionalString(candidate.parentEquivalent),
+  };
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
 export function formatUnknownErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
     return error.message;
@@ -420,6 +435,7 @@ export function readForwardedPermissionRequest(
       value: asNullableDisplayString(parsed.value),
       sessionApproval: asForwardedSessionApproval(parsed.sessionApproval),
       accessIntent: asForwardedAccessIntent(parsed.accessIntent),
+      portablePath: asForwardedPortablePath(parsed.portablePath),
     };
   } catch (error) {
     logPermissionForwardingWarning(

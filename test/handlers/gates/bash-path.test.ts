@@ -44,7 +44,7 @@ async function describeGate(
   tcc: ToolCallContext,
   resolver: ScopedPermissionResolver,
 ): Promise<GateResult> {
-  return describeGateOnPlatform(process.platform, tcc, resolver);
+  return describeGateOnPlatform("linux", tcc, resolver);
 }
 
 /**

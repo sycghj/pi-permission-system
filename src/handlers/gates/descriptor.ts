@@ -35,6 +35,17 @@ export interface GateDescriptor {
     surface: string;
     value: string;
   };
+  /** Optional learned-capability metadata consumed only for ask-state checks. */
+  learning?: {
+    intentFingerprint: string;
+  };
+  /** Optional auto-mode routing metadata for ask-state checks. */
+  autoMode?: {
+    /** False when deterministic safety requires human authority instead of classifier review. */
+    classifierApprovable?: boolean;
+    /** Short diagnostic reason logged when auto-mode is bypassed. */
+    reason?: string;
+  };
   /**
    * When set, the gate has already resolved the permission state
    * (e.g. from a skill entry match). The runner uses this directly

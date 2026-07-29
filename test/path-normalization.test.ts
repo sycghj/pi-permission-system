@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 // Mock node:os so tilde-expansion is deterministic across platforms.
@@ -52,7 +51,7 @@ describe("normalizePathForComparison", () => {
   test("expands ~/... to homedir-relative path", () => {
     expect(
       normalizePathForComparison("~/docs/readme.md", cwd, posixPathFlavor),
-    ).toBe(join("/mock/home", "docs/readme.md"));
+    ).toBe("/mock/home/docs/readme.md");
   });
 
   test("expands bare $HOME to homedir", () => {
@@ -64,7 +63,7 @@ describe("normalizePathForComparison", () => {
   test("expands $HOME/... to homedir-relative path", () => {
     expect(
       normalizePathForComparison("$HOME/.ssh/config", cwd, posixPathFlavor),
-    ).toBe(join("/mock/home", ".ssh/config"));
+    ).toBe("/mock/home/.ssh/config");
   });
 
   test("strips leading @ before resolving", () => {
@@ -181,7 +180,7 @@ describe("normalizePathPolicyLiteral", () => {
 
   test("expands ~ to the home directory", () => {
     expect(normalizePathPolicyLiteral("~/docs/readme.md")).toBe(
-      join("/mock/home", "docs/readme.md"),
+      "/mock/home/docs/readme.md",
     );
   });
 

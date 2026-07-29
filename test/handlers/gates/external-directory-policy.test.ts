@@ -4,7 +4,7 @@ import {
   resolveExternalDirectoryPolicy,
   selectUncoveredExternalPaths,
 } from "#src/handlers/gates/external-directory-policy";
-import { posixPathFlavor } from "#src/path/path-flavor";
+import { posixPathFlavor, win32PathFlavor } from "#src/path/path-flavor";
 import type { PermissionCheckResult } from "#src/types";
 
 import { makeResolver } from "#test/helpers/gate-fixtures";
@@ -130,6 +130,57 @@ describe("selectUncoveredExternalPaths", () => {
       undefined,
     );
 
+    expect(worstCheck?.state).toBe("deny");
+  });
+
+  it("suppresses implicit asks for git worktree add targets that do not exist yet", () => {
+    const target = AccessPath.forPath("D:/code/wt/VisionNext-flowedit-m12", {
+      cwd: "D:/code/VisionNext",
+      flavor: win32PathFlavor,
+    });
+    const resolver = makeResolver(
+      makeCheckResult("ask", { matchedPattern: "*" }),
+    );
+
+    const { uncovered, worstCheck } = selectUncoveredExternalPaths(
+      [target],
+      resolver,
+      undefined,
+      "D:/code/VisionNext",
+      "cd D:/code/VisionNext && git worktree add D:/code/wt/VisionNext-flowedit-m12 -b task/demo HEAD",
+      (cwd, args) => {
+        if (cwd !== "D:/code/VisionNext") return "";
+        return args.join(" ") === "rev-parse --show-toplevel"
+          ? "D:/code/VisionNext\n"
+          : "";
+      },
+    );
+
+    expect(uncovered).toEqual([]);
+    expect(worstCheck).toBeUndefined();
+  });
+
+  it("does not suppress explicit denies for git worktree add targets", () => {
+    const target = AccessPath.forPath("D:/code/wt/VisionNext-flowedit-m12", {
+      cwd: "D:/code/VisionNext",
+      flavor: win32PathFlavor,
+    });
+    const resolver = makeResolver(
+      makeCheckResult("deny", { matchedPattern: "d:/code/wt/*" }),
+    );
+
+    const { uncovered, worstCheck } = selectUncoveredExternalPaths(
+      [target],
+      resolver,
+      undefined,
+      "D:/code/VisionNext",
+      "git worktree add D:/code/wt/VisionNext-flowedit-m12 HEAD",
+      () => "D:/code/VisionNext\n",
+    );
+
+    expect(uncovered.map(({ path }) => path.value())).toEqual([
+      "d:\\code\\wt\\visionnext-flowedit-m12",
+    ]);
     expect(worstCheck?.state).toBe("deny");
   });
 });

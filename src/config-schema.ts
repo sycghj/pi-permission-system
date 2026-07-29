@@ -126,6 +126,109 @@ const shellToolAliasSchema = z
       "Maps one shell-aliased tool to the input arguments holding its command and (optionally) its working directory.",
   });
 
+const autoModeTwoStageSchema = z
+  .strictObject({
+    enabled: z.boolean().optional().meta({
+      description:
+        "Run a second, deliberative classifier pass before auto-denying or falling back from malformed classifier output.",
+      default: false,
+    }),
+    thinkingBudgetTokens: z.number().int().min(1).optional().meta({
+      description:
+        "Anthropic-compatible thinking token budget for the second-stage classifier request.",
+      default: 1024,
+    }),
+  })
+  .meta({
+    description:
+      "Optional second-stage permission review with explicit thinking enabled.",
+  });
+
+const autoModeSchema = z
+  .strictObject({
+    enabled: z.boolean().optional().meta({
+      description:
+        "Resolve ask-state permission checks with an LLM classifier before showing the UI prompt.",
+      default: false,
+    }),
+    provider: z.string().min(1).optional().meta({
+      description: "Model provider id for the auto classifier.",
+      default: "new-provider",
+    }),
+    modelId: z.string().min(1).optional().meta({
+      description: "Model id for the auto classifier.",
+      default: "deepseek-v4-flash",
+    }),
+    maxTokens: z.number().int().min(1).optional().meta({
+      description: "Maximum output tokens for the classifier response.",
+      default: 256,
+    }),
+    maxRetries: z.number().int().min(0).optional().meta({
+      description:
+        "Maximum retry attempts after the first classifier request fails.",
+      default: 2,
+    }),
+    fallback: z.enum(["ask", "deny"]).optional().meta({
+      description:
+        "Decision when classifier attempts are exhausted or cannot start.",
+      default: "ask",
+    }),
+    twoStage: autoModeTwoStageSchema.optional(),
+  })
+  .meta({
+    description:
+      "Optional LLM classifier for ask-state permission checks only. Allow and deny policy decisions bypass it.",
+  });
+
+const learningSchema = z
+  .strictObject({
+    enabled: z.boolean().optional().meta({ default: false }),
+    mode: z.enum(["shadow", "suggest", "active"]).optional().meta({
+      default: "shadow",
+    }),
+    maxTtlMinutes: z.number().int().min(1).optional().meta({ default: 120 }),
+    maxUses: z.number().int().min(1).optional().meta({ default: 30 }),
+    autoActivateTiers: z
+      .array(z.enum(["R0", "R1"]))
+      .optional()
+      .meta({ default: ["R0", "R1"] }),
+  })
+  .meta({
+    description:
+      "Session-scoped learned capability grant settings. Learned grants only consume ask decisions and never override denies.",
+  });
+
+const riskOverrideSchema = z
+  .strictObject({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    from: z.literal("R2"),
+    to: z.literal("R1"),
+    capability: z.literal("dotnet-build-test"),
+    scope: z.strictObject({
+      projectIdentity: z.string().regex(/^git:.+/),
+      agents: z.array(z.string().min(1)),
+      sources: z.array(z.enum(["tool_call", "user_bash"])),
+      sameRepoWorktrees: z.literal(true),
+    }),
+    constraints: z.strictObject({
+      subcommands: z.array(z.enum(["build", "test"])).min(1),
+      projectPaths: z.array(z.string().min(1)).min(1),
+      requireExplicitProjectPath: z.literal(true),
+      requireNoRestore: z.literal(true),
+      allowWrites: z.array(z.string().min(1)).min(1),
+      denyCommandRequestedNetwork: z.literal(true),
+      denySecrets: z.literal(true),
+      safeOptions: z.array(z.string().min(1)),
+    }),
+    ttlMinutes: z.number().int().min(1),
+    maxUses: z.number().int().min(1),
+  })
+  .meta({
+    description:
+      "A bounded risk-friction override. MVP supports only trusted dotnet build/test profiles, never broad executable globs.",
+  });
+
 const shellToolsSchema = z
   .record(
     z.string().min(1).meta({
@@ -213,6 +316,9 @@ export const unifiedConfigSchema = z
         "Ordered names of registered **live-authority chain links** (e.g. a model judge) to consult before the terminal authorizer (the human, or the subagent-forwarding / headless-deny fallback).\n\nA link reviews an `ask` and returns `allow` / `deny` (with an optional teaching reason) / `defer` to the next link. Three invariants govern the chain:\n\n- **Config order wins.** The order here \u2014 not the order extensions register in \u2014 fixes the security-relevant chain order.\n- **Fail-safe skip.** A name with no registered link is skipped with a warning; the `ask` still reaches the terminal (more prompting, never less).\n- **Opt-in activation.** Installing a judge extension grants it no authority; a link decides nothing until you name it here.\n\nThe chain owner caps every verdict with a bounded-delegation checkpoint: a link's `allow` on an excluded surface (`external_directory` or `path`) is downgraded to `defer`, so a link cannot exceed your policy.\n\nDefaults to an empty list (no links).",
       default: [],
     }),
+    autoMode: autoModeSchema.optional(),
+    learning: learningSchema.optional(),
+    riskOverrides: z.array(riskOverrideSchema).optional(),
     permission: permissionSchema.optional(),
     shellTools: shellToolsSchema.optional(),
   })
@@ -238,6 +344,15 @@ export type FlatPermissionConfig = z.infer<typeof permissionSchema>;
 
 /** The `shellTools` map: tool name → shell-alias argument mapping. */
 export type ShellToolsConfig = z.infer<typeof shellToolsSchema>;
+
+/** The optional auto-mode classifier config. */
+export type AutoModeConfig = z.infer<typeof autoModeSchema>;
+
+/** Optional learned capability grants config. */
+export type LearningConfig = z.infer<typeof learningSchema>;
+
+/** Bounded risk-friction override config. */
+export type RiskOverrideConfig = z.infer<typeof riskOverrideSchema>;
 
 /** The raw config file shape after validation (all fields optional). */
 export type UnifiedPermissionConfig = z.infer<typeof unifiedConfigSchema>;

@@ -4,6 +4,7 @@ import type { ScopedPermissionResolver } from "#src/permission-resolver";
 import { SessionApproval } from "#src/session-approval";
 import { deriveApprovalPattern } from "#src/session-rules";
 import type { ToolAccessExtractorLookup } from "#src/tool-access-extractor-registry";
+import { isSameRepositoryWorktreePath } from "#src/worktree-runtime-context";
 import type { GateResult } from "./descriptor";
 import { formatExternalDirectoryAskPrompt } from "./external-directory-messages";
 import { resolveExternalDirectoryPolicy } from "./external-directory-policy";
@@ -83,6 +84,34 @@ export function describeExternalDirectoryGate(
     resolver,
     tcc.agentName ?? undefined,
   );
+  if (
+    preCheck.state === "ask" &&
+    (!preCheck.matchedPattern || preCheck.matchedPattern === "*") &&
+    isSameRepositoryWorktreePath(tcc.cwd, accessPath.value())
+  ) {
+    return {
+      action: "allow",
+      log: {
+        event: "permission_request.same_repo_worktree_allowed",
+        details: {
+          source: "tool_call",
+          toolCallId: tcc.toolCallId,
+          toolName: tcc.toolName,
+          agentName: tcc.agentName,
+          path: externalDirectoryPath,
+        },
+      },
+      decision: {
+        surface: "external_directory",
+        value: externalDirectoryPath,
+        result: "allow",
+        resolution: "same_repo_worktree_allowed",
+        origin: null,
+        agentName: tcc.agentName ?? null,
+        matchedPattern: null,
+      },
+    };
+  }
   const pattern = deriveApprovalPattern(accessPath.value());
 
   return {

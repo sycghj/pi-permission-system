@@ -125,5 +125,31 @@ export function describeToolGate(
       surface: gateSurface,
       value: decisionValue,
     },
+    autoMode: autoModeRouting(check),
   };
+}
+
+const HUMAN_AUTHORITY_PATTERNS: Record<string, string> = {
+  "<credential-network-egress>": "credential_network_egress_requires_human",
+  "<destructive-git-history>": "destructive_git_history_requires_human",
+  "<indirection-bash-wrapper>": "indirection_bash_wrapper_requires_human",
+  "<opaque-bash-wrapper>": "opaque_bash_wrapper_requires_human",
+  "<permission-config-write>": "permission_config_write_requires_human",
+  "<unparseable-bash-command>": "unparseable_bash_requires_human",
+};
+
+function humanAuthorityRouting(reason: string): GateDescriptor["autoMode"] {
+  return { classifierApprovable: false, reason };
+}
+
+function autoModeRouting(
+  check: PermissionCheckResult,
+): GateDescriptor["autoMode"] {
+  if (check.state !== "ask") return undefined;
+  if (check.commandContext) {
+    return humanAuthorityRouting(`bash_${check.commandContext}_requires_human`);
+  }
+  if (!check.matchedPattern) return undefined;
+  const reason = HUMAN_AUTHORITY_PATTERNS[check.matchedPattern];
+  return reason ? humanAuthorityRouting(reason) : undefined;
 }

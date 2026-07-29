@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockDiscoverGlobalNodeModulesRoot } = vi.hoisted(() => ({
@@ -38,7 +37,7 @@ describe("computeExtensionPaths", () => {
   it("derives forwardingDir as sessionsDir/permission-forwarding", () => {
     const paths = computeExtensionPaths("/test/agent");
     expect(paths.forwardingDir).toBe(
-      join("/test/agent/sessions", "permission-forwarding"),
+      "/test/agent/sessions/permission-forwarding",
     );
   });
 

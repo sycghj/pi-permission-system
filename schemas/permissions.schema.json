@@ -65,6 +65,253 @@
         "minLength": 1
       }
     },
+    "autoMode": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Resolve ask-state permission checks with an LLM classifier before showing the UI prompt.",
+          "default": false,
+          "type": "boolean"
+        },
+        "provider": {
+          "description": "Model provider id for the auto classifier.",
+          "default": "new-provider",
+          "type": "string",
+          "minLength": 1
+        },
+        "modelId": {
+          "description": "Model id for the auto classifier.",
+          "default": "deepseek-v4-flash",
+          "type": "string",
+          "minLength": 1
+        },
+        "maxTokens": {
+          "description": "Maximum output tokens for the classifier response.",
+          "default": 256,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "maxRetries": {
+          "description": "Maximum retry attempts after the first classifier request fails.",
+          "default": 2,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "fallback": {
+          "description": "Decision when classifier attempts are exhausted or cannot start.",
+          "default": "ask",
+          "type": "string",
+          "enum": ["ask", "deny"]
+        },
+        "twoStage": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "description": "Run a second, deliberative classifier pass before auto-denying or falling back from malformed classifier output.",
+              "default": false,
+              "type": "boolean"
+            },
+            "thinkingBudgetTokens": {
+              "description": "Anthropic-compatible thinking token budget for the second-stage classifier request.",
+              "default": 1024,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "additionalProperties": false,
+          "description": "Optional second-stage permission review with explicit thinking enabled."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Optional LLM classifier for ask-state permission checks only. Allow and deny policy decisions bypass it."
+    },
+    "learning": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "mode": {
+          "default": "shadow",
+          "type": "string",
+          "enum": ["shadow", "suggest", "active"]
+        },
+        "maxTtlMinutes": {
+          "default": 120,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "maxUses": {
+          "default": 30,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "autoActivateTiers": {
+          "default": ["R0", "R1"],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["R0", "R1"]
+          }
+        }
+      },
+      "additionalProperties": false,
+      "description": "Session-scoped learned capability grant settings. Learned grants only consume ask decisions and never override denies."
+    },
+    "riskOverrides": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "from": {
+            "type": "string",
+            "const": "R2"
+          },
+          "to": {
+            "type": "string",
+            "const": "R1"
+          },
+          "capability": {
+            "type": "string",
+            "const": "dotnet-build-test"
+          },
+          "scope": {
+            "type": "object",
+            "properties": {
+              "projectIdentity": {
+                "type": "string",
+                "pattern": "^git:.+"
+              },
+              "agents": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "sources": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["tool_call", "user_bash"]
+                }
+              },
+              "sameRepoWorktrees": {
+                "type": "boolean",
+                "const": true
+              }
+            },
+            "required": [
+              "projectIdentity",
+              "agents",
+              "sources",
+              "sameRepoWorktrees"
+            ],
+            "additionalProperties": false
+          },
+          "constraints": {
+            "type": "object",
+            "properties": {
+              "subcommands": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["build", "test"]
+                }
+              },
+              "projectPaths": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "requireExplicitProjectPath": {
+                "type": "boolean",
+                "const": true
+              },
+              "requireNoRestore": {
+                "type": "boolean",
+                "const": true
+              },
+              "allowWrites": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "denyCommandRequestedNetwork": {
+                "type": "boolean",
+                "const": true
+              },
+              "denySecrets": {
+                "type": "boolean",
+                "const": true
+              },
+              "safeOptions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": [
+              "subcommands",
+              "projectPaths",
+              "requireExplicitProjectPath",
+              "requireNoRestore",
+              "allowWrites",
+              "denyCommandRequestedNetwork",
+              "denySecrets",
+              "safeOptions"
+            ],
+            "additionalProperties": false
+          },
+          "ttlMinutes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "maxUses": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "from",
+          "to",
+          "capability",
+          "scope",
+          "constraints",
+          "ttlMinutes",
+          "maxUses"
+        ],
+        "additionalProperties": false,
+        "description": "A bounded risk-friction override. MVP supports only trusted dotnet build/test profiles, never broad executable globs."
+      }
+    },
     "permission": {
       "type": "object",
       "propertyNames": {

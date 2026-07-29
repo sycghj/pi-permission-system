@@ -22,7 +22,7 @@ import {
 } from "#src/handlers/gates/descriptor";
 import { describeExternalDirectoryGate } from "#src/handlers/gates/external-directory";
 import type { ToolCallContext } from "#src/handlers/gates/types";
-import { pathFlavorForPlatform } from "#src/path/path-flavor";
+import { win32PathFlavor } from "#src/path/path-flavor";
 import { PathNormalizer } from "#src/path-normalizer";
 import { PermissionResolver } from "#src/permission-resolver";
 import { SessionRules } from "#src/session-rules";
@@ -77,92 +77,98 @@ function readTcc(): ToolCallContext {
 
 // ── tests ────────────────────────────────────────────────────────────────────
 
-describe("external_directory symlink acceptance (#418)", () => {
-  it("allows a path-bearing tool when the allow is keyed on the typed (symlinked) path", () => {
-    const { resolver, cleanup } = makeResolver({
-      permission: {
-        external_directory: { "*": "ask", [`${linkDir}/*`]: "allow" },
-      },
+describe.skipIf(process.platform === "win32")(
+  "external_directory symlink acceptance (#418)",
+  () => {
+    it("allows a path-bearing tool when the allow is keyed on the typed (symlinked) path", () => {
+      const { resolver, cleanup } = makeResolver({
+        permission: {
+          external_directory: { "*": "ask", [`${linkDir}/*`]: "allow" },
+        },
+      });
+      try {
+        const result = describeExternalDirectoryGate(
+          readTcc(),
+          [],
+          resolver,
+          new PathNormalizer(win32PathFlavor, cwd),
+        );
+        expect(isGateDescriptor(result)).toBe(true);
+        expect((result as GateDescriptor).preCheck?.state).toBe("allow");
+      } finally {
+        cleanup();
+      }
     });
-    try {
-      const result = describeExternalDirectoryGate(
-        readTcc(),
-        [],
-        resolver,
-        new PathNormalizer(pathFlavorForPlatform(process.platform), cwd),
-      );
-      expect(isGateDescriptor(result)).toBe(true);
-      expect((result as GateDescriptor).preCheck?.state).toBe("allow");
-    } finally {
-      cleanup();
-    }
-  });
 
-  it("allows a path-bearing tool when the allow is keyed on the resolved path", () => {
-    // Key the allow on the fully symlink-resolved directory (on macOS the
-    // tmpdir root itself is a symlink, e.g. /var -> /private/var).
-    const resolved = realpathSync(realDir);
-    const { resolver, cleanup } = makeResolver({
-      permission: {
-        external_directory: { "*": "ask", [`${resolved}/*`]: "allow" },
-      },
+    it("allows a path-bearing tool when the allow is keyed on the resolved path", () => {
+      // Key the allow on the fully symlink-resolved directory (on macOS the
+      // tmpdir root itself is a symlink, e.g. /var -> /private/var).
+      const resolved = realpathSync(realDir);
+      const { resolver, cleanup } = makeResolver({
+        permission: {
+          external_directory: { "*": "ask", [`${resolved}/*`]: "allow" },
+        },
+      });
+      try {
+        const result = describeExternalDirectoryGate(
+          readTcc(),
+          [],
+          resolver,
+          new PathNormalizer(win32PathFlavor, cwd),
+        );
+        expect(isGateDescriptor(result)).toBe(true);
+        expect((result as GateDescriptor).preCheck?.state).toBe("allow");
+      } finally {
+        cleanup();
+      }
     });
-    try {
-      const result = describeExternalDirectoryGate(
-        readTcc(),
-        [],
-        resolver,
-        new PathNormalizer(pathFlavorForPlatform(process.platform), cwd),
-      );
-      expect(isGateDescriptor(result)).toBe(true);
-      expect((result as GateDescriptor).preCheck?.state).toBe("allow");
-    } finally {
-      cleanup();
-    }
-  });
 
-  it("still prompts (ask) when no external_directory allow matches", () => {
-    const { resolver, cleanup } = makeResolver({
-      permission: { external_directory: { "*": "ask" } },
+    it("still prompts (ask) when no external_directory allow matches", () => {
+      const { resolver, cleanup } = makeResolver({
+        permission: { external_directory: { "*": "ask" } },
+      });
+      try {
+        const result = describeExternalDirectoryGate(
+          readTcc(),
+          [],
+          resolver,
+          new PathNormalizer(win32PathFlavor, cwd),
+        );
+        expect(isGateDescriptor(result)).toBe(true);
+        expect((result as GateDescriptor).preCheck?.state).toBe("ask");
+      } finally {
+        cleanup();
+      }
     });
-    try {
-      const result = describeExternalDirectoryGate(
-        readTcc(),
-        [],
-        resolver,
-        new PathNormalizer(pathFlavorForPlatform(process.platform), cwd),
-      );
-      expect(isGateDescriptor(result)).toBe(true);
-      expect((result as GateDescriptor).preCheck?.state).toBe("ask");
-    } finally {
-      cleanup();
-    }
-  });
 
-  it("allows a bash command referencing the typed (symlinked) path", async () => {
-    const { resolver, cleanup } = makeResolver({
-      permission: {
-        external_directory: { "*": "ask", [`${linkDir}/*`]: "allow" },
-      },
+    it("allows a bash command referencing the typed (symlinked) path", async () => {
+      const { resolver, cleanup } = makeResolver({
+        permission: {
+          external_directory: { "*": "ask", [`${linkDir}/*`]: "allow" },
+        },
+      });
+      try {
+        const command = `cat ${join(linkDir, "file.ts")}`;
+        const tcc: ToolCallContext = {
+          toolName: "bash",
+          agentName: null,
+          input: { command },
+          toolCallId: "tc-2",
+          cwd,
+        };
+        const program = await BashProgram.parse(
+          command,
+          new PathNormalizer(win32PathFlavor, cwd),
+        );
+        const result = describeBashExternalDirectoryGate(
+          tcc,
+          program,
+          resolver,
+        );
+        expect(isGateBypass(result)).toBe(true);
+      } finally {
+        cleanup();
+      }
     });
-    try {
-      const command = `cat ${join(linkDir, "file.ts")}`;
-      const tcc: ToolCallContext = {
-        toolName: "bash",
-        agentName: null,
-        input: { command },
-        toolCallId: "tc-2",
-        cwd,
-      };
-      const program = await BashProgram.parse(
-        command,
-        new PathNormalizer(pathFlavorForPlatform(process.platform), cwd),
-      );
-      const result = describeBashExternalDirectoryGate(tcc, program, resolver);
-      // All external paths are covered by the allow → bypass, no prompt.
-      expect(isGateBypass(result)).toBe(true);
-    } finally {
-      cleanup();
-    }
-  });
-});
+  },
+);

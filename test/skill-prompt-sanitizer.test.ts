@@ -1,4 +1,3 @@
-import { resolve } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { posixPathFlavor } from "#src/path/path-flavor";
 import { PathNormalizer } from "#src/path-normalizer";
@@ -398,15 +397,15 @@ test("REGRESSION: resolveSkillPromptEntries keeps only visible skills available 
       null,
       new PathNormalizer(posixPathFlavor, "/cwd"),
     );
-    const visiblePath = resolve("/cwd", "./skills/visible/file.ts");
-    const blockedPath = resolve("/cwd", "./skills/blocked/file.ts");
+    const visiblePath = "/cwd/skills/visible/file.ts";
+    const blockedPath = "/cwd/skills/blocked/file.ts";
     const matchedVisibleSkill = findSkillPathMatch(
-      process.platform === "win32" ? visiblePath.toLowerCase() : visiblePath,
+      visiblePath,
       result.entries,
       normalizer,
     );
     const matchedBlockedSkill = findSkillPathMatch(
-      process.platform === "win32" ? blockedPath.toLowerCase() : blockedPath,
+      blockedPath,
       result.entries,
       normalizer,
     );

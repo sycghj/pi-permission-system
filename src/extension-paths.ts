@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { getGlobalLogsDir } from "./config-paths";
 import { discoverGlobalNodeModulesRoot } from "./node-modules-discovery";
 
@@ -42,15 +41,15 @@ export function computeExtensionPaths(
   agentDir: string,
   piPackageDir?: string,
 ): ExtensionPaths {
-  const sessionsDir = join(agentDir, "sessions");
-  const subagentSessionsDir = join(agentDir, "subagent-sessions");
-  const forwardingDir = join(sessionsDir, "permission-forwarding");
+  const sessionsDir = joinPath(agentDir, "sessions");
+  const subagentSessionsDir = joinPath(agentDir, "subagent-sessions");
+  const forwardingDir = joinPath(sessionsDir, "permission-forwarding");
   const globalLogsDir = getGlobalLogsDir(agentDir);
 
   const globalNodeModulesRoot = discoverGlobalNodeModulesRoot();
   const piInfrastructureDirs: string[] = [
     agentDir,
-    join(agentDir, "git"),
+    joinPath(agentDir, "git"),
     ...(globalNodeModulesRoot ? [globalNodeModulesRoot] : []),
     ...(piPackageDir ? [piPackageDir] : []),
   ];
@@ -63,4 +62,9 @@ export function computeExtensionPaths(
     globalLogsDir,
     piInfrastructureDirs,
   };
+}
+
+function joinPath(base: string, segment: string): string {
+  const sep = base.includes("/") ? "/" : "\\";
+  return `${base.replace(/[\\/]+$/, "")}${sep}${segment}`;
 }
