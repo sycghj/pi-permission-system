@@ -1,6 +1,6 @@
 {
-  "name": "@gotgenes/pi-permission-system",
-  "version": "24.0.0",
+  "name": "@sycghj/pi-permission-system",
+  "version": "24.1.0",
   "description": "Permission enforcement extension for the Pi coding agent.",
   "type": "module",
   "exports": {
@@ -17,6 +17,7 @@
     "src",
     "dist",
     "config/config.example.json",
+    "config/config.autoMode.example.jsonc",
     "schemas/permissions.schema.json",
     "docs/*.md",
     "docs/guides",
@@ -34,7 +35,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verify:public-types": "bash scripts/verify-public-types.sh",
-    "lint:md": "rumdl check *.md docs/**/*.md",
+    "lint:md": "bash -lc 'rumdl check README.md docs/**/*.md'",
     "lint": "biome check . && eslint . && pnpm run lint:md"
   },
   "keywords": [
@@ -55,12 +56,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gotgenes/pi-packages.git",
+    "url": "git+https://github.com/sycghj/pi-packages.git",
     "directory": "packages/pi-permission-system"
   },
-  "homepage": "https://github.com/gotgenes/pi-packages/tree/main/packages/pi-permission-system#readme",
+  "homepage": "https://github.com/sycghj/pi-packages/tree/main/packages/pi-permission-system#readme",
   "bugs": {
-    "url": "https://github.com/gotgenes/pi-packages/issues"
+    "url": "https://github.com/sycghj/pi-packages/issues"
   },
   "engines": {
     "node": ">=22"
