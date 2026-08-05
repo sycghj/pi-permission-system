@@ -24,6 +24,14 @@ Permission enforcement extension for the [Pi](https://pi.mariozechner.at/) codin
 - **Broadcasts UI prompt events** — `permissions:ui_prompt` fires only when the permission system is about to invoke the active user-facing permission UI
 - **Native [`@gotgenes/pi-subagents`](https://github.com/gotgenes/pi-subagents) integration** — in-process child sessions register with the permission system automatically, enabling per-agent policy enforcement and `ask`-state forwarding to the parent UI without configuration
 
+## Release Status and Security Boundary
+
+Version 24.1.0 is an early public release: it is ready for testing, use with reviewed policies, and community audit, but it should not be presented as a complete security sandbox.
+This extension enforces policy at Pi's tool-call boundary; it does not replace operating-system permissions, process isolation, containers, or filesystem sandboxes.
+
+Known limitations include create-time bare redirect destinations that can miss the Bash path gates and an autoMode summary heuristic that can overstate read-only behavior when a command contains shell effects.
+See [Roadmap and known limitations](docs/TODO.md) for impact, workarounds, provenance, and the planned patch-release criteria.
+
 ## Install
 
 ```bash
@@ -177,6 +185,7 @@ If you relied on the old permissive behavior for bash, set an explicit permissiv
 | [docs/guides/permission-frontmatter-for-subagent-extensions.md](docs/guides/permission-frontmatter-for-subagent-extensions.md) | Convention guide for subagent extension authors                                               |
 | [docs/opencode-compatibility.md](docs/opencode-compatibility.md)                                                               | OpenCode compatibility — shared concepts, divergences, porting guide                          |
 | [docs/troubleshooting.md](docs/troubleshooting.md)                                                                             | Common issues, diagnostic logging, threat model                                               |
+| [docs/TODO.md](docs/TODO.md)                                                                                                   | Early-release limitations, workarounds, and planned fixes                                     |
 | [docs/migration/legacy-to-flat.md](docs/migration/legacy-to-flat.md)                                                           | Migration from pre-v2 config layout                                                           |
 | [docs/migration/strict-config-validation.md](docs/migration/strict-config-validation.md)                                       | Strict config validation (breaking) — rejected configs, and the cross-scope fail-closed clamp |
 | [docs/migration/0644-project-trust-gating.md](docs/migration/0644-project-trust-gating.md)                                     | Project-trust gating (breaking) — project config loads only after project trust               |
@@ -202,6 +211,8 @@ This project began as a fork of [MasuRii/pi-permission-system](https://github.co
 Thank you to [MasuRii](https://github.com/MasuRii) for the original work that made this possible.
 
 Thank you to the [OpenCode](https://opencode.ai) team for the permission model design that inspired the flat config format and evaluation semantics used in this extension.
+
+本项目认可并支持 [LINUX DO](https://linux.do/) 社区开放、友善、共同创造价值的理念，感谢社区为中文开发者提供交流与分享的平台。
 
 ## License
 
