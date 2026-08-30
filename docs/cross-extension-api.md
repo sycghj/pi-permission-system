@@ -266,7 +266,7 @@ The extractor must not throw — guard your parsing and return `undefined` on an
 #### Subagent session registration
 
 In-process subagent registration is event-driven.
-`@gotgenes/pi-subagents` emits `subagents:child:session-created` before `bindExtensions()` and `subagents:child:disposed` in the run's `finally`; the permission system subscribes automatically — no service call from the spawner is required.
+`@sycghj/pi-subagents` emits `subagents:child:session-created` before `bindExtensions()` and `subagents:child:disposed` in the run's `finally`; the permission system subscribes automatically — no service call from the spawner is required.
 See [Subagent Integration](subagent-integration.md) for details.
 
 ### Reload Safety

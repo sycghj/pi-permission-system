@@ -1,7 +1,7 @@
+import type { NulRedirectTarget } from "./access-intent/bash/nul-redirects";
 import { classifyToolKind, isMcpCheck } from "./access-intent/tool-kind";
 import { EXTENSION_ID } from "./extension-config";
 import type { BashCommandContext, PermissionCheckResult } from "./types";
-import type { NulRedirectTarget } from "./access-intent/bash/nul-redirects";
 
 // ── Extension attribution tag ──────────────────────────────────────────────
 

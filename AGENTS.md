@@ -1,7 +1,15 @@
 # AGENTS.md
 
-⚠️ It looks like the agent was started from a package subdirectory.
+This is the standalone `@sycghj/pi-permission-system` repository.
+Run development commands from this repository root.
 
-Advise the user to launch Pi from the **repository root** (`pi-packages/`) instead.
-The root provides `.pi/settings.json`, `.pi/prompts/`, and the full skill set.
-Package-specific context for this package is available via the `package-pi-permission-system` skill.
+## Validation
+
+```bash
+pnpm run check
+pnpm run lint
+pnpm run test
+pnpm run verify:public-types
+```
+
+Keep permission decisions fail-closed, preserve the `@gotgenes/` global symbol keys used for cross-extension compatibility, and update tests and documentation with behavioral changes.

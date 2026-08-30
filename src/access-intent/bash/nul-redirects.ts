@@ -1,7 +1,7 @@
 import {
   ARG_NODE_TYPES,
-  SKIP_SUBTREE_TYPES,
   resolveNodeText,
+  SKIP_SUBTREE_TYPES,
 } from "#src/access-intent/bash/node-text";
 import type { TSNode } from "#src/access-intent/bash/parser";
 import type { PathFlavor } from "#src/path/path-flavor";
@@ -107,7 +107,7 @@ function inspectRedirect(node: TSNode): NulRedirectTarget | null {
     if (!child.isNamed) {
       // The operator is the anonymous literal child; its node type is the
       // operator's own spelling (tree-sitter-bash grammar).
-      if (operator === null) operator = child.type;
+      operator ??= child.type;
       continue;
     }
     if (child.type === "file_descriptor") continue;

@@ -50,7 +50,7 @@ This clamp is deny-preserving and, like `yoloMode`, applied at composition; when
 
 ```jsonc
 {
-  "$schema": "https://raw.githubusercontent.com/gotgenes/pi-packages/main/packages/pi-permission-system/schemas/permissions.schema.json",
+  "$schema": "https://raw.githubusercontent.com/sycghj/pi-permission-system/main/schemas/permissions.schema.json",
 
   // Runtime knobs
   "debugLog": false,
@@ -1014,7 +1014,7 @@ Practical guidance:
 - Set `"permissionReviewLog": false` (and leave `debugLog` off) for a session that will handle credentials on the command line.
 - Owner-only modes do not protect against anything running as you, including a backup or cloud-sync agent that copies your home directory.
 
-[ADR 0010]: https://github.com/gotgenes/pi-packages/blob/main/packages/pi-permission-system/docs/decisions/0010-permission-log-secret-exposure.md
+[ADR 0010]: https://github.com/sycghj/pi-permission-system/blob/main/docs/decisions/0010-permission-log-secret-exposure.md
 
 ---
 
@@ -1031,7 +1031,7 @@ npx --yes ajv-cli@5 validate \
 **Editor tip:** Add the hosted schema URL as the `$schema` key in your config for autocomplete and validation support:
 
 ```json
-"$schema": "https://raw.githubusercontent.com/gotgenes/pi-packages/main/packages/pi-permission-system/schemas/permissions.schema.json"
+"$schema": "https://raw.githubusercontent.com/sycghj/pi-permission-system/main/schemas/permissions.schema.json"
 ```
 
 The schema is generated from the extension's zod source of truth (`src/config-schema.ts`); regenerate it with `pnpm run gen:schema` after changing the config shape.

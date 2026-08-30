@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "packages": {
+    ".": {
+      "component": "pi-permission-system"
+    }
+  },
+  "exclude-paths": [
+    "docs/architecture",
+    "docs/assets",
+    "docs/decisions",
+    "docs/plans",
+    "docs/retro"
+  ],
+  "include-v-in-tag": true,
+  "include-component-in-tag": false,
+  "release-type": "node"
+}

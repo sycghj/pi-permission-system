@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { getParser } from "#src/access-intent/bash/parser";
 import {
   extractNulRedirects,
   type NulRedirectTarget,
 } from "#src/access-intent/bash/nul-redirects";
+import { getParser } from "#src/access-intent/bash/parser";
 import { posixPathFlavor, win32PathFlavor } from "#src/path/path-flavor";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -61,12 +61,8 @@ describe("extractNulRedirects — write redirects", () => {
   });
 
   it("detects &>nul and &>>nul", async () => {
-    expect(await win("cmd &> nul")).toEqual([
-      { token: "nul", mode: "write" },
-    ]);
-    expect(await win("cmd &>>nul")).toEqual([
-      { token: "nul", mode: "write" },
-    ]);
+    expect(await win("cmd &> nul")).toEqual([{ token: "nul", mode: "write" }]);
+    expect(await win("cmd &>>nul")).toEqual([{ token: "nul", mode: "write" }]);
   });
 
   it("detects 1>nul with explicit fd", async () => {
@@ -74,9 +70,7 @@ describe("extractNulRedirects — write redirects", () => {
   });
 
   it("keeps only the nul hit in a chained command", async () => {
-    const hits = await win(
-      "where python 2>nul && dir 2>&1 | tee out.log",
-    );
+    const hits = await win("where python 2>nul && dir 2>&1 | tee out.log");
     expect(hits).toEqual([{ token: "nul", mode: "write" }]);
   });
 

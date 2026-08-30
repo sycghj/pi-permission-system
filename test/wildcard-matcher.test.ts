@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 const mockHomedir = vi.hoisted(() => vi.fn(() => "/home/testuser"));
