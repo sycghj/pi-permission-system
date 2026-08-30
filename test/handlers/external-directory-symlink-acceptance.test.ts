@@ -22,7 +22,7 @@ import {
 } from "#src/handlers/gates/descriptor";
 import { describeExternalDirectoryGate } from "#src/handlers/gates/external-directory";
 import type { ToolCallContext } from "#src/handlers/gates/types";
-import { win32PathFlavor } from "#src/path/path-flavor";
+import { posixPathFlavor } from "#src/path/path-flavor";
 import { PathNormalizer } from "#src/path-normalizer";
 import { PermissionResolver } from "#src/permission-resolver";
 import { SessionRules } from "#src/session-rules";
@@ -91,7 +91,7 @@ describe.skipIf(process.platform === "win32")(
           readTcc(),
           [],
           resolver,
-          new PathNormalizer(win32PathFlavor, cwd),
+          new PathNormalizer(posixPathFlavor, cwd),
         );
         expect(isGateDescriptor(result)).toBe(true);
         expect((result as GateDescriptor).preCheck?.state).toBe("allow");
@@ -114,7 +114,7 @@ describe.skipIf(process.platform === "win32")(
           readTcc(),
           [],
           resolver,
-          new PathNormalizer(win32PathFlavor, cwd),
+          new PathNormalizer(posixPathFlavor, cwd),
         );
         expect(isGateDescriptor(result)).toBe(true);
         expect((result as GateDescriptor).preCheck?.state).toBe("allow");
@@ -132,7 +132,7 @@ describe.skipIf(process.platform === "win32")(
           readTcc(),
           [],
           resolver,
-          new PathNormalizer(win32PathFlavor, cwd),
+          new PathNormalizer(posixPathFlavor, cwd),
         );
         expect(isGateDescriptor(result)).toBe(true);
         expect((result as GateDescriptor).preCheck?.state).toBe("ask");
@@ -158,7 +158,7 @@ describe.skipIf(process.platform === "win32")(
         };
         const program = await BashProgram.parse(
           command,
-          new PathNormalizer(win32PathFlavor, cwd),
+          new PathNormalizer(posixPathFlavor, cwd),
         );
         const result = describeBashExternalDirectoryGate(
           tcc,
