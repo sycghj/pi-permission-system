@@ -17,7 +17,7 @@ import { SessionApproval } from "#src/session-approval";
 import type { SessionApprovalRecorder } from "#src/session-approval-recorder";
 import type { DebugReviewLogger } from "#src/session-logger";
 import type { PermissionCheckResult } from "#src/types";
-import type { AskEscalator } from "./authorizer-selection";
+import type { HumanOnlyAskEscalator } from "./authorizer-selection";
 import {
   cleanupPermissionForwardingLocationIfEmpty,
   ensureDirectoryExists,
@@ -57,6 +57,8 @@ export interface InboxProcessor {
  */
 export interface ServingPolicy {
   resolve(intent: ForwardedAccessIntent): PermissionCheckResult;
+  /** Base policy only: excludes session grants and yolo ask-to-allow rewriting. */
+  resolveBase?(intent: ForwardedAccessIntent): PermissionCheckResult;
 }
 
 /** Constructor config for `ForwardedRequestServer`. */
@@ -66,7 +68,7 @@ export interface ForwardedRequestServerDeps {
   /** Recorded-authority resolution for a forwarded `ForwardedAccessIntent`. */
   policy: ServingPolicy;
   /** Escalation seam to the serving session's selected `Authorizer` on `ask`. */
-  escalator: AskEscalator;
+  escalator: HumanOnlyAskEscalator;
   /**
    * The serving session's `SessionRules`. Records a whole-session grant when a
    * human approves a forwarded request for the entire serving session.
@@ -119,7 +121,8 @@ function buildForwardedAskDetails(
     },
     // Carries the child's suggestion so LocalUserAuthorizer can offer the
     // whole-session grant scope; absent for a legacy/version-skew request.
-    ...(request.sessionApproval
+    ...(request.humanOnly ? { humanOnly: true } : {}),
+    ...(!request.humanOnly && request.sessionApproval
       ? { sessionApproval: request.sessionApproval }
       : {}),
     // Absent for a version-skew request that carried no intent — which the
@@ -166,7 +169,7 @@ export class ForwardedRequestServer implements InboxProcessor {
   private readonly forwardingDir: string;
   private readonly logger: DebugReviewLogger;
   private readonly policy: ServingPolicy;
-  private readonly escalator: AskEscalator;
+  private readonly escalator: HumanOnlyAskEscalator;
   private readonly recorder: SessionApprovalRecorder;
   private readonly registry: SubagentSessionRegistry | undefined;
 
@@ -293,6 +296,13 @@ export class ForwardedRequestServer implements InboxProcessor {
     decision: PermissionPromptDecision,
     logDetails: Record<string, unknown>,
   ): PermissionPromptDecision {
+    if (
+      request.humanOnly &&
+      (decision.state === "approved_for_session" ||
+        decision.state === "approved_for_serving_session")
+    ) {
+      return { approved: true, state: "approved" };
+    }
     if (decision.state !== "approved_for_serving_session") {
       return decision;
     }
@@ -378,8 +388,30 @@ export class ForwardedRequestServer implements InboxProcessor {
     logDetails: Record<string, unknown>,
   ): Promise<PermissionPromptDecision> {
     const state = request.accessIntent
-      ? this.policy.resolve(request.accessIntent).state
+      ? request.humanOnly
+        ? (this.policy.resolveBase?.(request.accessIntent).state ?? "deny")
+        : this.policy.resolve(request.accessIntent).state
       : "ask";
+
+    if (request.humanOnly) {
+      if (state === "deny") {
+        this.logger.review("forwarded_permission.auto_denied", logDetails);
+        return { approved: false, state: "denied" };
+      }
+      this.logger.review("forwarded_permission.prompted", logDetails);
+      try {
+        return await this.escalator.escalateHumanOnly(
+          buildForwardedAskDetails(request),
+        );
+      } catch (error) {
+        logPermissionForwardingError(
+          this.logger,
+          `Failed to escalate human-only forwarded permission request '${request.id}'`,
+          error,
+        );
+        return { approved: false, state: "denied" };
+      }
+    }
 
     if (state === "allow") {
       this.logger.review("forwarded_permission.auto_approved", logDetails);

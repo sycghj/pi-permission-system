@@ -34,6 +34,8 @@ const OPTION_VERBS: Record<PromptKey, string> = {
 export interface PromptModelConfig {
   /** When true, a letter hotkey arms first and commits only on a second press. */
   doublePressToConfirm: boolean;
+  /** Whether session approval is available. Defaults to true. */
+  allowSessionApproval?: boolean;
   /** Label shown beside the approve-for-session option. */
   sessionLabel: string;
   /**
@@ -114,7 +116,11 @@ function reduceDecisionStep(
     case "nav":
       return render({
         ...state,
-        highlightedKey: shiftKey(state.highlightedKey, event.direction),
+        highlightedKey: shiftKey(
+          state.highlightedKey,
+          event.direction,
+          config.allowSessionApproval !== false,
+        ),
         armedKey: undefined,
         hint: "",
       });
@@ -134,6 +140,9 @@ function pressHotkey(
   state: PromptViewState,
   key: PromptKey,
 ): PromptOutcome {
+  if (key === "s" && config.allowSessionApproval === false) {
+    return render(state);
+  }
   if (!config.doublePressToConfirm || state.armedKey === key) {
     return commit(config, state, key);
   }
@@ -169,6 +178,9 @@ function commit(
         reasonError: undefined,
       });
     case "s":
+      if (config.allowSessionApproval === false) {
+        return render(state);
+      }
       if (config.sessionScope) {
         return render({
           ...state,
@@ -246,11 +258,18 @@ function reduceScopeStep(
   }
 }
 
-function shiftKey(current: PromptKey, direction: "up" | "down"): PromptKey {
-  const index = OPTION_ORDER.indexOf(current);
+function shiftKey(
+  current: PromptKey,
+  direction: "up" | "down",
+  allowSessionApproval: boolean,
+): PromptKey {
+  const order = allowSessionApproval
+    ? OPTION_ORDER
+    : OPTION_ORDER.filter((key) => key !== "s");
+  const index = order.indexOf(current);
   const delta = direction === "down" ? 1 : -1;
-  const next = (index + delta + OPTION_ORDER.length) % OPTION_ORDER.length;
-  return OPTION_ORDER[next] ?? current;
+  const next = (index + delta + order.length) % order.length;
+  return order[next] ?? current;
 }
 
 function render(state: PromptViewState): PromptOutcome {

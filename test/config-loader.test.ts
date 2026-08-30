@@ -498,6 +498,15 @@ describe("mergeUnifiedConfigs", () => {
     expect(merged.doublePressToConfirm).toBe(false);
   });
 
+  it("lets project config override manual approval enablement", () => {
+    const merged = mergeUnifiedConfigs(
+      { manualApproval: { enabled: false } },
+      { manualApproval: { enabled: true } },
+    );
+
+    expect(merged.manualApproval).toEqual({ enabled: true });
+  });
+
   it("returns base unchanged when override is empty", () => {
     const base = {
       debugLog: true,

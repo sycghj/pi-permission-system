@@ -24,7 +24,10 @@ import {
   type ToolCallGateInputs,
   ToolCallGatePipeline,
 } from "#src/handlers/gates/tool-call-gate-pipeline";
-import { PermissionGateHandler } from "#src/handlers/permission-gate-handler";
+import {
+  type ManualApprovalGate,
+  PermissionGateHandler,
+} from "#src/handlers/permission-gate-handler";
 import type { PermissionDecisionEvent } from "#src/permission-events";
 import { PERMISSIONS_DECISION_CHANNEL } from "#src/permission-events";
 import type { Rule } from "#src/rule";
@@ -86,6 +89,8 @@ export function makeCtx(
     sessionManager: {
       getEntries: vi.fn().mockReturnValue([]),
       getSessionDir: vi.fn().mockReturnValue("/sessions/test"),
+      getSessionId: vi.fn().mockReturnValue("session-test"),
+      getLeafId: vi.fn().mockReturnValue("assistant-message-test"),
       addEntry: vi.fn(),
     },
     ...overrides,
@@ -231,6 +236,7 @@ export function makeHandler(overrides?: {
   };
   /** Override the AskEscalator passed to GateRunner. Defaults to an allow-all stub. */
   prompter?: AskEscalator;
+  manualApproval?: ManualApprovalGate;
   toolRegistry?: Partial<ToolRegistry>;
   /** Sugar: builds the `getAll` mock from a list of tool names. */
   tools?: string[];
@@ -323,6 +329,7 @@ export function makeHandler(overrides?: {
     pipeline,
     skillInputPipeline,
     runner,
+    overrides?.manualApproval,
   );
   return {
     handler,

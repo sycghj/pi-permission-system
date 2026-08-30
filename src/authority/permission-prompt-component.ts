@@ -97,6 +97,7 @@ export function presentInlinePermissionPrompt(
 ): Promise<PermissionPromptDecision> {
   const config: PromptModelConfig = {
     doublePressToConfirm: view.doublePressToConfirm,
+    allowSessionApproval: options?.allowSessionApproval !== false,
     sessionLabel: options?.sessionLabel ?? DEFAULT_SESSION_LABEL,
     sessionScope: options?.sessionScope,
   };
@@ -250,6 +251,7 @@ class PermissionPromptComponent implements Component {
   private renderDecision(): string[] {
     const lines = [this.theme.fg("accent", this.title), this.message, ""];
     for (const key of OPTION_ORDER) {
+      if (key === "s" && this.config.allowSessionApproval === false) continue;
       const label = key === "s" ? this.config.sessionLabel : OPTION_LABELS[key];
       const selected = this.state.highlightedKey === key;
       const marker = selected ? "▶" : " ";

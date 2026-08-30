@@ -35,7 +35,8 @@ const COMMAND_ARGUMENTS = [
   {
     value: "reset",
     label: "Reset defaults",
-    description: "Restore default yolo/logging settings and persist them",
+    description:
+      "Restore default approval/yolo/logging settings without changing Auto Mode",
   },
   {
     value: "help",
@@ -46,14 +47,16 @@ const COMMAND_ARGUMENTS = [
 const USAGE_TEXT =
   "Usage: /permission-system [show|path|reset|help] (or run /permission-system with no args to open settings modal)";
 
-function cloneDefaultConfig(): PermissionSystemExtensionConfig {
+function resetCommandSettings(
+  current: PermissionSystemExtensionConfig,
+): PermissionSystemExtensionConfig {
   return {
+    ...current,
     debugLog: DEFAULT_EXTENSION_CONFIG.debugLog,
     permissionReviewLog: DEFAULT_EXTENSION_CONFIG.permissionReviewLog,
     yoloMode: DEFAULT_EXTENSION_CONFIG.yoloMode,
     doublePressToConfirm: DEFAULT_EXTENSION_CONFIG.doublePressToConfirm,
-    autoMode: { ...DEFAULT_EXTENSION_CONFIG.autoMode },
-    learning: { ...DEFAULT_EXTENSION_CONFIG.learning },
+    manualApproval: { ...DEFAULT_EXTENSION_CONFIG.manualApproval },
   };
 }
 
@@ -81,6 +84,8 @@ function summarizeConfig(
 ): string {
   const knobs = [
     `yoloMode=${toOnOff(config.yoloMode)}`,
+    `autoMode=${toOnOff(config.autoMode.enabled)}`,
+    `manualApproval=${toOnOff(config.manualApproval.enabled)}`,
     `permissionReviewLog=${toOnOff(config.permissionReviewLog)}`,
     `debugLog=${toOnOff(config.debugLog)}`,
   ].join(", ");
@@ -98,6 +103,14 @@ function buildSettingItems(
       description:
         "Auto-approve ask-state permission checks, including subagent approval forwarding",
       currentValue: toOnOff(config.yoloMode),
+      values: ON_OFF,
+    },
+    {
+      id: "manualApproval",
+      label: "One-shot manual approval tool",
+      description:
+        "Evaluate exact approval requests automatically before human review",
+      currentValue: toOnOff(config.manualApproval.enabled),
       values: ON_OFF,
     },
     {
@@ -135,6 +148,11 @@ function applySetting(
   switch (id) {
     case "yoloMode":
       return { ...config, yoloMode: value === "on" };
+    case "manualApproval":
+      return {
+        ...config,
+        manualApproval: { enabled: value === "on" },
+      };
     case "permissionReviewLog":
       return { ...config, permissionReviewLog: value === "on" };
     case "debugLog":
@@ -151,6 +169,10 @@ function syncSettingValues(
   config: PermissionSystemExtensionConfig,
 ): void {
   settingsList.updateValue("yoloMode", toOnOff(config.yoloMode));
+  settingsList.updateValue(
+    "manualApproval",
+    toOnOff(config.manualApproval.enabled),
+  );
   settingsList.updateValue(
     "permissionReviewLog",
     toOnOff(config.permissionReviewLog),
@@ -235,8 +257,14 @@ function handleArgs(
   }
 
   if (normalized === "reset") {
-    controller.config.save(cloneDefaultConfig(), ctx);
-    ctx.ui.notify("Permission system settings reset to defaults.", "info");
+    controller.config.save(
+      resetCommandSettings(controller.config.current()),
+      ctx,
+    );
+    ctx.ui.notify(
+      "Permission-system approval/yolo/logging settings reset; Auto Mode and learning were unchanged.",
+      "info",
+    );
     return true;
   }
 
@@ -255,7 +283,7 @@ export function registerPermissionSystemCommand(
 ): void {
   pi.registerCommand("permission-system", {
     description:
-      "Configure pi-permission-system logging and yolo-mode behavior",
+      "Configure pi-permission-system approval, logging, and yolo-mode behavior",
     getArgumentCompletions,
     handler: async (args, ctx) => {
       if (handleArgs(args, ctx, controller)) {

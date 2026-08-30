@@ -110,6 +110,8 @@ function makeCommandCtx(
 ): ExtensionCommandContext {
   return {
     cwd: "/test/project",
+    hasUI: true,
+    isProjectTrusted: vi.fn(() => false),
     ui: { notify: vi.fn(), setStatus: vi.fn() },
     ...overrides,
   } as unknown as ExtensionCommandContext;
@@ -342,8 +344,59 @@ describe("ConfigStore", () => {
     it("updates current() after a successful save", () => {
       const { store } = makeStore();
       const next = { ...DEFAULT_EXTENSION_CONFIG, debugLog: true };
+      mockLoadAndMergeConfigs.mockReturnValue({ merged: next, issues: [] });
       store.save(next, makeCommandCtx());
       expect(store.current().debugLog).toBe(true);
+    });
+
+    it("keeps command-managed disk and memory settings aligned without resetting Auto Mode", () => {
+      const { store } = makeStore();
+      const enabledAutoMode = {
+        ...DEFAULT_EXTENSION_CONFIG.autoMode,
+        enabled: true,
+      };
+      mockLoadAndMergeConfigs.mockReturnValue({
+        merged: {
+          ...DEFAULT_EXTENSION_CONFIG,
+          autoMode: enabledAutoMode,
+          manualApproval: { enabled: true },
+          doublePressToConfirm: false,
+        },
+        issues: [],
+      });
+      store.refresh(undefined, false);
+      mockLoadUnifiedConfig.mockReturnValue({
+        config: {
+          permission: { "*": "ask" },
+          autoMode: enabledAutoMode,
+          manualApproval: { enabled: true },
+          doublePressToConfirm: false,
+        },
+      });
+      mockLoadAndMergeConfigs.mockReturnValue({
+        merged: {
+          ...DEFAULT_EXTENSION_CONFIG,
+          autoMode: enabledAutoMode,
+        },
+        issues: [],
+      });
+
+      store.save({ ...DEFAULT_EXTENSION_CONFIG }, makeCommandCtx());
+
+      const persisted = JSON.parse(
+        mockWriteFileSync.mock.calls[0]?.[1] as string,
+      ) as Record<string, unknown>;
+      expect(persisted).toMatchObject({
+        permission: { "*": "ask" },
+        autoMode: { enabled: true },
+        manualApproval: { enabled: false },
+        doublePressToConfirm: true,
+      });
+      expect(store.current()).toMatchObject({
+        autoMode: { enabled: true },
+        manualApproval: { enabled: false },
+        doublePressToConfirm: true,
+      });
     });
 
     it("calls syncPermissionSystemStatus after a successful save", () => {
@@ -356,13 +409,17 @@ describe("ConfigStore", () => {
       );
     });
 
-    it("writes config.saved debug log after a successful save", () => {
+    it("writes sanitized config.saved audit logs after a successful save", () => {
       const { store, logger } = makeStore();
       store.save({ ...DEFAULT_EXTENSION_CONFIG }, makeCommandCtx());
-      expect(logger.debug).toHaveBeenCalledWith(
-        "config.saved",
-        expect.objectContaining({ debugLog: false }),
-      );
+      const details = expect.objectContaining({
+        scope: "global",
+        debugLog: false,
+        autoModeEnabled: false,
+        manualApprovalEnabled: false,
+      });
+      expect(logger.review).toHaveBeenCalledWith("config.saved", details);
+      expect(logger.debug).toHaveBeenCalledWith("config.saved", details);
     });
 
     it("notifies with error and returns early when write fails", () => {

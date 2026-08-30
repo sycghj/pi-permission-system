@@ -135,6 +135,10 @@ test("permission-system command handlers manage config summary, persistence, and
     permissionReviewLog: false,
     yoloMode: true,
     doublePressToConfirm: true,
+    autoMode: {
+      ...DEFAULT_EXTENSION_CONFIG.autoMode,
+      enabled: true,
+    },
   };
 
   try {
@@ -196,6 +200,9 @@ test("permission-system command handlers manage config summary, persistence, and
       "yoloMode=on",
     );
     expect(lastNotification(infoCtx.notifications).message).toContain(
+      "autoMode=on",
+    );
+    expect(lastNotification(infoCtx.notifications).message).toContain(
       "debugLog=on",
     );
 
@@ -210,16 +217,23 @@ test("permission-system command handlers manage config summary, persistence, and
     );
 
     await definition!.handler("reset", infoCtx.ctx);
-    expect(config).toEqual(DEFAULT_EXTENSION_CONFIG);
+    const expectedResetConfig = {
+      ...DEFAULT_EXTENSION_CONFIG,
+      autoMode: {
+        ...DEFAULT_EXTENSION_CONFIG.autoMode,
+        enabled: true,
+      },
+    };
+    expect(config).toEqual(expectedResetConfig);
     expect(lastNotification(infoCtx.notifications).message).toBe(
-      "Permission system settings reset to defaults.",
+      "Permission-system approval/yolo/logging settings reset; Auto Mode and learning were unchanged.",
     );
 
     const persisted = JSON.parse(readFileSync(configPath, "utf8")) as Record<
       string,
       unknown
     >;
-    expect(persisted).toEqual(DEFAULT_EXTENSION_CONFIG);
+    expect(persisted).toEqual(expectedResetConfig);
 
     await definition!.handler("unknown", infoCtx.ctx);
     expect(lastNotification(infoCtx.notifications).level).toBe("warning");

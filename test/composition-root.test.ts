@@ -37,6 +37,7 @@ import { getSubagentSessionRegistry } from "#src/authority/subagent-registry";
 import { getGlobalConfigPath } from "#src/config-paths";
 import { DEFAULT_EXTENSION_CONFIG } from "#src/extension-config";
 import piPermissionSystemExtension from "#src/index";
+import { MANUAL_APPROVAL_TOOL_NAME } from "#src/manual-approval";
 import { PERMISSIONS_READY_CHANNEL } from "#src/permission-events";
 import { getPermissionsService } from "#src/service";
 import { makeFakePi } from "#test/helpers/make-fake-pi";
@@ -131,6 +132,7 @@ function makeBaseCtx(
       getEntries: (): unknown[] => [],
       getSessionId: (): string => sessionId,
       getSessionDir: (): string => cwd,
+      getLeafId: (): string => `${sessionId}-assistant-message`,
     },
     ui: {
       notify: (): void => {},
@@ -227,6 +229,20 @@ describe("event-handler registration completeness", () => {
     piPermissionSystemExtension(pi as unknown as ExtensionAPI);
 
     expect([...pi.handlers.keys()].sort()).toEqual(EXPECTED_HANDLERS);
+    const approvalTool = pi.tools.get(MANUAL_APPROVAL_TOOL_NAME) as {
+      description?: string;
+    };
+    expect(approvalTool).toBeDefined();
+    expect(approvalTool.description).toContain("next model step");
+    expect(approvalTool.description).toContain(
+      "first runs normal policy and Auto Mode",
+    );
+    expect(approvalTool.description).toContain(
+      "automatic approval does not open a human dialog",
+    );
+    expect(approvalTool.description).toContain(
+      "without asking the user to reply",
+    );
   });
 });
 

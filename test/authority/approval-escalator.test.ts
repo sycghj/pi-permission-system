@@ -139,6 +139,50 @@ describe("ParentAuthorizer", () => {
     }
   });
 
+  test("preserves humanOnly, omits session approval, and normalizes a session response", async () => {
+    const temp = createForwardingTempDir("parent-session");
+    try {
+      const authorizer = new ParentAuthorizer(
+        makeForwarderContext({ hasUI: false, sessionId: "child-session" }),
+        {
+          forwardingDir: temp.forwardingDir,
+          registry: makeSubagentRegistry("child-session", {
+            parentSessionId: "parent-session",
+          }),
+          logger: { review: () => {}, debug: () => {} },
+        },
+      );
+      const decisionPromise = authorizer.authorize({
+        requestId: "human-only",
+        source: "tool_call",
+        agentName: "Explore",
+        message: "Allow once?",
+        humanOnly: true,
+        sessionApproval: { surface: "bash", patterns: ["git *"] },
+      });
+
+      const request = await waitForRequestFile(temp.location.requestsDir);
+      expect(request.humanOnly).toBe(true);
+      expect(request.sessionApproval).toBeUndefined();
+      writeFileSync(
+        join(temp.location.responsesDir, `${request.id}.json`),
+        JSON.stringify({
+          approved: true,
+          state: "approved_for_session",
+          responderSessionId: "parent-session",
+        }),
+        "utf-8",
+      );
+
+      await expect(decisionPromise).resolves.toEqual({
+        approved: true,
+        state: "approved",
+      });
+    } finally {
+      temp.cleanup();
+    }
+  });
+
   test("stamps the child-fixed access intent with requester identity onto the forwarded request", async () => {
     const temp = createForwardingTempDir("parent-session");
     try {

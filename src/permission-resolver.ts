@@ -3,7 +3,10 @@ import type {
   PathValuesAccessIntent,
   ResolvedAccessIntent,
 } from "./access-intent/access-intent";
-import type { ScopedPermissionManager } from "./permission-manager";
+import type {
+  BasePermissionManager,
+  ScopedPermissionManager,
+} from "./permission-manager";
 import type { Rule } from "./rule";
 import type { SessionRules } from "./session-rules";
 import type { SkillPermissionChecker } from "./skill-prompt-sanitizer";
@@ -65,7 +68,8 @@ export class PermissionResolver
   implements ScopedPermissionResolver, SkillPermissionChecker
 {
   constructor(
-    private readonly permissionManager: ScopedPermissionManager,
+    private readonly permissionManager: ScopedPermissionManager &
+      BasePermissionManager,
     private readonly sessionRules: Pick<SessionRules, "getRuleset">,
   ) {}
 
@@ -87,6 +91,13 @@ export class PermissionResolver
       toResolvedIntent(intent),
       this.sessionRules.getRuleset(),
     );
+  }
+
+  /** Resolve recorded policy without session grants or yolo rewriting. */
+  resolveBase(
+    intent: AccessIntent | PathValuesAccessIntent,
+  ): PermissionCheckResult {
+    return this.permissionManager.checkBase(toResolvedIntent(intent));
   }
 
   /**

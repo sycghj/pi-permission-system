@@ -75,6 +75,8 @@ export function isPermissionDecisionState(
 }
 
 export interface RequestPermissionOptions {
+  /** Whether to offer session approval. Defaults to true for compatibility. */
+  allowSessionApproval?: boolean;
   /** Override the "for this session" option label (e.g. to show the suggested pattern). */
   sessionLabel?: string;
   /**
@@ -95,16 +97,12 @@ export async function requestPermissionDecisionFromUi(
   options?: RequestPermissionOptions,
 ): Promise<PermissionPromptDecision> {
   const sessionOption = options?.sessionLabel ?? APPROVE_FOR_SESSION_OPTION;
-  const decisionOptions = [
-    APPROVE_OPTION,
-    sessionOption,
-    DENY_OPTION,
-    DENY_WITH_REASON_OPTION,
-  ] as const;
+  const allowSessionApproval = options?.allowSessionApproval !== false;
+  const decisionOptions = allowSessionApproval
+    ? [APPROVE_OPTION, sessionOption, DENY_OPTION, DENY_WITH_REASON_OPTION]
+    : [APPROVE_OPTION, DENY_OPTION, DENY_WITH_REASON_OPTION];
 
-  const selected = await ui.select(`${title}\n${message}`, [
-    ...decisionOptions,
-  ]);
+  const selected = await ui.select(`${title}\n${message}`, decisionOptions);
 
   if (selected === APPROVE_OPTION) {
     return {
@@ -113,7 +111,7 @@ export async function requestPermissionDecisionFromUi(
     };
   }
 
-  if (selected === sessionOption) {
+  if (allowSessionApproval && selected === sessionOption) {
     if (options?.sessionScope) {
       const scope = await ui.select(`${title}\nApply this session grant to:`, [
         options.sessionScope.subagentLabel,

@@ -428,6 +428,7 @@ export function readForwardedPermissionRequest(
       targetSessionId: parsed.targetSessionId,
       requesterAgentName: parsed.requesterAgentName,
       message: parsed.message,
+      ...(parsed.humanOnly === true ? { humanOnly: true } : {}),
       // Tolerant read: display fields are optional and may be absent (older
       // child) or malformed; reconstruct only the well-formed ones.
       source: asUiPromptSource(parsed.source),

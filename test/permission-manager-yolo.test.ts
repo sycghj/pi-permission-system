@@ -48,6 +48,17 @@ describe("PermissionManager yolo rewrite", () => {
     expect(result.origin).toBe("yolo");
   });
 
+  it("checkBase excludes the yolo rewrite", () => {
+    const manager = makeManager({ bash: "ask" }, () => true);
+    const result = manager.checkBase({
+      kind: "tool",
+      surface: "bash",
+      input: { command: "rm -rf /tmp/x" },
+    });
+    expect(result.state).toBe("ask");
+    expect(result.origin).not.toBe("yolo");
+  });
+
   it("preserves explicit deny under yolo (hard denies survive)", () => {
     const manager = makeManager({ bash: "deny" }, () => true);
     const result = manager.check({

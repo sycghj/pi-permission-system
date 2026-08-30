@@ -139,6 +139,21 @@ describe("requestPermissionDecisionFromUi", () => {
     ]);
   });
 
+  it("omits session approval when disabled", async () => {
+    const selectFn = vi.fn().mockResolvedValue("Yes");
+    const ui: PermissionDecisionUi = { select: selectFn, input: vi.fn() };
+
+    await requestPermissionDecisionFromUi(ui, "Title", "Message", {
+      allowSessionApproval: false,
+    });
+
+    expect(selectFn.mock.calls[0][1]).toEqual([
+      "Yes",
+      "No",
+      "No, provide reason",
+    ]);
+  });
+
   it("uses custom sessionLabel when provided", async () => {
     const selectFn = vi.fn().mockResolvedValue("Yes");
     const ui: PermissionDecisionUi = {

@@ -11,12 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added (fork-only, not in upstream gotgenes)
 
+- **One-shot manual approval** — opt-in `request_tool_approval` lets an Agent proactively request approval for one exact invocation. The permission system first evaluates the target through normal policy, session/YOLO/learning, and Auto Mode: automatic allows issue a grant without a dialog, while unresolved asks and Auto Mode denies proceed to direct human review. Grants are bound to session, Agent, tool, and stable full input; expire after five minutes; and are consumed once. Deterministic denies remain inviolable, and subagent human reviews forward to the parent UI.
 - **ask-branch `autoMode`** — optional LLM classifier that resolves `ask` decisions before the UI prompt. Deterministic `allow`/`deny` bypass the classifier entirely. Default `enabled: false`; `fallback: "ask"`. No hardcoded safe-tool allowlist.
 - **`autoMode.twoStage`** — optional thinking-review second stage on deny/malformed first-stage output. Default `enabled: false` (opt-in only).
 - **Worktree portable-path forwarding** (`ForwardedPortablePath`) + same-repo worktree `external_directory` suppression via git common-dir detection.
 - **Observability** — `auto_mode.*` and `learning.*` review-log events (no secrets / full transcript dump).
 - **Offline eval** — golden corpus (~100 cases) + `auto-mode-eval` with injected fake classifier.
 - **Path-handling fixes** — separator-preserving `expandHomePath` and `pi-infrastructure-read` flavor routing (fixes `PathFlavor` injection violations present in upstream on Windows).
+
+### Fixed (fork-only, not in upstream gotgenes)
+
+- **Runtime config persistence** — `/permission-system` now persists every setting it exposes and re-resolves the complete config scope stack after saving. Resetting interactive settings no longer sets in-memory Auto Mode to its default while leaving the on-disk value unchanged.
+- **Auto Mode visibility** — `/permission-system show` and the status bar now expose active Auto Mode state; YOLO remains the displayed precedence mode when both are configured.
+- **Log attribution** — every review/debug JSONL event now includes a process ID and per-extension-runtime ID, and successful configuration saves emit a sanitized review event.
+- **Manual-approval preflight** — `request_tool_approval` now runs the exact target through policy and Auto Mode before opening a human dialog, so automatically permitted requests proceed without waiting for a user. Changed-input and repeated requests are independently reevaluated rather than categorically suppressed.
 
 ### Kept (default-off, not marketed)
 

@@ -111,6 +111,9 @@ describe("normalizePermissionSystemConfig", () => {
           thinkingBudgetTokens: 1024,
         },
       },
+      manualApproval: {
+        enabled: false,
+      },
       learning: {
         enabled: false,
         mode: "shadow",
@@ -134,6 +137,16 @@ describe("normalizePermissionSystemConfig", () => {
   it("defaults yoloMode to false when missing", () => {
     const result = normalizePermissionSystemConfig({});
     expect(result.yoloMode).toBe(false);
+  });
+
+  it("defaults manual approval to disabled and honors an explicit enable", () => {
+    expect(normalizePermissionSystemConfig({}).manualApproval.enabled).toBe(
+      false,
+    );
+    expect(
+      normalizePermissionSystemConfig({ manualApproval: { enabled: true } })
+        .manualApproval.enabled,
+    ).toBe(true);
   });
 
   it("defaults doublePressToConfirm to true when missing", () => {

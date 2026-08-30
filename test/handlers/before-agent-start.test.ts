@@ -40,6 +40,8 @@ function makeToolRegistry(overrides: Partial<ToolRegistry> = {}): ToolRegistry {
 function makeSetup(opts?: {
   toolPermission?: "allow" | "deny" | "ask";
   toolRegistry?: Partial<ToolRegistry>;
+  alwaysExposedTools?: readonly string[];
+  hiddenTools?: readonly string[];
 }) {
   const { session, permissionManager, sessionRules, configStore, forwarding } =
     makeRealSession();
@@ -58,6 +60,8 @@ function makeSetup(opts?: {
     resolver,
     toolRegistry,
     warmParser,
+    () => opts?.alwaysExposedTools ?? [],
+    () => opts?.hiddenTools ?? [],
   );
   return {
     handler,
@@ -152,6 +156,36 @@ describe("AgentPrepHandler.handle", () => {
     });
     await handler.handle(makeEvent(), makeCtx());
     expect(toolRegistry.setActive).toHaveBeenCalledWith([]);
+  });
+
+  it("removes a hidden managed tool even when policy allows it", async () => {
+    const { handler, toolRegistry } = makeSetup({
+      hiddenTools: ["request_tool_approval"],
+      toolRegistry: {
+        getActive: vi.fn().mockReturnValue(["read", "request_tool_approval"]),
+      },
+    });
+
+    await handler.handle(makeEvent(), makeCtx());
+
+    expect(toolRegistry.setActive).toHaveBeenCalledWith(["read"]);
+  });
+
+  it("reactivates an always-exposed tool even when policy denies it", async () => {
+    const { handler, toolRegistry } = makeSetup({
+      toolPermission: "deny",
+      alwaysExposedTools: ["request_tool_approval"],
+      toolRegistry: {
+        getActive: vi.fn().mockReturnValue(["read"]),
+        getAll: vi.fn().mockReturnValue([{ name: "request_tool_approval" }]),
+      },
+    });
+
+    await handler.handle(makeEvent(), makeCtx());
+
+    expect(toolRegistry.setActive).toHaveBeenCalledWith([
+      "request_tool_approval",
+    ]);
   });
 
   it("includes allowed and ask tools in the active list", async () => {

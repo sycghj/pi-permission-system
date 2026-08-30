@@ -180,6 +180,19 @@ const autoModeSchema = z
       "Optional LLM classifier for ask-state permission checks only. Allow and deny policy decisions bypass it.",
   });
 
+const manualApprovalSchema = z
+  .strictObject({
+    enabled: z.boolean().optional().meta({
+      description:
+        "Expose a tool that lets an agent request an exact, one-shot human approval for a high-risk tool invocation.",
+      default: false,
+    }),
+  })
+  .meta({
+    description:
+      "Agent-initiated, human-only approval for one exact tool invocation. Deterministic denies remain authoritative.",
+  });
+
 const learningSchema = z
   .strictObject({
     enabled: z.boolean().optional().meta({ default: false }),
@@ -317,6 +330,7 @@ export const unifiedConfigSchema = z
       default: [],
     }),
     autoMode: autoModeSchema.optional(),
+    manualApproval: manualApprovalSchema.optional(),
     learning: learningSchema.optional(),
     riskOverrides: z.array(riskOverrideSchema).optional(),
     permission: permissionSchema.optional(),

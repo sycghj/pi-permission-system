@@ -121,6 +121,22 @@ describe("createPermissionSystemLogger", () => {
     });
   });
 
+  test("identifies the process and extension runtime on every log entry", () => {
+    const logger = makeLogger();
+
+    logger.review("permission_request.waiting", { toolName: "write" });
+    logger.review("permission_request.approved", { toolName: "write" });
+
+    const entries = readFileSync(reviewLogPath, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toMatchObject({ processId: process.pid });
+    expect(entries[0]?.runtimeId).toEqual(expect.any(String));
+    expect(entries[1]?.runtimeId).toBe(entries[0]?.runtimeId);
+  });
+
   test("respects debug toggle and keeps review log enabled by default", () => {
     const logger = makeLogger();
 

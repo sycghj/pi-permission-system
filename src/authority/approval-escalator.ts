@@ -75,6 +75,7 @@ function getContextSystemPrompt(ctx: ForwarderContext): string | undefined {
 interface ForwardedRequestFacts {
   message: string;
   display?: ForwardedPromptDisplay;
+  humanOnly?: true;
   sessionApproval?: ForwardedSessionApproval;
   /** The child-fixed access facts; the edge completes them into a `ForwardedAccessIntent`. */
   accessIntent?: ForwardedAccessFacts;
@@ -125,7 +126,8 @@ export class ParentAuthorizer implements TerminalAuthorizer {
         surface: uiPrompt.surface,
         value: uiPrompt.value,
       },
-      sessionApproval: details.sessionApproval,
+      humanOnly: details.humanOnly,
+      sessionApproval: details.humanOnly ? undefined : details.sessionApproval,
       accessIntent: details.accessIntent,
     });
   }
@@ -250,7 +252,8 @@ export class ParentAuthorizer implements TerminalAuthorizer {
             value: facts.display.value,
           }
         : {}),
-      ...(facts.sessionApproval
+      ...(facts.humanOnly ? { humanOnly: true } : {}),
+      ...(!facts.humanOnly && facts.sessionApproval
         ? { sessionApproval: facts.sessionApproval }
         : {}),
       ...(accessIntent ? { accessIntent } : {}),
@@ -292,7 +295,12 @@ export class ParentAuthorizer implements TerminalAuthorizer {
           "forwarded permission request",
         );
         cleanupPermissionForwardingLocationIfEmpty(this.logger, location);
-        return response ?? { approved: false, state: "denied" };
+        const decision = response ?? { approved: false, state: "denied" };
+        return request.humanOnly &&
+          (decision.state === "approved_for_session" ||
+            decision.state === "approved_for_serving_session")
+          ? { approved: true, state: "approved" }
+          : decision;
       }
 
       await sleep(PERMISSION_FORWARDING_POLL_INTERVAL_MS);

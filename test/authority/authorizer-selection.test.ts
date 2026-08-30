@@ -193,6 +193,64 @@ describe("AuthorizerSelection", () => {
     });
   });
 
+  describe("escalateHumanOnly", () => {
+    it("rejects before activate", async () => {
+      const selection = new AuthorizerSelection(makeDeps());
+
+      await expect(
+        selection.escalateHumanOnly({ ...makeDetails(), humanOnly: true }),
+      ).rejects.toThrow(
+        "escalateHumanOnly called before the session was activated",
+      );
+    });
+
+    it("bypasses configured links and prompts the selected terminal directly", async () => {
+      const registry = new AuthorizerRegistry();
+      registry.register("judge", () =>
+        Promise.resolve({ kind: "deny", reason: "automated denial" }),
+      );
+      const prompter = makePrompterApi();
+      const selection = new AuthorizerSelection(
+        makeDeps({
+          prompter,
+          authorizerRegistry: registry,
+          getAuthorizerChain: () => ["judge"],
+        }),
+      );
+      selection.activate(makeCtx({ hasUI: true }));
+      const details = { ...makeDetails(), humanOnly: true as const };
+
+      await selection.escalateHumanOnly(details);
+
+      expect(prompter.prompt).toHaveBeenCalledWith(
+        expect.any(LocalUserAuthorizer),
+        details,
+      );
+    });
+
+    it("removes session approval data and normalizes session decisions to one-shot approval", async () => {
+      const prompter = makePrompterApi();
+      prompter.prompt.mockResolvedValue({
+        approved: true,
+        state: "approved_for_session",
+      });
+      const selection = new AuthorizerSelection(makeDeps({ prompter }));
+      selection.activate(makeCtx({ hasUI: true }));
+
+      const decision = await selection.escalateHumanOnly({
+        ...makeDetails(),
+        humanOnly: true,
+        sessionApproval: { surface: "bash", patterns: ["git *"] },
+      });
+
+      expect(prompter.prompt).toHaveBeenCalledWith(
+        expect.any(LocalUserAuthorizer),
+        expect.not.objectContaining({ sessionApproval: expect.anything() }),
+      );
+      expect(decision).toEqual({ approved: true, state: "approved" });
+    });
+  });
+
   describe("lifecycle", () => {
     it("activate then deactivate rejects a subsequent escalate", async () => {
       const selection = new AuthorizerSelection(makeDeps());

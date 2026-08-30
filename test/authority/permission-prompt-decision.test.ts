@@ -192,6 +192,26 @@ describe("reducePrompt", () => {
     });
   });
 
+  describe("session approval disabled", () => {
+    it("ignores the s hotkey and navigation skips it", () => {
+      const config = makeConfig({ allowSessionApproval: false });
+      const initial = initialPromptState(config);
+      const hotkey = reducePrompt(config, initial, {
+        type: "hotkey",
+        key: "s",
+      });
+      expect(hotkey).toEqual({ kind: "render", state: initial });
+
+      const moved = reducePrompt(config, initial, {
+        type: "nav",
+        direction: "down",
+      });
+      expect(moved.kind).toBe("render");
+      if (moved.kind !== "render") throw new Error("expected render");
+      expect(moved.state.highlightedKey).toBe("n");
+    });
+  });
+
   describe("escape", () => {
     it("denies from the decision step", () => {
       const config = makeConfig();

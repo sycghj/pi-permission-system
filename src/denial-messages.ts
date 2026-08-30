@@ -1,6 +1,7 @@
 import { classifyToolKind, isMcpCheck } from "./access-intent/tool-kind";
 import { EXTENSION_ID } from "./extension-config";
 import type { BashCommandContext, PermissionCheckResult } from "./types";
+import type { NulRedirectTarget } from "./access-intent/bash/nul-redirects";
 
 // ── Extension attribution tag ──────────────────────────────────────────────
 
@@ -58,6 +59,12 @@ export type DenialContext =
       agentName?: string;
     }
   | {
+      kind: "bash_nul_redirect";
+      command: string;
+      targets: NulRedirectTarget[];
+      agentName?: string;
+    }
+  | {
       kind: "skill_read";
       skillName: string;
       readPath: string;
@@ -111,6 +118,8 @@ function buildDenyBody(ctx: DenialContext): string {
       return `${subject(ctx.agentName)} is not permitted to run bash command '${ctx.command}' which references path(s) outside working directory '${ctx.cwd}': ${formatExternalPathList(ctx.externalPaths)}.`;
     case "bash_path":
       return `${subject(ctx.agentName)} is not permitted to access path '${ctx.pathValue}' via tool 'bash'.`;
+    case "bash_nul_redirect":
+      return `${subject(ctx.agentName)} is not permitted to run bash command '${ctx.command}' which redirects to the Windows reserved device name (${formatNulTargetList(ctx.targets)}). Rewrite the redirect as /dev/null — Git Bash does not map 'nul' to a device, so this creates an un-indexable, un-deletable file instead of discarding output.`;
     case "skill_read":
       return `${subject(ctx.agentName)} is not permitted to access skill '${ctx.skillName}' via '${ctx.readPath}'.`;
     case "skill_input":
@@ -207,6 +216,8 @@ function buildUnavailableBody(ctx: DenialContext): string {
       return `Bash command '${ctx.command}' references path(s) outside the working directory and requires approval, but no interactive UI is available.`;
     case "bash_path":
       return `Bash command '${ctx.command}' accesses path '${ctx.pathValue}' which requires approval, but no interactive UI is available.`;
+    case "bash_nul_redirect":
+      return `Bash command '${ctx.command}' redirects to the Windows reserved device name and is denied deterministically (no interactive approval path exists for it). Rewrite the redirect as /dev/null.`;
     case "skill_read":
       return `Accessing skill '${ctx.skillName}' requires approval, but no interactive UI is available.`;
     case "skill_input":
@@ -237,6 +248,8 @@ function buildUserDeniedBody(
       return `User denied external directory access for bash command '${ctx.command}'.${reasonSuffix(denialReason)}`;
     case "bash_path":
       return `User denied path access for bash command '${ctx.command}' (path '${ctx.pathValue}').${reasonSuffix(denialReason)}`;
+    case "bash_nul_redirect":
+      return `User denied bash command '${ctx.command}' for its Windows reserved-name redirect. Rewrite the redirect as /dev/null.${reasonSuffix(denialReason)}`;
     case "skill_read":
       return `User denied access to skill '${ctx.skillName}'.${reasonSuffix(denialReason)}`;
     case "skill_input":
@@ -249,4 +262,9 @@ function formatExternalPathList(paths: ExternalPathDisclosure[]): string {
   return paths
     .map(({ path, resolvedPath }) => `${path}${resolvesToSuffix(resolvedPath)}`)
     .join(", ");
+}
+
+/** Render a reserved-name redirect target list for the nul-redirect deny body. */
+function formatNulTargetList(targets: NulRedirectTarget[]): string {
+  return [...new Set(targets.map(({ token }) => `'${token}'`))].join(", ");
 }

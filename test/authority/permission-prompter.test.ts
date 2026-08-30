@@ -87,6 +87,30 @@ describe("PermissionPrompter", () => {
       );
     });
 
+    it("withholds exact human-only input from review logs", async () => {
+      const logger = { review: vi.fn() };
+      const prompter = new PermissionPrompter(makeDeps({ logger }));
+      const authorizer = makeAuthorizer({ approved: true, state: "approved" });
+
+      await prompter.prompt(
+        authorizer,
+        makeDetails({
+          humanOnly: true,
+          auditFingerprint: "sha256-value",
+          message: "secret exact input",
+          toolInputPreview: '{"token":"secret"}',
+        }),
+      );
+
+      for (const [, details] of logger.review.mock.calls) {
+        expect(details).toMatchObject({
+          message: "[exact manual-approval input withheld from logs]",
+          toolInputPreview: null,
+          auditFingerprint: "sha256-value",
+        });
+      }
+    });
+
     it("logs permission_request.denied when the authorizer denies", async () => {
       const logger = { review: vi.fn() };
       const prompter = new PermissionPrompter(makeDeps({ logger }));

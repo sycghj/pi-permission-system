@@ -86,6 +86,11 @@ export interface ScopedPermissionManager {
   getConfigIssues(agentName?: string): string[];
 }
 
+/** Base recorded policy only: no session rules and no yolo ask→allow rewrite. */
+export interface BasePermissionManager {
+  checkBase(intent: ResolvedAccessIntent): PermissionCheckResult;
+}
+
 export interface PermissionManagerOptions extends PolicyLoaderOptions {
   policyLoader?: PolicyLoader;
   /**
@@ -110,7 +115,9 @@ export interface PermissionManagerOptions extends PolicyLoaderOptions {
   isYoloEnabled?: () => boolean;
 }
 
-export class PermissionManager implements ScopedPermissionManager {
+export class PermissionManager
+  implements ScopedPermissionManager, BasePermissionManager
+{
   private readonly agentDir: string | undefined;
   private readonly flavor: PathFlavor;
   private readonly isYoloEnabled: () => boolean;
@@ -297,6 +304,23 @@ export class PermissionManager implements ScopedPermissionManager {
       ? rewriteAsksToYolo(composedWithSession)
       : composedWithSession;
 
+    return this.checkAgainstRules(intent, fullRules);
+  }
+
+  /**
+   * Resolve only against composed recorded policy. This intentionally excludes
+   * session grants and the yolo rewrite, providing the deny floor used by
+   * exact one-shot manual approvals.
+   */
+  checkBase(intent: ResolvedAccessIntent): PermissionCheckResult {
+    const { composedRules } = this.resolvePermissions(intent.agentName);
+    return this.checkAgainstRules(intent, composedRules);
+  }
+
+  private checkAgainstRules(
+    intent: ResolvedAccessIntent,
+    rules: Ruleset,
+  ): PermissionCheckResult {
     if (intent.kind === "path-values") {
       const lookupValues =
         intent.values.length > 0 ? [...intent.values] : ["*"];
@@ -306,12 +330,11 @@ export class PermissionManager implements ScopedPermissionManager {
         {},
         intent.surface,
         intent.surface,
-        fullRules,
+        rules,
         this.flavor,
       );
     }
 
-    // kind === "tool"
     const toolName = intent.surface.trim();
     const { surface, values, resultExtras } = normalizeInput(
       toolName,
@@ -324,7 +347,7 @@ export class PermissionManager implements ScopedPermissionManager {
       resultExtras,
       toolName,
       intent.surface,
-      fullRules,
+      rules,
       this.flavor,
     );
   }

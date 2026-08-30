@@ -28,6 +28,7 @@ describe("unifiedConfigSchema", () => {
         debugLog: true,
         permissionReviewLog: false,
         yoloMode: true,
+        manualApproval: { enabled: true },
         toolInputPreviewMaxLength: 1000,
         toolTextSummaryMaxLength: 120,
         piInfrastructureReadPaths: ["/extra/path"],
@@ -46,6 +47,14 @@ describe("unifiedConfigSchema", () => {
 
     it("accepts an empty config", () => {
       expect(unifiedConfigSchema.safeParse({}).success).toBe(true);
+    });
+
+    it("rejects unknown manual-approval settings", () => {
+      expect(
+        unifiedConfigSchema.safeParse({
+          manualApproval: { enabled: true, unknown: true },
+        }).success,
+      ).toBe(false);
     });
 
     it("accepts a $schema field", () => {

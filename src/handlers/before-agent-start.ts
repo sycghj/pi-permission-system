@@ -50,6 +50,8 @@ export class AgentPrepHandler {
     private readonly resolver: PermissionResolver,
     private readonly toolRegistry: ToolRegistry,
     private readonly warmParser: () => void,
+    private readonly getAlwaysExposedTools: () => readonly string[] = () => [],
+    private readonly getHiddenTools: () => readonly string[] = () => [],
   ) {}
 
   // eslint-disable-next-line @typescript-eslint/require-await
@@ -69,20 +71,32 @@ export class AgentPrepHandler {
     this.session.refreshConfig(ctx, ctx.isProjectTrusted());
 
     const agentName = this.session.resolveAgentName(ctx, event.systemPrompt);
+    const alwaysExposed = new Set(this.getAlwaysExposedTools());
+    const hidden = new Set(this.getHiddenTools());
     const activeTools = this.toolRegistry.getActive();
+    const candidates = [
+      ...activeTools,
+      ...this.toolRegistry.getAll().filter((tool) => {
+        const name = getToolNameFromValue(tool);
+        return name !== null && alwaysExposed.has(name);
+      }),
+    ];
     const allowedTools: string[] = [];
 
-    for (const tool of activeTools) {
+    for (const tool of candidates) {
       const toolName = getToolNameFromValue(tool);
-      if (!toolName) {
+      if (!toolName || hidden.has(toolName)) {
         continue;
       }
       if (
+        alwaysExposed.has(toolName) ||
         shouldExposeTool(toolName, agentName, (t, a) =>
           this.resolver.getToolPermission(t, a),
         )
       ) {
-        allowedTools.push(toolName);
+        if (!allowedTools.includes(toolName)) {
+          allowedTools.push(toolName);
+        }
       }
     }
 

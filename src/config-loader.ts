@@ -244,6 +244,11 @@ export function mergeUnifiedConfigs(
     merged.autoMode = autoMode;
   }
 
+  const manualApproval = override.manualApproval ?? base.manualApproval;
+  if (manualApproval !== undefined) {
+    merged.manualApproval = manualApproval;
+  }
+
   const learning = override.learning ?? base.learning;
   if (learning !== undefined) {
     merged.learning = learning;

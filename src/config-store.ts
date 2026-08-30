@@ -161,6 +161,8 @@ export class ConfigStore implements SessionConfigStore, CommandConfigStore {
       debugLog: normalized.debugLog,
       permissionReviewLog: normalized.permissionReviewLog,
       yoloMode: normalized.yoloMode,
+      doublePressToConfirm: normalized.doublePressToConfirm,
+      manualApproval: normalized.manualApproval,
     };
 
     const tmpPath = `${globalPath}.tmp`;
@@ -184,14 +186,25 @@ export class ConfigStore implements SessionConfigStore, CommandConfigStore {
       return;
     }
 
-    this.config = normalized;
-    syncPermissionSystemStatus(ctx, normalized);
-    this.lastConfigWarning = null;
-
-    this.deps.logger.debug("config.saved", {
+    const savedDetails = {
+      scope: "global",
       debugLog: normalized.debugLog,
       permissionReviewLog: normalized.permissionReviewLog,
       yoloMode: normalized.yoloMode,
+      doublePressToConfirm: normalized.doublePressToConfirm,
+      manualApprovalEnabled: normalized.manualApproval.enabled,
+      autoModeEnabled: this.config.autoMode.enabled,
+    };
+    this.deps.logger.review("config.saved", savedDetails);
+
+    // Re-resolve every scope instead of assigning `normalized`: `next` is an
+    // effective config and may contain project/agent values that must not be
+    // materialized globally. This also keeps memory identical to a reload.
+    this.refresh(ctx, ctx.isProjectTrusted());
+
+    this.deps.logger.debug("config.saved", {
+      ...savedDetails,
+      autoModeEnabled: this.config.autoMode.enabled,
     });
   }
 

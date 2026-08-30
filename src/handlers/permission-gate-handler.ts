@@ -26,6 +26,23 @@ interface InputPayload {
   text: string;
 }
 
+/** Optional one-shot approval seam; null means no matching grant. */
+export interface ManualApprovalGate {
+  readonly toolName: string;
+  isEnabled(): boolean;
+  noteRequest(
+    input: unknown,
+    agentName: string | null,
+    sessionId: string,
+    messageId: string | null,
+  ): void;
+  authorizeIfGranted(
+    tcc: ToolCallContext,
+    sessionId: string,
+    messageId: string | null,
+  ): Promise<GateOutcome | null>;
+}
+
 /**
  * Handles permission gate events: tool_call and input.
  *
@@ -43,6 +60,7 @@ export class PermissionGateHandler {
     private readonly pipeline: ToolCallGatePipeline,
     private readonly skillInputPipeline: SkillInputGatePipeline,
     private readonly runner: GateRunner,
+    private readonly manualApproval?: ManualApprovalGate,
   ) {}
 
   async handleToolCall(
@@ -56,10 +74,24 @@ export class PermissionGateHandler {
       return { action: "block", reason: validation.reason };
     }
     const toolName = validation.toolName;
-
     const agentName = this.session.resolveAgentName(ctx);
-
     const input = getEventInput(event);
+    if (toolName === this.manualApproval?.toolName) {
+      if (!this.manualApproval.isEnabled()) {
+        return {
+          action: "block",
+          reason: "One-shot manual approval is disabled by configuration.",
+        };
+      }
+      this.manualApproval.noteRequest(
+        input,
+        agentName,
+        ctx.sessionManager.getSessionId(),
+        ctx.sessionManager.getLeafId(),
+      );
+      return { action: "allow" };
+    }
+
     const toolCallId =
       typeof (event as Record<string, unknown>).toolCallId === "string"
         ? ((event as Record<string, unknown>).toolCallId as string)
@@ -73,6 +105,14 @@ export class PermissionGateHandler {
       cwd: ctx.cwd,
     };
 
+    const manualOutcome = await this.manualApproval?.authorizeIfGranted(
+      tcc,
+      ctx.sessionManager.getSessionId(),
+      ctx.sessionManager.getLeafId(),
+    );
+    if (manualOutcome) {
+      return manualOutcome;
+    }
     return await this.pipeline.evaluate(tcc, this.runner);
   }
 

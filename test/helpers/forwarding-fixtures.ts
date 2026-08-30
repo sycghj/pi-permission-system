@@ -109,6 +109,9 @@ export function makeServerDeps(
       escalate: vi
         .fn()
         .mockResolvedValue({ approved: true, state: "approved" }),
+      escalateHumanOnly: vi
+        .fn()
+        .mockResolvedValue({ approved: true, state: "approved" }),
     },
     recorder: { recordSessionApproval: vi.fn() },
     ...overrides,

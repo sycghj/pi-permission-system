@@ -39,6 +39,13 @@ export interface AskEscalator {
   escalate(details: PromptPermissionDetails): Promise<PermissionPromptDecision>;
 }
 
+/** Direct-terminal escalation used only by exact one-shot manual approval. */
+export interface HumanOnlyAskEscalator extends AskEscalator {
+  escalateHumanOnly(
+    details: PromptPermissionDetails,
+  ): Promise<PermissionPromptDecision>;
+}
+
 /**
  * Context-owning selection root for the Authorizer spine.
  *
@@ -52,7 +59,7 @@ export interface AskEscalator {
  * predicate survives (#556 dissolved `canConfirm()`).
  */
 export class AuthorizerSelection
-  implements AskEscalator, AuthorizerSelectionLifecycle
+  implements HumanOnlyAskEscalator, AuthorizerSelectionLifecycle
 {
   private terminal: TerminalAuthorizer | null = null;
 
@@ -129,5 +136,24 @@ export class AuthorizerSelection
       this.deps.logger,
     );
     return this.deps.prompter.prompt(chain, details);
+  }
+
+  async escalateHumanOnly(
+    details: PromptPermissionDetails,
+  ): Promise<PermissionPromptDecision> {
+    if (this.terminal === null) {
+      throw new Error(
+        "escalateHumanOnly called before the session was activated",
+      );
+    }
+    const { sessionApproval: _sessionApproval, ...oneShotDetails } = details;
+    const decision = await this.deps.prompter.prompt(this.terminal, {
+      ...oneShotDetails,
+      humanOnly: true,
+    });
+    return decision.state === "approved_for_session" ||
+      decision.state === "approved_for_serving_session"
+      ? { approved: true, state: "approved" }
+      : decision;
   }
 }

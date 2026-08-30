@@ -1,10 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getAgentDir, getPackageDir } from "@earendil-works/pi-coding-agent";
 import { warmBashParser } from "./access-intent/bash/parser";
-import {
-  buildAccessIntentForSurface,
-  buildResolvedIntentFromMatchValues,
-} from "./access-intent/input-normalizer";
+import { buildResolvedIntentFromMatchValues } from "./access-intent/input-normalizer";
 import { AuthorizerRegistry } from "./authority/authorizer-registry";
 import { AuthorizerSelection } from "./authority/authorizer-selection";
 import {
@@ -38,6 +35,12 @@ import { createFailClosedToolCall } from "./handlers/tool-call-boundary";
 import { InMemoryEvidenceRecorder } from "./learning/evidence-recorder";
 import { LearnedGrantEvaluator } from "./learning/learned-grant-evaluator";
 import { SessionLearningStore } from "./learning/session-learning-store";
+import {
+  MANUAL_APPROVAL_TOOL_NAME,
+  ManualApprovalService,
+  registerManualApprovalTool,
+} from "./manual-approval";
+import { ManualApprovalStore } from "./manual-approval-store";
 import { pathFlavorForPlatform } from "./path/path-flavor";
 import { PermissionManager } from "./permission-manager";
 import { PermissionResolver } from "./permission-resolver";
@@ -151,6 +154,14 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
           intent.principal.agentName,
         ),
       ),
+    resolveBase: (intent) =>
+      resolver.resolveBase(
+        buildResolvedIntentFromMatchValues(
+          intent.surface,
+          intent.matchValues,
+          intent.principal.agentName,
+        ),
+      ),
   };
 
   const requestServer = new ForwardedRequestServer({
@@ -225,6 +236,16 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
     setActive: (names: string[]) => pi.setActiveTools(names),
   };
 
+  const baseResolver = {
+    resolve: (intent: Parameters<PermissionResolver["resolveBase"]>[0]) =>
+      resolver.resolveBase(intent),
+  };
+  const denyFloorPipeline = new ToolCallGatePipeline(
+    baseResolver,
+    session,
+    formatterRegistry,
+    accessExtractorRegistry,
+  );
   const audit = new DecisionAudit();
   const lifecycle = new SessionLifecycleHandler(
     session,
@@ -240,6 +261,14 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
     () => {
       void warmBashParser();
     },
+    () =>
+      configStore.current().manualApproval.enabled
+        ? [MANUAL_APPROVAL_TOOL_NAME]
+        : [],
+    () =>
+      configStore.current().manualApproval.enabled
+        ? []
+        : [MANUAL_APPROVAL_TOOL_NAME],
   );
 
   const reporter = new GateDecisionReporter(logger, pi.events);
@@ -277,21 +306,40 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
     accessExtractorRegistry,
   );
   const skillInputGatePipeline = new SkillInputGatePipeline(resolver);
+  const manualApproval = new ManualApprovalService({
+    store: new ManualApprovalStore(),
+    denyFloor: denyFloorPipeline,
+    automatic: {
+      evaluateAutomatic: (tcc) =>
+        toolCallGatePipeline.evaluateAutomatic(tcc, gateRunner),
+    },
+    escalator: authorizerSelection,
+    toolRegistry,
+    getConfig: () => configStore.current(),
+    resolveAgentName: (ctx) => session.resolveAgentName(ctx),
+    logger,
+  });
+  registerManualApprovalTool(pi, manualApproval);
   const gates = new PermissionGateHandler(
     session,
     toolRegistry,
     toolCallGatePipeline,
     skillInputGatePipeline,
     gateRunner,
+    manualApproval,
   );
 
-  pi.on("session_start", (event, ctx) =>
-    lifecycle.handleSessionStart(event, ctx),
-  );
+  pi.on("session_start", (event, ctx) => {
+    manualApproval.clear();
+    return lifecycle.handleSessionStart(event, ctx);
+  });
   pi.on("resources_discover", (event, ctx) =>
     lifecycle.handleResourcesDiscover(event, ctx),
   );
-  pi.on("session_shutdown", () => lifecycle.handleSessionShutdown());
+  pi.on("session_shutdown", () => {
+    manualApproval.clear();
+    return lifecycle.handleSessionShutdown();
+  });
   pi.on("before_agent_start", (event, ctx) => agentPrep.handle(event, ctx));
   pi.on("input", (event, ctx) => gates.handleInput(event, ctx));
   pi.on(

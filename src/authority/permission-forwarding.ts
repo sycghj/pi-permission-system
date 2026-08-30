@@ -123,6 +123,8 @@ export type ForwardedPermissionRequest = {
   targetSessionId: string;
   requesterAgentName: string;
   message: string;
+  /** This request must be decided directly by a human, never standing authority. */
+  humanOnly?: true;
   /**
    * Original prompt display fields, persisted so the parent emits a
    * non-degraded event. Optional for version-skew tolerance: a parent on a

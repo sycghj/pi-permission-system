@@ -128,6 +128,18 @@
       "additionalProperties": false,
       "description": "Optional LLM classifier for ask-state permission checks only. Allow and deny policy decisions bypass it."
     },
+    "manualApproval": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Expose a tool that lets an agent request an exact, one-shot human approval for a high-risk tool invocation.",
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "description": "Agent-initiated, human-only approval for one exact tool invocation. Deterministic denies remain authoritative."
+    },
     "learning": {
       "type": "object",
       "properties": {

@@ -57,6 +57,7 @@ This clamp is deny-preserving and, like `yoloMode`, applied at composition; when
   "permissionReviewLog": true,
   "yoloMode": false,
   "doublePressToConfirm": true,
+  "manualApproval": { "enabled": false },
   "toolInputPreviewMaxLength": 400,
   "toolTextSummaryMaxLength": 120,
   "piInfrastructureReadPaths": [],
@@ -104,6 +105,7 @@ This clamp is deny-preserving and, like `yoloMode`, applied at composition; when
 | `permissionReviewLog`       | `true`  | Enables the permission request/denial review log at `logs/pi-permission-system-permission-review.jsonl`. Records bash command strings verbatim — see [Log file sensitivity](#log-file-sensitivity) |
 | `yoloMode`                  | `false` | Auto-approves `ask` results instead of prompting when yolo mode is enabled                                                                                                                         |
 | `doublePressToConfirm`      | `true`  | Requires a confirming second press of a decision hotkey in the inline TUI dialog (see below). TUI sessions only; set to `false` for single-press.                                                  |
+| `manualApproval.enabled`    | `false` | Exposes `request_tool_approval`, which evaluates an exact target automatically before any human dialog. See below.                                                                                 |
 | `toolInputPreviewMaxLength` | `200`   | Max characters of inline JSON shown in permission prompts for tool inputs. Omit to use the default. Set to a large value to disable truncation.                                                    |
 | `toolTextSummaryMaxLength`  | `80`    | Max characters of inline pattern/path summaries (grep patterns, find globs, ls paths) in permission prompts. Omit to use the default.                                                              |
 | `piInfrastructureReadPaths` | `[]`    | Extra directories to auto-allow for reads, bypassing the `external_directory` gate. Supports `~`/`$HOME` expansion and wildcard patterns (`*`, `?`).                                               |
@@ -111,6 +113,12 @@ This clamp is deny-preserving and, like `yoloMode`, applied at composition; when
 
 Both logs write to `~/.pi/agent/extensions/pi-permission-system/logs/`.
 No debug output is printed to the terminal.
+Every JSONL entry includes `processId` and a per-extension-load `runtimeId`, so events from concurrent Pi processes and runtimes replaced by `/reload` can be distinguished.
+
+`/permission-system show` reports both YOLO and Auto Mode state.
+The status bar shows `auto` while Auto Mode is active, or `yolo` when YOLO takes precedence.
+`/permission-system reset` resets only the command-managed approval, YOLO, logging, and double-press settings; it does not change Auto Mode or learning.
+After any settings save, the extension reloads the complete scope stack so its in-memory config matches a fresh reload.
 
 ### Inline permission dialog (TUI)
 
@@ -132,6 +140,29 @@ It only toggles the display — it never resolves, commits, or arms the pending 
 While you are typing a denial reason it is not intercepted, so a rebound printable key still reaches the reason editor.
 
 Non-TUI contexts (RPC / frontend-driven sessions) keep the single-select prompt and are unaffected by `doublePressToConfirm`.
+
+### One-shot manual approval
+
+Set `manualApproval.enabled` to `true` to expose `request_tool_approval` to agents.
+An Agent may proactively supply a target `toolName`, the complete structured `input`, and its rationale.
+Before opening any dialog, the permission system evaluates that exact target through recorded policy, session/YOLO/learning, and Auto Mode without executing it.
+
+A deterministic `deny` rejects the request and cannot be overridden.
+If an automatic authority allows every applicable gate, the system issues the exact one-shot grant without opening a human dialog.
+If an `ask` remains unresolved or Auto Mode denies it, the request proceeds to the dedicated human dialog.
+Changed input and repeated requests are evaluated again rather than being categorically suppressed.
+Safety-floor asks marked as ineligible for classification skip Auto Mode and proceed to this human review.
+
+The dedicated dialog deliberately has no session-approval option.
+Approval creates an in-memory grant bound to the current session, agent, tool name, and stable serialization of the complete input.
+The next exact matching invocation consumes it atomically; changed parameters require a fresh request, and unused grants expire after five minutes.
+The Authorizer Chain, session grants, learning, YOLO, and Auto Mode cannot answer the dedicated human prompt itself; they only participate in the preceding automatic evaluation.
+Headless sessions deny requests that reach human review, while subagents forward them to their parent session's human UI.
+
+The approval request and target call must be separate: call `request_tool_approval` by itself and wait for its result, then automatically issue the exact target call in the next model step.
+Approval does not require another user message: the agent must continue without asking the user to reply, say "continue", or confirm again.
+Full target input remains in memory and in the human prompt; added audit entries record only identity metadata and a SHA-256 fingerprint.
+For a process-isolated subagent, the existing forwarding transport necessarily places the prompt in a temporary owner-only request file; the parent deletes it after responding or timeout cleanup.
 
 ### `piInfrastructureReadPaths` patterns
 
@@ -225,7 +256,8 @@ While the authorizer chain routes an `ask` to a registered reviewer, **`autoMode
 
 **Deterministic `allow` and `deny` bypass the classifier entirely** — tool safety, path safety, extension-tool extraction, and hard denials remain policy-driven by this permission system rather than by a hardcoded tool allowlist.
 
-`autoMode` is **disabled by default**. Enable it only in user/global config; a project config must not enable it (project config can only tighten, never loosen).
+`autoMode` is **disabled by default**.
+Enable it only in user/global config; a project config must not enable it (project config can only tighten, never loosen).
 
 ```jsonc
 {
@@ -243,16 +275,16 @@ While the authorizer chain routes an `ask` to a registered reviewer, **`autoMode
 
 Fields:
 
-| Field | Default | Notes |
-| --- | --- | --- |
-| `enabled` | `false` | Off by default. Only user/global config may set `true`. |
-| `provider` | — | LLM provider id (e.g. `anthropic`). |
-| `modelId` | — | Model id for the classifier. |
-| `maxTokens` | — | Max tokens for the classifier response. |
-| `maxRetries` | — | Retry count on transient failure. |
-| `fallback` | `"ask"` | What happens when the classifier fails or abstains: `"ask"` (recommended, returns to the prompt) or `"deny"`. |
-| `twoStage.enabled` | `false` | Opt-in thinking-review second stage on a deny or malformed first-stage output. |
-| `twoStage.thinkingBudgetTokens` | — | Thinking budget for the second stage. |
+| Field                           | Default | Notes                                                                                                         |
+| ------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------- |
+| `enabled`                       | `false` | Off by default. Only user/global config may set `true`.                                                       |
+| `provider`                      | —       | LLM provider id (e.g. `anthropic`).                                                                           |
+| `modelId`                       | —       | Model id for the classifier.                                                                                  |
+| `maxTokens`                     | —       | Max tokens for the classifier response.                                                                       |
+| `maxRetries`                    | —       | Retry count on transient failure.                                                                             |
+| `fallback`                      | `"ask"` | What happens when the classifier fails or abstains: `"ask"` (recommended, returns to the prompt) or `"deny"`. |
+| `twoStage.enabled`              | `false` | Opt-in thinking-review second stage on a deny or malformed first-stage output.                                |
+| `twoStage.thinkingBudgetTokens` | —       | Thinking budget for the second stage.                                                                         |
 
 **Safety floor:** high-risk matched patterns are marked `classifierApprovable: false` and never reach the classifier — they fall straight to the prompt (or deny per `fallback`).
 

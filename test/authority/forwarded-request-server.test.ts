@@ -59,6 +59,13 @@ function makeCapturingEscalator() {
         state: "approved",
       });
     }),
+    escalateHumanOnly: vi.fn((details: PromptPermissionDetails) => {
+      escalated.push(details);
+      return Promise.resolve<PermissionPromptDecision>({
+        approved: true,
+        state: "approved",
+      });
+    }),
     /** The details of the most recent escalation. */
     lastDetails(): PromptPermissionDetails {
       const details = escalated.at(-1);
@@ -115,7 +122,7 @@ describe("processInbox — recorded-authority resolution", () => {
         forwardingDir: temp.forwardingDir,
         logger,
         policy: { resolve },
-        escalator: { escalate },
+        escalator: { escalate, escalateHumanOnly: escalate },
       }),
     );
 
@@ -157,7 +164,7 @@ describe("processInbox — recorded-authority resolution", () => {
         forwardingDir: temp.forwardingDir,
         logger,
         policy: { resolve },
-        escalator: { escalate },
+        escalator: { escalate, escalateHumanOnly: escalate },
       }),
     );
 
@@ -199,7 +206,7 @@ describe("processInbox — recorded-authority resolution", () => {
       makeServerDeps({
         forwardingDir: temp.forwardingDir,
         policy: { resolve },
-        escalator: { escalate },
+        escalator: { escalate, escalateHumanOnly: escalate },
       }),
     );
 
@@ -246,7 +253,7 @@ describe("processInbox — recorded-authority resolution", () => {
       makeServerDeps({
         forwardingDir: temp.forwardingDir,
         policy: { resolve },
-        escalator: { escalate },
+        escalator: { escalate, escalateHumanOnly: escalate },
       }),
     );
 
@@ -286,7 +293,7 @@ describe("processInbox — recorded-authority resolution", () => {
       makeServerDeps({
         forwardingDir: temp.forwardingDir,
         policy: { resolve },
-        escalator: { escalate },
+        escalator: { escalate, escalateHumanOnly: escalate },
       }),
     );
 
@@ -322,7 +329,7 @@ describe("processInbox — recorded-authority resolution", () => {
         forwardingDir: temp.forwardingDir,
         logger,
         policy: { resolve },
-        escalator: { escalate },
+        escalator: { escalate, escalateHumanOnly: escalate },
       }),
     );
 
@@ -436,6 +443,86 @@ describe("processInbox — bounded delegation over forwarded asks", () => {
   });
 });
 
+describe("processInbox — human-only forwarding", () => {
+  test("uses base policy and prompts the human for ask or allow without recording session approval", async () => {
+    temp = createForwardingTempDir("parent-session");
+    const accessIntent = makeForwardedAccessIntent({
+      matchValues: ["git push"],
+    });
+    temp.writeRequest({
+      id: "req-human",
+      humanOnly: true,
+      accessIntent,
+      sessionApproval: { surface: "bash", patterns: ["git *"] },
+    });
+    const resolve = vi.fn(() => makeCheckResult({ state: "deny" }));
+    const resolveBase = vi.fn(() => makeCheckResult({ state: "allow" }));
+    const escalate = vi.fn();
+    const escalateHumanOnly = vi.fn().mockResolvedValue({
+      approved: true,
+      state: "approved_for_serving_session",
+    });
+    const recordSessionApproval = vi.fn();
+    const server = new ForwardedRequestServer(
+      makeServerDeps({
+        forwardingDir: temp.forwardingDir,
+        policy: { resolve, resolveBase },
+        escalator: { escalate, escalateHumanOnly },
+        recorder: { recordSessionApproval },
+      }),
+    );
+
+    await server.processInbox(
+      makeForwarderContext({ hasUI: true, sessionId: "parent-session" }),
+    );
+
+    expect(resolveBase).toHaveBeenCalledWith(accessIntent);
+    expect(resolve).not.toHaveBeenCalled();
+    expect(escalate).not.toHaveBeenCalled();
+    expect(escalateHumanOnly).toHaveBeenCalledWith(
+      expect.objectContaining({ humanOnly: true }),
+    );
+    expect(escalateHumanOnly).toHaveBeenCalledWith(
+      expect.not.objectContaining({ sessionApproval: expect.anything() }),
+    );
+    expect(recordSessionApproval).not.toHaveBeenCalled();
+    expect(readResponse(temp, "req-human")).toMatchObject({
+      approved: true,
+      state: "approved",
+    });
+  });
+
+  test("auto-denies a deterministic base deny", async () => {
+    temp = createForwardingTempDir("parent-session");
+    temp.writeRequest({
+      id: "req-human-deny",
+      humanOnly: true,
+      accessIntent: makeForwardedAccessIntent(),
+    });
+    const escalateHumanOnly = vi.fn();
+    const server = new ForwardedRequestServer(
+      makeServerDeps({
+        forwardingDir: temp.forwardingDir,
+        policy: {
+          resolve: vi.fn(() => makeCheckResult({ state: "allow" })),
+          resolveBase: vi.fn(() => makeCheckResult({ state: "deny" })),
+        },
+        escalator: { escalate: vi.fn(), escalateHumanOnly },
+      }),
+    );
+
+    await server.processInbox(
+      makeForwarderContext({ hasUI: true, sessionId: "parent-session" }),
+    );
+
+    expect(escalateHumanOnly).not.toHaveBeenCalled();
+    expect(readResponse(temp, "req-human-deny")).toMatchObject({
+      approved: false,
+      state: "denied",
+    });
+  });
+});
+
 describe("processInbox — grant-scope selection", () => {
   test("records a whole-session grant into the serving recorder and translates the response to a plain approve", async () => {
     temp = createForwardingTempDir("parent-session");
@@ -459,7 +546,7 @@ describe("processInbox — grant-scope selection", () => {
       makeServerDeps({
         forwardingDir: temp.forwardingDir,
         policy: { resolve },
-        escalator: { escalate },
+        escalator: { escalate, escalateHumanOnly: escalate },
         recorder: { recordSessionApproval },
       }),
     );
@@ -498,7 +585,7 @@ describe("processInbox — grant-scope selection", () => {
       makeServerDeps({
         forwardingDir: temp.forwardingDir,
         policy: { resolve },
-        escalator: { escalate },
+        escalator: { escalate, escalateHumanOnly: escalate },
       }),
     );
 
@@ -534,7 +621,7 @@ describe("processInbox — grant-scope selection", () => {
       makeServerDeps({
         forwardingDir: temp.forwardingDir,
         policy: { resolve },
-        escalator: { escalate },
+        escalator: { escalate, escalateHumanOnly: escalate },
         recorder: { recordSessionApproval },
       }),
     );

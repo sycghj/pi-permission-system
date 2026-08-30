@@ -53,19 +53,46 @@ export class GateRunner {
     agentName: string | null,
     toolCallId: string,
   ): Promise<GateOutcome> {
+    return this.runGate(gate, agentName, toolCallId, true, true);
+  }
+
+  /** Run automatic authorities quietly, without opening a human prompt. */
+  async runAutomatic(
+    gate: GateResult,
+    agentName: string | null,
+    toolCallId: string,
+  ): Promise<GateOutcome> {
+    return this.runGate(gate, agentName, toolCallId, false, false);
+  }
+
+  private async runGate(
+    gate: GateResult,
+    agentName: string | null,
+    toolCallId: string,
+    promptOnUnresolvedAsk: boolean,
+    reportDecisions: boolean,
+  ): Promise<GateOutcome> {
     if (!gate) {
       return { action: "allow" };
     }
     if (isGateBypass(gate)) {
-      if (gate.log) {
-        this.reporter.writeReviewLog(gate.log.event, gate.log.details);
-      }
-      if (gate.decision) {
-        this.reporter.emitDecision(gate.decision);
+      if (reportDecisions) {
+        if (gate.log) {
+          this.reporter.writeReviewLog(gate.log.event, gate.log.details);
+        }
+        if (gate.decision) {
+          this.reporter.emitDecision(gate.decision);
+        }
       }
       return { action: "allow" };
     }
-    return this.runDescriptor(gate, agentName, toolCallId);
+    return this.runDescriptor(
+      gate,
+      agentName,
+      toolCallId,
+      promptOnUnresolvedAsk,
+      reportDecisions,
+    );
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────
@@ -74,6 +101,8 @@ export class GateRunner {
     descriptor: GateDescriptor,
     agentName: string | null,
     toolCallId: string,
+    promptOnUnresolvedAsk: boolean,
+    reportDecisions: boolean,
   ): Promise<GateOutcome> {
     // 1. Resolve permission state — pre-check, pre-resolved, or via resolver
     let check: PermissionCheckResult;
@@ -97,21 +126,23 @@ export class GateRunner {
 
     // 2. Session-hit fast path
     if (check.source === "session") {
-      this.reporter.writeReviewLog("permission_request.session_approved", {
-        ...descriptor.logContext,
-        agentName,
-        resolution: "session_approved",
-        sessionApprovalPattern: check.matchedPattern,
-      });
-      this.reporter.emitDecision(
-        buildDecisionEvent(
-          descriptor.decision,
-          check,
+      if (reportDecisions) {
+        this.reporter.writeReviewLog("permission_request.session_approved", {
+          ...descriptor.logContext,
           agentName,
-          "allow",
-          "session_approved",
-        ),
-      );
+          resolution: "session_approved",
+          sessionApprovalPattern: check.matchedPattern,
+        });
+        this.reporter.emitDecision(
+          buildDecisionEvent(
+            descriptor.decision,
+            check,
+            agentName,
+            "allow",
+            "session_approved",
+          ),
+        );
+      }
       return { action: "allow" };
     }
 
@@ -120,21 +151,23 @@ export class GateRunner {
     // preserving today's single auto_approved review entry + decision event
     // so review-log parity holds (#526).
     if (check.state === "allow" && check.origin === "yolo") {
-      this.reporter.writeReviewLog("permission_request.auto_approved", {
-        ...descriptor.logContext,
-        agentName,
-        resolution: "auto_approved",
-      });
-      this.reporter.emitDecision(
-        buildDecisionEvent(
-          descriptor.decision,
-          check,
+      if (reportDecisions) {
+        this.reporter.writeReviewLog("permission_request.auto_approved", {
+          ...descriptor.logContext,
           agentName,
-          "allow",
-          deriveResolution(check.state, "allow", false, false, true),
-          { kind: "auto_mode", detail: "yolo-origin allow" },
-        ),
-      );
+          resolution: "auto_approved",
+        });
+        this.reporter.emitDecision(
+          buildDecisionEvent(
+            descriptor.decision,
+            check,
+            agentName,
+            "allow",
+            deriveResolution(check.state, "allow", false, false, true),
+            { kind: "auto_mode", detail: "yolo-origin allow" },
+          ),
+        );
+      }
       return { action: "allow" };
     }
 
@@ -154,6 +187,7 @@ export class GateRunner {
       check,
       agentName,
       toolCallId,
+      reportDecisions,
     );
     if (learnedAttempt.action === "allow") {
       return { action: "allow" };
@@ -167,8 +201,23 @@ export class GateRunner {
       check,
       agentName,
       toolCallId,
+      reportDecisions,
     );
     const autoDecision = autoAttempt.decision;
+    if (check.state === "ask" && !autoDecision && !promptOnUnresolvedAsk) {
+      if (reportDecisions && autoAttempt.fallbackReason) {
+        this.reporter.writeReviewLog("auto_mode.fallback_to_prompt", {
+          ...descriptor.logContext,
+          agentName,
+          reason: autoAttempt.fallbackReason,
+        });
+      }
+      return {
+        action: "block",
+        reason: "Automatic authorization did not resolve this ask.",
+        manualReviewRequired: true,
+      };
+    }
     const gateResult = await applyPermissionGate({
       state: check.state,
       sessionApproval: descriptor.sessionApproval?.toGateApproval(),
@@ -180,7 +229,7 @@ export class GateRunner {
           decisionReason = reasonForAutoDecision(autoDecision);
           return autoDecision;
         }
-        if (autoAttempt.fallbackReason) {
+        if (reportDecisions && autoAttempt.fallbackReason) {
           this.reporter.writeReviewLog("auto_mode.fallback_to_prompt", {
             ...descriptor.logContext,
             agentName,
@@ -202,8 +251,11 @@ export class GateRunner {
         decisionReason = reasonForPromptDecision(decision);
         return decision;
       },
-      writeLog: (event, details) =>
-        this.reporter.writeReviewLog(event, details),
+      writeLog: (event, details) => {
+        if (reportDecisions) {
+          this.reporter.writeReviewLog(event, details);
+        }
+      },
       logContext: { ...descriptor.logContext, agentName },
       messages,
     });
@@ -213,31 +265,39 @@ export class GateRunner {
       gateResult.action === "allow" && gateResult.sessionApproval !== undefined;
 
     // 5. Emit decision event
-    this.reporter.emitDecision(
-      buildDecisionEvent(
-        descriptor.decision,
-        check,
-        agentName,
-        gateResult.action === "allow" ? "allow" : "deny",
-        deriveResolution(
-          check.state,
-          gateResult.action,
-          hasSessionApproval,
-          confirmationUnavailable,
-          autoApproved,
+    if (reportDecisions) {
+      this.reporter.emitDecision(
+        buildDecisionEvent(
+          descriptor.decision,
+          check,
+          agentName,
+          gateResult.action === "allow" ? "allow" : "deny",
+          deriveResolution(
+            check.state,
+            gateResult.action,
+            hasSessionApproval,
+            confirmationUnavailable,
+            autoApproved,
+          ),
+          decisionReason,
         ),
-        decisionReason,
-      ),
-    );
+      );
+    }
 
     // 6. Record session approval — tell the store; it owns the per-pattern loop
     // hasSessionApproval already implies gateResult.action === "allow"
-    if (hasSessionApproval && descriptor.sessionApproval) {
+    if (reportDecisions && hasSessionApproval && descriptor.sessionApproval) {
       this.recorder.recordSessionApproval(descriptor.sessionApproval);
     }
 
     if (gateResult.action === "block") {
-      return { action: "block", reason: gateResult.reason };
+      return {
+        action: "block",
+        reason: gateResult.reason,
+        ...(!promptOnUnresolvedAsk && check.state === "ask"
+          ? { manualReviewRequired: true as const }
+          : {}),
+      };
     }
 
     return { action: "allow" };
@@ -272,16 +332,19 @@ export class GateRunner {
     check: PermissionCheckResult,
     agentName: string | null,
     toolCallId: string,
+    reportDecisions: boolean,
   ): { action: "allow" | "miss" } {
     if (check.state !== "ask" || !this.learnedEvaluator)
       return { action: "miss" };
-    this.reporter.writeReviewLog("learning.evaluated", {
-      ...descriptor.logContext,
-      agentName,
-      surface: descriptor.surface,
-      intentFingerprint:
-        descriptor.learning?.intentFingerprint ?? descriptor.decision.value,
-    });
+    if (reportDecisions) {
+      this.reporter.writeReviewLog("learning.evaluated", {
+        ...descriptor.logContext,
+        agentName,
+        surface: descriptor.surface,
+        intentFingerprint:
+          descriptor.learning?.intentFingerprint ?? descriptor.decision.value,
+      });
+    }
     const askCheck = check as PermissionCheckResult & { state: "ask" };
     const result = this.learnedEvaluator.evaluateAsk({
       check: askCheck,
@@ -293,37 +356,41 @@ export class GateRunner {
       toolCallId,
     });
     if (result.action !== "allow") {
-      this.reporter.writeReviewLog("learning.missed", {
+      if (reportDecisions) {
+        this.reporter.writeReviewLog("learning.missed", {
+          ...descriptor.logContext,
+          agentName,
+          surface: descriptor.surface,
+          action: result.action,
+        });
+      }
+      return { action: "miss" };
+    }
+    if (reportDecisions) {
+      this.reporter.writeReviewLog("learning.allowed", {
         ...descriptor.logContext,
         agentName,
         surface: descriptor.surface,
-        action: result.action,
+        resolution: "learned_grant",
+        learnedGrantId: result.grantId,
       });
-      return { action: "miss" };
-    }
-    this.reporter.writeReviewLog("learning.allowed", {
-      ...descriptor.logContext,
-      agentName,
-      surface: descriptor.surface,
-      resolution: "learned_grant",
-      learnedGrantId: result.grantId,
-    });
-    this.reporter.writeReviewLog("permission_request.learned_approved", {
-      ...descriptor.logContext,
-      agentName,
-      resolution: "learned_grant",
-      learnedGrantId: result.grantId,
-    });
-    this.reporter.emitDecision(
-      buildDecisionEvent(
-        descriptor.decision,
-        check,
+      this.reporter.writeReviewLog("permission_request.learned_approved", {
+        ...descriptor.logContext,
         agentName,
-        "allow",
-        "learned_grant",
-        { kind: "learned_grant", detail: result.grantId },
-      ),
-    );
+        resolution: "learned_grant",
+        learnedGrantId: result.grantId,
+      });
+      this.reporter.emitDecision(
+        buildDecisionEvent(
+          descriptor.decision,
+          check,
+          agentName,
+          "allow",
+          "learned_grant",
+          { kind: "learned_grant", detail: result.grantId },
+        ),
+      );
+    }
     return { action: "allow" };
   }
 
@@ -332,6 +399,7 @@ export class GateRunner {
     check: PermissionCheckResult,
     agentName: string | null,
     toolCallId: string,
+    reportDecisions: boolean,
   ): Promise<{
     decision: PermissionPromptDecision | null;
     fallbackReason?: string;
@@ -341,20 +409,24 @@ export class GateRunner {
     }
     if (descriptor.autoMode?.classifierApprovable === false) {
       const reason = descriptor.autoMode.reason ?? "not_classifier_approvable";
-      this.reporter.writeReviewLog("auto_mode.skipped", {
-        ...descriptor.logContext,
-        agentName,
-        reason,
-        classifierApprovable: false,
-      });
+      if (reportDecisions) {
+        this.reporter.writeReviewLog("auto_mode.skipped", {
+          ...descriptor.logContext,
+          agentName,
+          reason,
+          classifierApprovable: false,
+        });
+      }
       return { decision: null, fallbackReason: reason };
     }
     if (!this.autoDecider) {
-      this.reporter.writeReviewLog("auto_mode.skipped", {
-        ...descriptor.logContext,
-        agentName,
-        reason: "missing_auto_decider",
-      });
+      if (reportDecisions) {
+        this.reporter.writeReviewLog("auto_mode.skipped", {
+          ...descriptor.logContext,
+          agentName,
+          reason: "missing_auto_decider",
+        });
+      }
       return { decision: null, fallbackReason: "missing_auto_decider" };
     }
     try {
@@ -366,21 +438,25 @@ export class GateRunner {
         toolCallId,
       });
       if (!decision) {
-        this.reporter.writeReviewLog("auto_mode.unresolved", {
-          ...descriptor.logContext,
-          agentName,
-          reason: "no_decision",
-        });
+        if (reportDecisions) {
+          this.reporter.writeReviewLog("auto_mode.unresolved", {
+            ...descriptor.logContext,
+            agentName,
+            reason: "no_decision",
+          });
+        }
         return { decision: null, fallbackReason: "no_decision" };
       }
       return { decision };
     } catch (error) {
-      this.reporter.writeReviewLog("auto_mode.unresolved", {
-        ...descriptor.logContext,
-        agentName,
-        reason: "decider_error",
-        error: errorMessage(error),
-      });
+      if (reportDecisions) {
+        this.reporter.writeReviewLog("auto_mode.unresolved", {
+          ...descriptor.logContext,
+          agentName,
+          reason: "decider_error",
+          error: errorMessage(error),
+        });
+      }
       return { decision: null, fallbackReason: "decider_error" };
     }
   }

@@ -53,6 +53,55 @@ describe("GateRunner auto ask decider", () => {
     );
   });
 
+  it("returns human-review-required without prompting in automatic-only mode", async () => {
+    const autoDecide = vi.fn().mockResolvedValue(null);
+    const { runner, deps } = makeGateRunner({
+      resolveResult: makeCheckResult({ state: "ask", matchedPattern: "*" }),
+      autoDecide,
+    });
+
+    const result = await runner.runAutomatic(
+      makeDescriptor(),
+      null,
+      "tc-automatic",
+    );
+
+    expect(result).toEqual({
+      action: "block",
+      reason: "Automatic authorization did not resolve this ask.",
+      manualReviewRequired: true,
+    });
+    expect(deps.escalate).not.toHaveBeenCalled();
+    expect(deps.reporter.writeReviewLog).not.toHaveBeenCalled();
+    expect(deps.reporter.emitDecision).not.toHaveBeenCalled();
+  });
+
+  it("marks an Auto Mode denial for human review in automatic-only mode", async () => {
+    const autoDecide = vi.fn().mockResolvedValue({
+      approved: false,
+      state: "denied_with_reason",
+      denialReason: "classifier blocked",
+    });
+    const { runner, deps } = makeGateRunner({
+      resolveResult: makeCheckResult({ state: "ask", matchedPattern: "*" }),
+      autoDecide,
+    });
+
+    const result = await runner.runAutomatic(
+      makeDescriptor(),
+      null,
+      "tc-automatic",
+    );
+
+    expect(result).toMatchObject({
+      action: "block",
+      manualReviewRequired: true,
+    });
+    expect(deps.escalate).not.toHaveBeenCalled();
+    expect(deps.reporter.writeReviewLog).not.toHaveBeenCalled();
+    expect(deps.reporter.emitDecision).not.toHaveBeenCalled();
+  });
+
   it("falls back to the user prompt when decider abstains", async () => {
     const autoDecide = vi.fn().mockResolvedValue(null);
     const { runner, deps } = makeGateRunner({

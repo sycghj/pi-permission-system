@@ -33,6 +33,8 @@ export interface FakePi {
   handlers: Map<string, RecordedHandler>;
   /** Every `pi.registerCommand(name, …)` registration, keyed by command name. */
   commands: Map<string, unknown>;
+  /** Every `pi.registerTool(...)` registration, keyed by tool name. */
+  tools: Map<string, unknown>;
   /**
    * Drive a registered handler; resolves to its (possibly async) result.
    *
@@ -64,14 +66,16 @@ const DEFAULT_TOOL_NAMES = ["read", "write", "edit", "bash", "ls", "grep"];
  */
 export function makeFakePi(options: MakeFakePiOptions = {}): FakePi {
   const events = options.events ?? createEventBus();
-  const toolNames = options.toolNames ?? DEFAULT_TOOL_NAMES;
+  const toolNames = [...(options.toolNames ?? DEFAULT_TOOL_NAMES)];
   const handlers = new Map<string, RecordedHandler>();
   const commands = new Map<string, unknown>();
+  const tools = new Map<string, unknown>();
 
   return {
     events,
     handlers,
     commands,
+    tools,
     fire(event, input, ctx): Promise<unknown> {
       const handler = handlers.get(event);
       if (!handler) {
@@ -92,6 +96,12 @@ export function makeFakePi(options: MakeFakePiOptions = {}): FakePi {
     },
     registerCommand(name: string, optionsArg: unknown): void {
       commands.set(name, optionsArg);
+    },
+    registerTool(tool: unknown): void {
+      const name = (tool as { name?: unknown }).name;
+      if (typeof name !== "string") return;
+      tools.set(name, tool);
+      if (!toolNames.includes(name)) toolNames.push(name);
     },
     // ── ExtensionAPI methods present for the cast but unused by the factory ─
     registerProvider: vi.fn(),

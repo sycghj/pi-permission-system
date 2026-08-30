@@ -6,6 +6,7 @@ import {
   type ShellInvocation,
 } from "#src/access-intent/tool-kind";
 import type { ShellToolsConfig } from "#src/config-schema";
+import { formatDenyReason } from "#src/denial-messages";
 import { extractBashCapability } from "#src/learning/bash-capability-extractor";
 import { gitProjectIdentity } from "#src/learning/capability-fingerprint";
 import type { PathNormalizer } from "#src/path-normalizer";
@@ -20,8 +21,9 @@ import {
 import type { PermissionCheckResult } from "#src/types";
 import { resolveBashCommandCheck } from "./bash-command";
 import { describeBashExternalDirectoryGate } from "./bash-external-directory";
+import { describeBashNulRedirectGate } from "./bash-nul-redirect";
 import { describeBashPathGate } from "./bash-path";
-import type { GateResult } from "./descriptor";
+import { type GateResult, isGateDescriptor } from "./descriptor";
 import { describeExternalDirectoryGate } from "./external-directory";
 import { describePathGate } from "./path";
 import { isSameRepoReadonlyGitCommand } from "./readonly-git-worktree";
@@ -80,10 +82,79 @@ export class ToolCallGatePipeline {
     tcc: ToolCallContext,
     runner: GateRunner,
   ): Promise<GateOutcome> {
+    for (const produce of await this.createGateProducers(tcc)) {
+      const outcome = await runner.run(
+        await produce(),
+        tcc.agentName,
+        tcc.toolCallId,
+      );
+      if (outcome.action === "block") {
+        return outcome;
+      }
+    }
+    return { action: "allow" };
+  }
+
+  /** Evaluate normal automatic authorities without opening a human prompt. */
+  async evaluateAutomatic(
+    tcc: ToolCallContext,
+    runner: GateRunner,
+  ): Promise<GateOutcome> {
+    for (const produce of await this.createGateProducers(tcc)) {
+      const outcome = await runner.runAutomatic(
+        await produce(),
+        tcc.agentName,
+        tcc.toolCallId,
+      );
+      if (outcome.action === "block") {
+        return outcome;
+      }
+    }
+    return { action: "allow" };
+  }
+
+  /**
+   * Evaluate only the deterministic deny floor. Ask and allow both pass, and
+   * no prompt, learned grant, auto-mode decision, session grant, or event side
+   * effect is consulted.
+   */
+  async evaluateDenyFloor(tcc: ToolCallContext): Promise<GateOutcome> {
+    for (const produce of await this.createGateProducers(tcc)) {
+      const gate = await produce();
+      if (!isGateDescriptor(gate)) {
+        continue;
+      }
+      const check =
+        gate.preCheck ??
+        (gate.preResolved
+          ? {
+              state: gate.preResolved.state,
+              toolName: gate.surface,
+              source: "tool" as const,
+              origin: "builtin" as const,
+            }
+          : this.resolver.resolve({
+              kind: "tool",
+              surface: gate.surface,
+              input: gate.input,
+              agentName: tcc.agentName ?? undefined,
+            }));
+      if (check.state === "deny") {
+        return {
+          action: "block",
+          reason: formatDenyReason(gate.denialContext),
+        };
+      }
+    }
+    return { action: "allow" };
+  }
+
+  private async createGateProducers(
+    tcc: ToolCallContext,
+  ): Promise<Array<() => GateResult | Promise<GateResult>>> {
     // Resolve the shell invocation once: native `bash` and any tool recorded in
     // `shellTools` both yield a command (+ optional workdir); every other tool
-    // yields null (#574). The three bash gates then share the single BashProgram
-    // parsed from that command instead of each re-parsing (#308).
+    // yields null (#574). The three bash gates then share one parsed program.
     const shell = resolveShellInvocation(
       tcc.toolName,
       tcc.input,
@@ -95,7 +166,6 @@ export class ToolCallGatePipeline {
           workdir: shell.workdir,
         })
       : null;
-
     const formatter = new ToolPreviewFormatter(
       this.inputs.getToolPreviewLimits(),
       this.customFormatters,
@@ -109,10 +179,8 @@ export class ToolCallGatePipeline {
           projectIdentity: gitProjectIdentity(`${tcc.cwd}/.git`),
         })
       : undefined;
-
     const infraDirs = this.inputs.getInfrastructureReadDirs();
-
-    const gateProducers: Array<() => GateResult | Promise<GateResult>> = [
+    return [
       () =>
         describeSkillReadGate(tcc, normalizer, () =>
           this.inputs.getActiveSkillEntries(),
@@ -128,6 +196,7 @@ export class ToolCallGatePipeline {
           this.customExtractors,
         ),
       () => describeBashExternalDirectoryGate(tcc, bashProgram, this.resolver),
+      () => describeBashNulRedirectGate(tcc, bashProgram, this.resolver),
       () => describeBashPathGate(tcc, bashProgram, this.resolver),
       () => {
         const { toolCheck, accessPath } = this.resolvePerToolCheck(
@@ -156,19 +225,6 @@ export class ToolCallGatePipeline {
         return toolDescriptor;
       },
     ];
-
-    for (const produce of gateProducers) {
-      const outcome = await runner.run(
-        await produce(),
-        tcc.agentName,
-        tcc.toolCallId,
-      );
-      if (outcome.action === "block") {
-        return outcome;
-      }
-    }
-
-    return { action: "allow" };
   }
 
   /**

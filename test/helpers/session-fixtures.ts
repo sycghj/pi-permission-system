@@ -106,6 +106,14 @@ export function makeFakePermissionManager() {
         source: "tool",
         origin: "builtin",
       }),
+    checkBase: vi
+      .fn<(intent: ResolvedAccessIntent) => PermissionCheckResult>()
+      .mockReturnValue({
+        state: "allow",
+        toolName: "read",
+        source: "tool",
+        origin: "builtin",
+      }),
     getToolPermission: vi
       .fn<(toolName: string, agentName?: string) => PermissionState>()
       .mockReturnValue("allow"),

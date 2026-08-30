@@ -7,6 +7,10 @@ import {
   type BashCommand,
   collectCommands,
 } from "#src/access-intent/bash/command-enumeration";
+import {
+  extractNulRedirects,
+  type NulRedirectTarget,
+} from "#src/access-intent/bash/nul-redirects";
 import { getParser } from "#src/access-intent/bash/parser";
 import type { PathNormalizer } from "#src/path-normalizer";
 
@@ -28,6 +32,7 @@ export class BashProgram {
     private readonly commandUnits: readonly BashCommand[],
     private readonly resolvedExternalPaths: readonly AccessPath[],
     private readonly resolvedRuleCandidates: readonly BashPathRuleCandidate[],
+    private readonly nulTargets: readonly NulRedirectTarget[],
   ) {}
 
   /**
@@ -56,7 +61,7 @@ export class BashProgram {
   ): Promise<BashProgram> {
     const parser = await getParser();
     const tree = parser.parse(command);
-    if (!tree) return new BashProgram(command, [], [], []);
+    if (!tree) return new BashProgram(command, [], [], [], []);
 
     try {
       const { externalPaths, ruleCandidates } = new BashPathResolver(
@@ -68,6 +73,7 @@ export class BashProgram {
         collectCommands(tree.rootNode),
         externalPaths,
         ruleCandidates,
+        extractNulRedirects(tree.rootNode, normalizer.flavor),
       );
     } finally {
       tree.delete();
@@ -130,5 +136,16 @@ export class BashProgram {
    */
   pathRuleCandidates(): BashPathRuleCandidate[] {
     return [...this.resolvedRuleCandidates];
+  }
+
+  /**
+   * Local file-redirect destinations naming the Win32 reserved device `nul`.
+   *
+   * Empty on POSIX hosts (where `nul` is an ordinary legal filename) and for
+   * quoted payloads the local shell never interprets (`cmd.exe /c "… 2>NUL"`,
+   * `ssh host "… 2>nul"`). See {@link extractNulRedirects}.
+   */
+  nulRedirectTargets(): NulRedirectTarget[] {
+    return [...this.nulTargets];
   }
 }

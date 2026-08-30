@@ -73,6 +73,9 @@ export class LocalUserAuthorizer implements TerminalAuthorizer {
 function buildRequestOptions(
   details: PromptPermissionDetails,
 ): RequestPermissionOptions | undefined {
+  if (details.humanOnly) {
+    return { allowSessionApproval: false };
+  }
   const pattern = details.sessionApproval?.patterns[0];
   if (details.forwarding && details.sessionApproval && pattern) {
     return {

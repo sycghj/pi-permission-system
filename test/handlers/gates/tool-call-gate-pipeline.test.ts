@@ -38,6 +38,7 @@ function makeMockBashProgram(command = "echo hello") {
     commands: vi.fn<() => []>(() => []),
     pathRuleCandidates: vi.fn<() => []>(() => []),
     externalPaths: vi.fn<() => AccessPath[]>(() => []),
+    nulRedirectTargets: vi.fn<() => []>(() => []),
   };
 }
 
@@ -155,6 +156,32 @@ describe("ToolCallGatePipeline", () => {
     });
   });
 
+  describe("evaluateDenyFloor", () => {
+    it("blocks a deterministic deny without invoking a gate runner", async () => {
+      const resolver = makeResolver(
+        makeCheckResult({ state: "deny", matchedPattern: "*" }),
+      );
+      const pipeline = new ToolCallGatePipeline(resolver, makeGateInputs());
+
+      const result = await pipeline.evaluateDenyFloor(
+        makeTcc({ toolName: "edit", input: {} }),
+      );
+
+      expect(result).toMatchObject({ action: "block" });
+    });
+
+    it("passes ask state without prompting", async () => {
+      const resolver = makeResolver(makeCheckResult({ state: "ask" }));
+      const pipeline = new ToolCallGatePipeline(resolver, makeGateInputs());
+
+      const result = await pipeline.evaluateDenyFloor(
+        makeTcc({ toolName: "edit", input: {} }),
+      );
+
+      expect(result).toEqual({ action: "allow" });
+    });
+  });
+
   // ── bash tool ────────────────────────────────────────────────────────────
 
   describe("evaluate — bash tool", () => {
@@ -241,6 +268,7 @@ describe("ToolCallGatePipeline", () => {
         commands: vi.fn(() => [{ text }]),
         pathRuleCandidates: vi.fn<() => []>(() => []),
         externalPaths: vi.fn<() => AccessPath[]>(() => []),
+        nulRedirectTargets: vi.fn<() => []>(() => []),
       };
     }
 

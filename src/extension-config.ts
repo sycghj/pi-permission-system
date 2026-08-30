@@ -36,6 +36,8 @@ export interface PermissionSystemExtensionConfig {
   toolTextSummaryMaxLength?: number;
   /** Optional LLM auto-classifier for ask-state checks. Disabled by default. */
   autoMode: NormalizedAutoModeConfig;
+  /** Agent-initiated, human-only approval for one exact tool call. Disabled by default. */
+  manualApproval: { enabled: boolean };
   /** Session-scoped learned capability grant settings. Disabled by default. */
   learning: NormalizedLearningConfig;
   /** Non-bash tools that carry shell semantics, keyed by tool name. */
@@ -60,6 +62,9 @@ export const DEFAULT_EXTENSION_CONFIG: PermissionSystemExtensionConfig = {
       enabled: false,
       thinkingBudgetTokens: 1024,
     },
+  },
+  manualApproval: {
+    enabled: false,
   },
   learning: {
     enabled: false,
@@ -112,6 +117,9 @@ export function normalizePermissionSystemConfig(
         thinkingBudgetTokens:
           raw.autoMode?.twoStage?.thinkingBudgetTokens ?? 1024,
       },
+    },
+    manualApproval: {
+      enabled: raw.manualApproval?.enabled === true,
     },
     learning: {
       enabled: raw.learning?.enabled === true,

@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ResolvedAccessIntent } from "#src/access-intent/access-intent";
 import { AccessPath } from "#src/access-intent/access-path";
 import { posixPathFlavor } from "#src/path/path-flavor";
-import type { ScopedPermissionManager } from "#src/permission-manager";
+import type {
+  BasePermissionManager,
+  ScopedPermissionManager,
+} from "#src/permission-manager";
 import { PermissionResolver } from "#src/permission-resolver";
 import type { Ruleset } from "#src/rule";
 import { SessionApproval } from "#src/session-approval";
@@ -25,6 +28,14 @@ function makePermissionManager() {
         source: "tool",
         origin: "builtin",
       }),
+    checkBase: vi
+      .fn<(intent: ResolvedAccessIntent) => PermissionCheckResult>()
+      .mockReturnValue({
+        state: "ask",
+        toolName: "read",
+        source: "tool",
+        origin: "builtin",
+      }),
     getToolPermission: vi
       .fn<(toolName: string, agentName?: string) => PermissionState>()
       .mockReturnValue("allow"),
@@ -33,7 +44,7 @@ function makePermissionManager() {
 }
 
 function makeResolver(
-  pm?: ScopedPermissionManager,
+  pm?: ScopedPermissionManager & BasePermissionManager,
   sessionRules?: Pick<SessionRules, "getRuleset">,
 ) {
   const permissionManager = pm ?? makePermissionManager();
@@ -118,6 +129,27 @@ describe("PermissionResolver", () => {
         origin: "global",
         matchedPattern: "rm *",
       });
+    });
+  });
+
+  describe("resolveBase", () => {
+    it("uses the manager base check without session rules", () => {
+      const pm = makePermissionManager();
+      const { resolver } = makeResolver(pm);
+
+      const result = resolver.resolveBase({
+        kind: "tool",
+        surface: "bash",
+        input: { command: "git reset --hard" },
+      });
+
+      expect(pm.checkBase).toHaveBeenCalledWith({
+        kind: "tool",
+        surface: "bash",
+        input: { command: "git reset --hard" },
+      });
+      expect(pm.check).not.toHaveBeenCalled();
+      expect(result.state).toBe("ask");
     });
   });
 

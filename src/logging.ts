@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { appendFileSync } from "node:fs";
 
 import {
@@ -36,6 +37,7 @@ export function createPermissionSystemLogger(
   // rather than on every line. Lives in the closure because the factory is
   // re-invoked per session, unlike module scope, which now outlives one.
   const hardened = new Set<string>();
+  const runtimeId = randomUUID();
 
   const writeLine = (
     stream: "debug" | "review",
@@ -52,6 +54,8 @@ export function createPermissionSystemLogger(
       const line = redactedJsonStringify({
         timestamp: new Date().toISOString(),
         extension: EXTENSION_ID,
+        processId: process.pid,
+        runtimeId,
         stream,
         event,
         ...details,

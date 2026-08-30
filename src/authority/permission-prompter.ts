@@ -59,6 +59,10 @@ export interface PromptPermissionDetails {
    * no intent leaves this absent.
    */
   accessIntent?: ForwardedAccessFacts;
+  /** Require a direct human decision; automated/session authority must not grant it. */
+  humanOnly?: true;
+  /** Safe identity for auditing a human-only request without logging raw input. */
+  auditFingerprint?: string;
 }
 
 /**
@@ -138,14 +142,19 @@ export class PermissionPrompter implements PermissionPrompterApi {
       requestId: details.requestId,
       source: details.source,
       agentName: details.agentName,
-      message: details.message,
+      message: details.humanOnly
+        ? "[exact manual-approval input withheld from logs]"
+        : details.message,
       toolCallId: details.toolCallId ?? null,
       toolName: details.toolName ?? null,
       skillName: details.skillName ?? null,
       path: details.path ?? null,
       command: details.command ?? null,
       target: details.target ?? null,
-      toolInputPreview: details.toolInputPreview ?? null,
+      toolInputPreview: details.humanOnly
+        ? null
+        : (details.toolInputPreview ?? null),
+      auditFingerprint: details.auditFingerprint ?? null,
       resolution: details.resolution ?? null,
       denialReason: details.denialReason ?? null,
     });
