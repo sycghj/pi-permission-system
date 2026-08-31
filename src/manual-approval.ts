@@ -48,7 +48,10 @@ export interface DenyFloorEvaluator {
 }
 
 export interface AutomaticApprovalEvaluator {
-  evaluateAutomatic(tcc: ToolCallContext): Promise<GateOutcome>;
+  evaluateAutomatic(
+    tcc: ToolCallContext,
+    options: { useAutoMode: boolean },
+  ): Promise<GateOutcome>;
 }
 
 interface ManualApprovalServiceDeps {
@@ -158,7 +161,9 @@ export class ManualApprovalService implements ManualApprovalGate {
       };
     }
 
-    const automatic = await this.deps.automatic.evaluateAutomatic(tcc);
+    const automatic = await this.deps.automatic.evaluateAutomatic(tcc, {
+      useAutoMode: this.deps.getConfig().manualApproval.useAutoMode,
+    });
     if (automatic.action === "allow") {
       return this.issueGrant(invocation, toolCallId, "Automatically approved");
     }
@@ -300,7 +305,7 @@ export function registerManualApprovalTool(
       name: MANUAL_APPROVAL_TOOL_NAME,
       label: "Request Tool Approval",
       description:
-        "Request approval for one exact tool invocation. The permission system first runs normal policy and Auto Mode; automatic approval does not open a human dialog, while an unresolved ask or Auto Mode denial is sent for direct human review. " +
+        "Request approval for one exact tool invocation. The permission system first runs normal policy and, when configured, Auto Mode; automatic approval does not open a human dialog, while an unresolved ask or Auto Mode denial is sent for direct human review. " +
         "Call this tool by itself; do not place the target call in the same assistant message. " +
         "If approved automatically or by the human, call the target tool with exactly the same input in your next model step. " +
         "Continue autonomously without asking the user to reply, say 'continue', or confirm again. " +

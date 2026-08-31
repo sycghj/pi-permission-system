@@ -235,7 +235,7 @@ describe("event-handler registration completeness", () => {
     expect(approvalTool).toBeDefined();
     expect(approvalTool.description).toContain("next model step");
     expect(approvalTool.description).toContain(
-      "first runs normal policy and Auto Mode",
+      "first runs normal policy and, when configured, Auto Mode",
     );
     expect(approvalTool.description).toContain(
       "automatic approval does not open a human dialog",

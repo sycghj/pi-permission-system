@@ -77,7 +77,8 @@ In an interactive TUI session the prompt is an inline keybind dialog — `y` app
 Pi's tool-expansion binding (`app.tools.expand`, `Ctrl+O` by default) keeps working while the dialog is open, so you can expand a truncated tool preview before deciding.
 
 For exceptional calls, opt-in `manualApproval.enabled` exposes `request_tool_approval`.
-An Agent may request approval proactively, but the permission system first evaluates the exact target through recorded policy, session/YOLO/learning, and Auto Mode.
+An Agent may request approval proactively, but the permission system first evaluates the exact target through recorded policy, session/YOLO/learning, and, by default, Auto Mode.
+Set `manualApproval.useAutoMode` to `false` to skip only the Auto Mode classifier for approval requests; the other checks remain active and an unresolved ask proceeds directly to human review.
 Automatic approval produces the exact one-shot grant without opening a human dialog; an unresolved ask or Auto Mode denial proceeds to direct human review, while a deterministic `deny` remains inviolable.
 The resulting grant is session/Agent/input-bound, consumed once, expires after five minutes, and the dedicated dialog has no session-approval option.
 

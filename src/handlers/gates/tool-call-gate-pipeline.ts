@@ -99,12 +99,14 @@ export class ToolCallGatePipeline {
   async evaluateAutomatic(
     tcc: ToolCallContext,
     runner: GateRunner,
+    options: { useAutoMode: boolean } = { useAutoMode: true },
   ): Promise<GateOutcome> {
     for (const produce of await this.createGateProducers(tcc)) {
       const outcome = await runner.runAutomatic(
         await produce(),
         tcc.agentName,
         tcc.toolCallId,
+        options,
       );
       if (outcome.action === "block") {
         return outcome;

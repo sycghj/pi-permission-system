@@ -78,6 +78,24 @@ describe("GateRunner learned grants", () => {
     );
   });
 
+  it("honors a learned grant when automatic-only mode skips Auto Mode", async () => {
+    const { runner, deps } = makeLearnedRunner({
+      learnedResult: { action: "allow", grantId: "lg-1", reservationId: "r-1" },
+    });
+
+    await expect(
+      runner.runAutomatic(
+        makeDescriptor({ surface: "bash" }),
+        "agent-1",
+        "tc-1",
+        { useAutoMode: false },
+      ),
+    ).resolves.toEqual({ action: "allow" });
+    expect(deps.learned.evaluateAsk).toHaveBeenCalledOnce();
+    expect(deps.autoDecide).not.toHaveBeenCalled();
+    expect(deps.escalate).not.toHaveBeenCalled();
+  });
+
   it("does not call learned grants for deny, allow, or session checks", async () => {
     for (const options of [
       { checkState: "deny" as const },

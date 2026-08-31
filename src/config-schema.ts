@@ -187,10 +187,15 @@ const manualApprovalSchema = z
         "Expose a tool that lets an agent request an exact, one-shot human approval for a high-risk tool invocation.",
       default: false,
     }),
+    useAutoMode: z.boolean().optional().meta({
+      description:
+        "Let manual approval requests consult Auto Mode after deterministic, session, YOLO, and learned-grant checks.",
+      default: true,
+    }),
   })
   .meta({
     description:
-      "Agent-initiated, human-only approval for one exact tool invocation. Deterministic denies remain authoritative.",
+      "Agent-initiated one-shot approval for one exact tool invocation. Auto Mode preflight is optional and deterministic denies remain authoritative.",
   });
 
 const learningSchema = z

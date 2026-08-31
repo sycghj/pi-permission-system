@@ -203,6 +203,9 @@ test("permission-system command handlers manage config summary, persistence, and
       "autoMode=on",
     );
     expect(lastNotification(infoCtx.notifications).message).toContain(
+      "manualApprovalAutoMode=on",
+    );
+    expect(lastNotification(infoCtx.notifications).message).toContain(
       "debugLog=on",
     );
 

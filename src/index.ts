@@ -310,8 +310,8 @@ export default function piPermissionSystemExtension(pi: ExtensionAPI): void {
     store: new ManualApprovalStore(),
     denyFloor: denyFloorPipeline,
     automatic: {
-      evaluateAutomatic: (tcc) =>
-        toolCallGatePipeline.evaluateAutomatic(tcc, gateRunner),
+      evaluateAutomatic: (tcc, options) =>
+        toolCallGatePipeline.evaluateAutomatic(tcc, gateRunner, options),
     },
     escalator: authorizerSelection,
     toolRegistry,

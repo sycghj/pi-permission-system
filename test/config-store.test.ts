@@ -359,7 +359,7 @@ describe("ConfigStore", () => {
         merged: {
           ...DEFAULT_EXTENSION_CONFIG,
           autoMode: enabledAutoMode,
-          manualApproval: { enabled: true },
+          manualApproval: { enabled: true, useAutoMode: false },
           doublePressToConfirm: false,
         },
         issues: [],
@@ -369,7 +369,7 @@ describe("ConfigStore", () => {
         config: {
           permission: { "*": "ask" },
           autoMode: enabledAutoMode,
-          manualApproval: { enabled: true },
+          manualApproval: { enabled: true, useAutoMode: false },
           doublePressToConfirm: false,
         },
       });
@@ -389,12 +389,12 @@ describe("ConfigStore", () => {
       expect(persisted).toMatchObject({
         permission: { "*": "ask" },
         autoMode: { enabled: true },
-        manualApproval: { enabled: false },
+        manualApproval: { enabled: false, useAutoMode: true },
         doublePressToConfirm: true,
       });
       expect(store.current()).toMatchObject({
         autoMode: { enabled: true },
-        manualApproval: { enabled: false },
+        manualApproval: { enabled: false, useAutoMode: true },
         doublePressToConfirm: true,
       });
     });
@@ -417,6 +417,7 @@ describe("ConfigStore", () => {
         debugLog: false,
         autoModeEnabled: false,
         manualApprovalEnabled: false,
+        manualApprovalUseAutoMode: true,
       });
       expect(logger.review).toHaveBeenCalledWith("config.saved", details);
       expect(logger.debug).toHaveBeenCalledWith("config.saved", details);

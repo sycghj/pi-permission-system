@@ -53,7 +53,7 @@ export class GateRunner {
     agentName: string | null,
     toolCallId: string,
   ): Promise<GateOutcome> {
-    return this.runGate(gate, agentName, toolCallId, true, true);
+    return this.runGate(gate, agentName, toolCallId, true, true, true);
   }
 
   /** Run automatic authorities quietly, without opening a human prompt. */
@@ -61,8 +61,16 @@ export class GateRunner {
     gate: GateResult,
     agentName: string | null,
     toolCallId: string,
+    options: { useAutoMode: boolean } = { useAutoMode: true },
   ): Promise<GateOutcome> {
-    return this.runGate(gate, agentName, toolCallId, false, false);
+    return this.runGate(
+      gate,
+      agentName,
+      toolCallId,
+      false,
+      false,
+      options.useAutoMode,
+    );
   }
 
   private async runGate(
@@ -71,6 +79,7 @@ export class GateRunner {
     toolCallId: string,
     promptOnUnresolvedAsk: boolean,
     reportDecisions: boolean,
+    useAutoMode: boolean,
   ): Promise<GateOutcome> {
     if (!gate) {
       return { action: "allow" };
@@ -92,6 +101,7 @@ export class GateRunner {
       toolCallId,
       promptOnUnresolvedAsk,
       reportDecisions,
+      useAutoMode,
     );
   }
 
@@ -103,6 +113,7 @@ export class GateRunner {
     toolCallId: string,
     promptOnUnresolvedAsk: boolean,
     reportDecisions: boolean,
+    useAutoMode: boolean,
   ): Promise<GateOutcome> {
     // 1. Resolve permission state — pre-check, pre-resolved, or via resolver
     let check: PermissionCheckResult;
@@ -196,13 +207,15 @@ export class GateRunner {
     let autoApproved = false;
     let confirmationUnavailable = false;
     let decisionReason: PermissionDecisionReason | null = null;
-    const autoAttempt = await this.tryAutoDecide(
-      descriptor,
-      check,
-      agentName,
-      toolCallId,
-      reportDecisions,
-    );
+    const autoAttempt = useAutoMode
+      ? await this.tryAutoDecide(
+          descriptor,
+          check,
+          agentName,
+          toolCallId,
+          reportDecisions,
+        )
+      : { decision: null };
     const autoDecision = autoAttempt.decision;
     if (check.state === "ask" && !autoDecision && !promptOnUnresolvedAsk) {
       if (reportDecisions && autoAttempt.fallbackReason) {

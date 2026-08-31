@@ -498,13 +498,16 @@ describe("mergeUnifiedConfigs", () => {
     expect(merged.doublePressToConfirm).toBe(false);
   });
 
-  it("lets project config override manual approval enablement", () => {
+  it("lets project config override manual approval settings", () => {
     const merged = mergeUnifiedConfigs(
-      { manualApproval: { enabled: false } },
-      { manualApproval: { enabled: true } },
+      { manualApproval: { enabled: false, useAutoMode: true } },
+      { manualApproval: { enabled: true, useAutoMode: false } },
     );
 
-    expect(merged.manualApproval).toEqual({ enabled: true });
+    expect(merged.manualApproval).toEqual({
+      enabled: true,
+      useAutoMode: false,
+    });
   });
 
   it("returns base unchanged when override is empty", () => {

@@ -76,6 +76,55 @@ describe("GateRunner auto ask decider", () => {
     expect(deps.reporter.emitDecision).not.toHaveBeenCalled();
   });
 
+  it("skips the Auto Mode classifier when automatic-only mode disables it", async () => {
+    const autoDecide = vi.fn().mockResolvedValue({
+      approved: true,
+      state: "approved",
+      autoApproved: true,
+    });
+    const { runner, deps } = makeGateRunner({
+      resolveResult: makeCheckResult({ state: "ask", matchedPattern: "*" }),
+      autoDecide,
+    });
+
+    const result = await runner.runAutomatic(
+      makeDescriptor(),
+      null,
+      "tc-no-auto-mode",
+      { useAutoMode: false },
+    );
+
+    expect(result).toEqual({
+      action: "block",
+      reason: "Automatic authorization did not resolve this ask.",
+      manualReviewRequired: true,
+    });
+    expect(autoDecide).not.toHaveBeenCalled();
+    expect(deps.escalate).not.toHaveBeenCalled();
+  });
+
+  it("still honors session approval when Auto Mode is disabled", async () => {
+    const autoDecide = vi.fn();
+    const { runner } = makeGateRunner({
+      resolveResult: makeCheckResult({
+        state: "allow",
+        source: "session",
+        matchedPattern: "*",
+      }),
+      autoDecide,
+    });
+
+    const result = await runner.runAutomatic(
+      makeDescriptor(),
+      null,
+      "tc-session-no-auto-mode",
+      { useAutoMode: false },
+    );
+
+    expect(result).toEqual({ action: "allow" });
+    expect(autoDecide).not.toHaveBeenCalled();
+  });
+
   it("marks an Auto Mode denial for human review in automatic-only mode", async () => {
     const autoDecide = vi.fn().mockResolvedValue({
       approved: false,

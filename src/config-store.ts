@@ -193,6 +193,7 @@ export class ConfigStore implements SessionConfigStore, CommandConfigStore {
       yoloMode: normalized.yoloMode,
       doublePressToConfirm: normalized.doublePressToConfirm,
       manualApprovalEnabled: normalized.manualApproval.enabled,
+      manualApprovalUseAutoMode: normalized.manualApproval.useAutoMode,
       autoModeEnabled: this.config.autoMode.enabled,
     };
     this.deps.logger.review("config.saved", savedDetails);

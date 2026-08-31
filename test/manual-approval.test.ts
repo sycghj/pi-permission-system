@@ -9,6 +9,7 @@ function makeService(options?: {
   floor?: "allow" | "block";
   automatic?: "allow" | "deny" | "review";
   approved?: boolean;
+  useAutoMode?: boolean;
 }) {
   const store = new ManualApprovalStore({ now: () => 1_000 });
   const denyFloor = {
@@ -54,7 +55,10 @@ function makeService(options?: {
     toolRegistry,
     getConfig: () => ({
       ...DEFAULT_EXTENSION_CONFIG,
-      manualApproval: { enabled: true },
+      manualApproval: {
+        enabled: true,
+        useAutoMode: options?.useAutoMode ?? true,
+      },
     }),
     resolveAgentName: () => "builder",
     logger,
@@ -79,9 +83,24 @@ describe("ManualApprovalService", () => {
         toolName: "edit",
         input: editRequest.input,
       }),
+      { useAutoMode: true },
     );
     expect(escalator.escalateHumanOnly).toHaveBeenCalledOnce();
     expect(result.approved).toBe(true);
+  });
+
+  it("can skip Auto Mode while retaining the automatic authority preflight", async () => {
+    const { service, automatic, escalator } = makeService({
+      useAutoMode: false,
+    });
+
+    await service.request("request-1", editRequest, makeCtx());
+
+    expect(automatic.evaluateAutomatic).toHaveBeenCalledWith(
+      expect.objectContaining({ toolName: "edit" }),
+      { useAutoMode: false },
+    );
+    expect(escalator.escalateHumanOnly).toHaveBeenCalledOnce();
   });
 
   it("issues an exact grant without a dialog when automatic authorization allows", async () => {

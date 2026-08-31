@@ -86,6 +86,7 @@ function summarizeConfig(
     `yoloMode=${toOnOff(config.yoloMode)}`,
     `autoMode=${toOnOff(config.autoMode.enabled)}`,
     `manualApproval=${toOnOff(config.manualApproval.enabled)}`,
+    `manualApprovalAutoMode=${toOnOff(config.manualApproval.useAutoMode)}`,
     `permissionReviewLog=${toOnOff(config.permissionReviewLog)}`,
     `debugLog=${toOnOff(config.debugLog)}`,
   ].join(", ");
@@ -111,6 +112,14 @@ function buildSettingItems(
       description:
         "Evaluate exact approval requests automatically before human review",
       currentValue: toOnOff(config.manualApproval.enabled),
+      values: ON_OFF,
+    },
+    {
+      id: "manualApprovalAutoMode",
+      label: "Use Auto Mode for approval requests",
+      description:
+        "Let one-shot approval requests consult Auto Mode before human review",
+      currentValue: toOnOff(config.manualApproval.useAutoMode),
       values: ON_OFF,
     },
     {
@@ -151,7 +160,18 @@ function applySetting(
     case "manualApproval":
       return {
         ...config,
-        manualApproval: { enabled: value === "on" },
+        manualApproval: {
+          ...config.manualApproval,
+          enabled: value === "on",
+        },
+      };
+    case "manualApprovalAutoMode":
+      return {
+        ...config,
+        manualApproval: {
+          ...config.manualApproval,
+          useAutoMode: value === "on",
+        },
       };
     case "permissionReviewLog":
       return { ...config, permissionReviewLog: value === "on" };
@@ -172,6 +192,10 @@ function syncSettingValues(
   settingsList.updateValue(
     "manualApproval",
     toOnOff(config.manualApproval.enabled),
+  );
+  settingsList.updateValue(
+    "manualApprovalAutoMode",
+    toOnOff(config.manualApproval.useAutoMode),
   );
   settingsList.updateValue(
     "permissionReviewLog",

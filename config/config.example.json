@@ -1,11 +1,11 @@
 {
-  "$schema": "https://raw.githubusercontent.com/sycghj/pi-packages/main/packages/pi-permission-system/schemas/permissions.schema.json",
+  "$schema": "https://raw.githubusercontent.com/sycghj/pi-permission-system/main/schemas/permissions.schema.json",
 
   "debugLog": false,
   "permissionReviewLog": true,
   "yoloMode": false,
   "doublePressToConfirm": true,
-  "manualApproval": { "enabled": false },
+  "manualApproval": { "enabled": false, "useAutoMode": true },
 
   "toolInputPreviewMaxLength": 400,
   "toolTextSummaryMaxLength": 120,

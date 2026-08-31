@@ -113,6 +113,7 @@ describe("normalizePermissionSystemConfig", () => {
       },
       manualApproval: {
         enabled: false,
+        useAutoMode: true,
       },
       learning: {
         enabled: false,
@@ -139,14 +140,16 @@ describe("normalizePermissionSystemConfig", () => {
     expect(result.yoloMode).toBe(false);
   });
 
-  it("defaults manual approval to disabled and honors an explicit enable", () => {
-    expect(normalizePermissionSystemConfig({}).manualApproval.enabled).toBe(
-      false,
-    );
+  it("normalizes manual approval and its Auto Mode preflight switch", () => {
+    expect(normalizePermissionSystemConfig({}).manualApproval).toEqual({
+      enabled: false,
+      useAutoMode: true,
+    });
     expect(
-      normalizePermissionSystemConfig({ manualApproval: { enabled: true } })
-        .manualApproval.enabled,
-    ).toBe(true);
+      normalizePermissionSystemConfig({
+        manualApproval: { enabled: true, useAutoMode: false },
+      }).manualApproval,
+    ).toEqual({ enabled: true, useAutoMode: false });
   });
 
   it("defaults doublePressToConfirm to true when missing", () => {
