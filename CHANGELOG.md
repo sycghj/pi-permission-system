@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [24.2.0](https://github.com/sycghj/pi-permission-system/compare/v24.1.0...v24.2.0) (2026-08-31)
+
+
+### Features
+
+* checkpoint permission and subagent hardening ([3796372](https://github.com/sycghj/pi-permission-system/commit/3796372deaa74faf98009b22451356c9391f93e1))
+* make manual approval Auto Mode optional ([ae6b859](https://github.com/sycghj/pi-permission-system/commit/ae6b859d4563d0df64e1e939fa67cc273ec92430))
+
 ## [24.1.0] — sycghj fork n-day release (2026-07-29)
 
 > **Fork notice:** `@sycghj/pi-permission-system` 24.1.0 is a fork of `gotgenes/pi-packages` `upstream/main` @ 24.0.0 rebased with the ask-branch `autoMode` feature (`fbdcbc1`). It is published under the `@sycghj` scope on the `sycghj/pi-packages` GitHub fork. npm publication is deferred (no npm account yet). See `docs/RELEASE_STATUS.md` for the full slice boundary, path-handling resolution, and pre-existing Windows test gaps.
